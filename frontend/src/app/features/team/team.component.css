@@ -1,0 +1,36 @@
+/*
+ * Team.
+ *
+ * A table-led screen: the design system asks for "one table (name, email, role,
+ * status, open chats, Manage)" and the rest are cards beneath it. No directional
+ * value appears in this file.
+ */
+
+.fe-card__title {
+  font-size: var(--fe-text-base);
+  font-weight: 600;
+  color: var(--ink);
+  margin-block-end: var(--fe-space-3);
+}
+
+.subtitle {
+  margin-block-start: var(--fe-space-3);
+  margin-block-end: var(--fe-space-2);
+}
+
+.chips {
+  list-style: none;
+  margin: var(--fe-space-2) 0;
+  padding: 0;
+  display: flex;
+  gap: var(--fe-space-1);
+  flex-wrap: wrap;
+}
+
+/* The session table can carry long identifiers; let them wrap rather than
+   forcing a horizontal scrollbar on a phone. */
+@media (max-width: 860px) {
+  .fe-table td.fe-mono {
+    overflow-wrap: anywhere;
+  }
+}

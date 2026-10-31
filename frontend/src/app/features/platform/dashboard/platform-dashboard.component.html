@@ -1,0 +1,303 @@
+<div class="dashboard-page" [dir]="i18n.direction()">
+  <!-- Header with Title & Refresh Action -->
+  <header class="page-header">
+    <div class="header-titles">
+      <h1 class="page-title">
+        {{ i18n.locale() === 'ar' ? 'لوحة تحكم المنصة' : 'Platform Dashboard' }}
+      </h1>
+      <div class="header-badge">
+        <fe-icon name="dashboard" class="badge-icon"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'مركز العمليات والمؤشرات' : 'Operations Center' }}</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button
+        type="button"
+        class="action-btn refresh-btn"
+        [disabled]="loading()"
+        (click)="loadDashboard()"
+      >
+        <fe-icon name="exports" class="btn-icon"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'تحديث' : 'Refresh' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Error Banner -->
+  @if (error()) {
+    <div class="state-banner error-banner" role="alert">
+      <fe-icon name="warning" class="state-icon"></fe-icon>
+      <div class="state-content">
+        <span class="state-title">{{ i18n.locale() === 'ar' ? 'فشل تحميل بيانات لوحة التحكم' : 'Failed to load dashboard overview' }}</span>
+        <span class="state-desc">{{ error() }}</span>
+      </div>
+      <button type="button" class="action-btn retry-btn" (click)="loadDashboard()">
+        {{ i18n.locale() === 'ar' ? 'إعادة المحاولة' : 'Retry' }}
+      </button>
+    </div>
+  }
+
+  <!-- Loading State -->
+  @if (loading() && !overview()) {
+    <div class="state-card loading-card">
+      <div class="spinner-ring" aria-hidden="true"></div>
+      <span class="state-text">
+        {{ i18n.locale() === 'ar' ? 'جاري تجميع المؤشرات والبيانات التشغيلية...' : 'Aggregating platform metrics...' }}
+      </span>
+    </div>
+  }
+
+  @if (overview()) {
+    <!-- 1. Sleek Compact KPI Metric Cards Row -->
+    <section class="kpi-grid" aria-label="Key Performance Indicators">
+      <!-- Total Clinics -->
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'إجمالي العيادات' : 'Total Clinics' }}</span>
+          @if (kpis()?.newClinicsThisMonth; as newCount) {
+            <span class="new-tag">+{{ newCount }}</span>
+          }
+        </div>
+        <span class="kpi-value">{{ kpis()?.totalClinics ?? 0 }}</span>
+      </div>
+
+      <!-- Active Clinics -->
+      <div class="kpi-card kpi-active">
+        <div class="kpi-top">
+          <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'العيادات النشطة' : 'Active Clinics' }}</span>
+          <fe-status-chip tone="ok">{{ i18n.locale() === 'ar' ? 'منتظم' : 'Healthy' }}</fe-status-chip>
+        </div>
+        <span class="kpi-value">{{ kpis()?.activeClinics ?? 0 }}</span>
+      </div>
+
+      <!-- Platform Revenue This Month -->
+      <div class="kpi-card kpi-revenue">
+        <div class="kpi-top">
+          <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'إيرادات الشهر' : 'Revenue (This Month)' }}</span>
+          <span class="platform-revenue-badge">JOD</span>
+        </div>
+        <span class="kpi-value revenue-val">{{ formatJod(kpis()?.subscriptionRevenueThisMonth) }}</span>
+      </div>
+
+      <!-- Grace Period Clinics -->
+      <div class="kpi-card kpi-grace">
+        <div class="kpi-top">
+          <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'فترة السماح' : 'Grace Period' }}</span>
+          <fe-status-chip tone="warn">{{ kpis()?.graceClinics ?? 0 }}</fe-status-chip>
+        </div>
+        <span class="kpi-value">{{ kpis()?.graceClinics ?? 0 }}</span>
+      </div>
+
+      <!-- Suspended / Expired -->
+      <div class="kpi-card kpi-suspended">
+        <div class="kpi-top">
+          <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'معلقة أو منتهية' : 'Suspended' }}</span>
+          <fe-status-chip tone="bad">{{ (kpis()?.suspendedClinics ?? 0) + (kpis()?.expiredClinics ?? 0) }}</fe-status-chip>
+        </div>
+        <span class="kpi-value">{{ (kpis()?.suspendedClinics ?? 0) + (kpis()?.expiredClinics ?? 0) }}</span>
+      </div>
+
+      <!-- Expiring in 7 Days -->
+      <div class="kpi-card kpi-expiring7">
+        <div class="kpi-top">
+          <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'تنتهي خلال 7 أيام' : 'Expiring in 7d' }}</span>
+          <fe-icon name="calendar" class="kpi-mini-icon"></fe-icon>
+        </div>
+        <span class="kpi-value" [class.danger-text]="(kpis()?.expiringIn7Days ?? 0) > 0">
+          {{ kpis()?.expiringIn7Days ?? 0 }}
+        </span>
+      </div>
+    </section>
+
+    <!-- 2. Balanced Split View: Needs Attention & Analytics (No Scroll Down) -->
+    <div class="dashboard-split-view">
+      <!-- Left Column: Needs Attention Feed -->
+      <section class="section-container triage-container" aria-label="Needs Attention Triage Feed">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <fe-icon name="warning" class="section-icon text-warning"></fe-icon>
+            <h2 class="section-title">
+              {{ i18n.locale() === 'ar' ? 'المتابعة والتدخل' : 'Needs Attention' }}
+            </h2>
+            <span class="attention-badge" [class.attention-badge-alert]="criticalCount() > 0">
+              {{ rawNeedsAttention().length }}
+            </span>
+          </div>
+
+          <!-- Filter Chips -->
+          <div class="filter-chips" role="tablist">
+            <button
+              type="button"
+              class="filter-chip"
+              [class.active]="attentionFilter() === 'ALL'"
+              (click)="attentionFilter.set('ALL')"
+            >
+              {{ i18n.locale() === 'ar' ? 'الكل' : 'All' }}
+            </button>
+            <button
+              type="button"
+              class="filter-chip filter-critical"
+              [class.active]="attentionFilter() === 'CRITICAL'"
+              (click)="attentionFilter.set('CRITICAL')"
+            >
+              {{ i18n.locale() === 'ar' ? 'حرجة' : 'Critical' }}
+            </button>
+            <button
+              type="button"
+              class="filter-chip filter-warning"
+              [class.active]="attentionFilter() === 'WARNING'"
+              (click)="attentionFilter.set('WARNING')"
+            >
+              {{ i18n.locale() === 'ar' ? 'تحذير' : 'Warning' }}
+            </button>
+            <button
+              type="button"
+              class="filter-chip"
+              [class.active]="attentionFilter() === 'EXPIRING'"
+              (click)="attentionFilter.set('EXPIRING')"
+            >
+              {{ i18n.locale() === 'ar' ? 'قرب الانتهاء' : 'Expiring' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Attention Items Table (Scrollable within container) -->
+        <div class="triage-scroll-wrap">
+          @if (filteredAttention().length === 0) {
+            <div class="empty-feed">
+              <fe-icon name="check" class="empty-icon text-ok"></fe-icon>
+              <span class="empty-title">
+                {{ i18n.locale() === 'ar' ? 'كافة العيادات والاشتراكات تعمل بانتظام' : 'All clinic tenants are healthy' }}
+              </span>
+              <span class="empty-desc">
+                {{ i18n.locale() === 'ar' ? 'لا توجد تنبيهات حرجة أو اشتراكات متعثرة تتطلب المتابعة.' : 'No overdue accounts or critical issues detected.' }}
+              </span>
+            </div>
+          } @else {
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>{{ i18n.locale() === 'ar' ? 'العيادة' : 'Clinic' }}</th>
+                  <th>{{ i18n.locale() === 'ar' ? 'السبب' : 'Reason' }}</th>
+                  <th>{{ i18n.locale() === 'ar' ? 'الخطورة' : 'Severity' }}</th>
+                  <th>{{ i18n.locale() === 'ar' ? 'الحالة' : 'Status' }}</th>
+                  <th class="actions-col">{{ i18n.locale() === 'ar' ? 'إجراء' : 'Action' }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of filteredAttention(); track item.clinicId + item.attentionType) {
+                  <tr [class.critical-row]="item.severity === 'CRITICAL'">
+                    <td>
+                      <div class="clinic-cell">
+                        <span class="clinic-name">{{ item.clinicName }}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="reason-text">{{ item.attentionReason }}</span>
+                    </td>
+                    <td>
+                      <fe-status-chip [tone]="severityTone(item.severity)">
+                        {{ item.severity }}
+                      </fe-status-chip>
+                    </td>
+                    <td>
+                      <fe-status-chip [tone]="statusTone(item.subscriptionStatus)">
+                        {{ item.subscriptionStatus }}
+                      </fe-status-chip>
+                    </td>
+                    <td class="actions-col">
+                      <a
+                        class="tbl-action-btn primary-action"
+                        routerLink="/app/platform/subscriptions"
+                        [title]="i18n.locale() === 'ar' ? 'إدارة الاشتراك' : 'Manage subscription'"
+                      >
+                        <fe-icon name="finance" class="mini-btn-icon"></fe-icon>
+                        <span>{{ i18n.locale() === 'ar' ? 'إدارة' : 'Manage' }}</span>
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      </section>
+
+      <!-- Right Column: Visual Charts -->
+      <section class="charts-column" aria-label="Visual Analytics">
+        <!-- Clinics By Status Distribution -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-wrap">
+              <fe-icon name="clinic" class="chart-icon"></fe-icon>
+              <h3 class="chart-title">
+                {{ i18n.locale() === 'ar' ? 'توزيع العيادات حسب الاشتراك' : 'Clinics by Subscription Status' }}
+              </h3>
+            </div>
+            <span class="chart-unit-badge">{{ kpis()?.totalClinics ?? 0 }} {{ i18n.locale() === 'ar' ? 'عيادة' : 'clinics' }}</span>
+          </div>
+
+          <!-- Stacked Progress Bar -->
+          <div class="status-distribution-bar">
+            @for (item of clinicsByStatus(); track item.status) {
+              @if (item.count > 0) {
+                <div
+                  class="status-bar-seg"
+                  [class]="'seg-' + item.status.toLowerCase()"
+                  [style.width.%]="item.percentage"
+                  [title]="item.status + ': ' + item.count + ' (' + item.percentage + '%)'"
+                ></div>
+              }
+            }
+          </div>
+
+          <!-- Legend and Percentages -->
+          <div class="status-legend-grid">
+            @for (item of clinicsByStatus(); track item.status) {
+              <div class="status-legend-item">
+                <div class="legend-indicator-row">
+                  <span class="legend-dot" [class]="'dot-' + item.status.toLowerCase()"></span>
+                  <span class="legend-status-name">{{ item.status }}</span>
+                </div>
+                <div class="legend-values-row">
+                  <span class="legend-count">{{ item.count }}</span>
+                  <span class="legend-pct">({{ item.percentage }}%)</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- 6-Month Platform Subscription Revenue Chart -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-title-wrap">
+              <fe-icon name="finance" class="chart-icon"></fe-icon>
+              <h3 class="chart-title">
+                {{ i18n.locale() === 'ar' ? 'إيرادات اشتراكات المنصة (آخر 6 أشهر)' : 'Platform Revenue (Last 6 Months)' }}
+              </h3>
+            </div>
+            <span class="chart-unit-badge">JOD</span>
+          </div>
+
+          <div class="bar-chart-container">
+            @for (month of revenueByMonth(); track month.monthKey) {
+              <div class="chart-col">
+                <span class="bar-val">{{ formatJod(month.amount) }}</span>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill"
+                    [style.height.%]="getRevenueBarHeight(month.amount)"
+                    [title]="month.monthLabel + ': ' + formatJod(month.amount)"
+                  ></div>
+                </div>
+                <span class="bar-label">{{ month.monthLabel }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </section>
+    </div>
+  }
+</div>

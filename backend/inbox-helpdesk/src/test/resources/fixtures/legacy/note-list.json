@@ -1,0 +1,21 @@
+{
+  "name": "an internal note: the legacy list shape with a nested author object",
+  "source": "apps/api/src/notes/notes.service.ts -> listForResource (legacy reference). The author is a nested {id, fullName} object, not a flattened name.",
+  "seed": "InboxFixture.reset(); one note on the fixture customer A1, written by the staff user.",
+  "volatile": ["id", "resourceId", "createdAt", "updatedAt"],
+  "response": [
+    {
+      "id": "<volatile>",
+      "resourceType": "Customer",
+      "resourceId": "aaaaaaaa-0000-0000-0000-0000000cc001",
+      "body": "Asked to call back after 4pm.",
+      "authorUserId": "aaaaaaaa-0000-0000-0000-00000000e001",
+      "author": {
+        "id": "aaaaaaaa-0000-0000-0000-00000000e001",
+        "fullName": "Alpha Staff"
+      },
+      "createdAt": "<volatile>",
+      "updatedAt": "<volatile>"
+    }
+  ]
+}

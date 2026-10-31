@@ -1,0 +1,424 @@
+/*
+ * The inbox is three panes on a wide screen and one at a time on a narrow one.
+ *
+ * `docs/migration-AGENT.md` §4.6 asks for "three columns: conversation list,
+ * thread, patient details". The pane widths are fixed rather than proportional
+ * because a thread is read as prose and a list is scanned by position: a list that
+ * changes width as the window changes makes scanning unreliable.
+ *
+ * Everything directional is a logical property. The only rule that mentions a
+ * direction is the pane switcher's `inset-inline-start` border, which exists to
+ * mark the start edge of a tab strip — and it is written logically so it flips with
+ * no second rule.
+ */
+
+.inbox {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 280px;
+  gap: var(--fe-space-4);
+  align-items: start;
+}
+
+.pane {
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius);
+  padding: var(--fe-space-4);
+  min-inline-size: 0;
+  /* The thread can be long; the pane scrolls, the page does not. */
+  max-block-size: calc(100dvh - 12rem);
+  overflow-y: auto;
+}
+
+.pane__title {
+  font-size: var(--fe-text-sm);
+  color: var(--mute);
+  margin-block-end: var(--fe-space-3);
+}
+
+/* --- pane switcher (narrow widths only) ---------------------------------- */
+
+.pane-switcher {
+  display: none;
+  gap: var(--fe-space-1);
+  margin-block-end: var(--fe-space-3);
+  border-block-end: 1px solid var(--line);
+}
+
+.pane-switcher__tab {
+  flex: 1;
+  min-block-size: var(--fe-control-height);
+  padding: var(--fe-space-2);
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: var(--fe-text-sm);
+  color: var(--mute);
+  cursor: pointer;
+  border-radius: var(--fe-radius-sm) var(--fe-radius-sm) 0 0;
+}
+
+.pane-switcher__tab--active {
+  color: var(--pri);
+  border-block-end-color: var(--pri);
+  font-weight: 600;
+}
+
+.pane-switcher__tab:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* --- conversation list --------------------------------------------------- */
+
+.segments {
+  display: flex;
+  gap: var(--fe-space-1);
+  margin-block: var(--fe-space-3);
+  flex-wrap: wrap;
+}
+
+.segments__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fe-space-1);
+  min-block-size: 32px;
+  padding: var(--fe-space-1) var(--fe-space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-sm);
+  background: var(--surf);
+  font: inherit;
+  font-size: var(--fe-text-xs);
+  color: var(--mute);
+  cursor: pointer;
+}
+
+.segments__item--active {
+  background: var(--pri-soft);
+  border-color: var(--pri);
+  color: var(--pri);
+  font-weight: 600;
+}
+
+/* --- unassigned queue ----------------------------------------------------- */
+
+/*
+ * The queue sits above the saved views and is visually distinct from them, because it
+ * answers a different question: not "what is mine" but "what has nobody taken". The
+ * start-edge rule is the same marker the selected row uses, so the eye reads them as
+ * the same kind of thing at different urgency.
+ */
+.queue {
+  margin-block-end: var(--fe-space-4);
+  padding-block-end: var(--fe-space-3);
+  border-block-end: 1px solid var(--line);
+}
+
+.queue__title {
+  font-size: var(--fe-text-sm);
+  font-weight: 600;
+  color: var(--ink);
+  margin-block-end: var(--fe-space-1);
+}
+
+.queue__list {
+  list-style: none;
+  margin: var(--fe-space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-1);
+  inline-size: 100%;
+  text-align: start;
+  padding: var(--fe-space-3);
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--warn);
+  border-radius: var(--fe-radius-sm);
+  background: var(--surf);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-block-size: var(--fe-control-height);
+}
+
+.queue__row:hover {
+  background: var(--surf2);
+}
+
+.queue__row--active {
+  background: var(--pri-soft);
+  border-color: var(--pri);
+}
+
+.queue__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fe-space-2);
+}
+
+.conversations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-1);
+  inline-size: 100%;
+  text-align: start;
+  padding: var(--fe-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--fe-radius-sm);
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-block-size: var(--fe-control-height);
+}
+
+.conversation:hover {
+  background: var(--surf2);
+}
+
+/*
+ * The selected row is marked three ways: colour, a start-edge rule, and
+ * `aria-current` in the template. Colour alone would be invisible to a
+ * screen reader and to anyone who cannot distinguish the two hues — the design
+ * system reserves green/amber/red for status and uses `--pri` for selection.
+ */
+.conversation--active {
+  background: var(--pri-soft);
+  border-color: var(--pri);
+  box-shadow: inset 3px 0 0 var(--pri);
+}
+
+.conversation__head,
+.conversation__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fe-space-2);
+}
+
+.conversation__ticket {
+  font-size: var(--fe-text-xs);
+  color: var(--mute);
+}
+
+.conversation__subject {
+  font-size: var(--fe-text-sm);
+  font-weight: 600;
+  /* Two lines, then an ellipsis. A subject that wraps to five lines pushes every
+     other row down and makes the list unscannable. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.conversation__preview {
+  font-size: var(--fe-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- thread -------------------------------------------------------------- */
+
+.thread__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--fe-space-3);
+  flex-wrap: wrap;
+  padding-block-end: var(--fe-space-3);
+  border-block-end: 1px solid var(--line);
+  margin-block-end: var(--fe-space-3);
+}
+
+.thread__ticket {
+  font-size: var(--fe-text-xs);
+  color: var(--mute);
+}
+
+.thread__subject {
+  font-size: var(--fe-text-lg);
+  font-weight: 600;
+}
+
+.thread__chips {
+  display: flex;
+  gap: var(--fe-space-1);
+  flex-wrap: wrap;
+}
+
+.thread__actions {
+  display: flex;
+  gap: var(--fe-space-2);
+  flex-wrap: wrap;
+  margin-block-end: var(--fe-space-4);
+}
+
+/*
+ * Chat bubbles, from the design system §4.5: incoming on the inset surface with a
+ * border, outgoing on the primary. Max width 72% so a short reply does not stretch
+ * across the pane and stop reading as a message.
+ */
+.messages {
+  list-style: none;
+  margin: 0 0 var(--fe-space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-3);
+}
+
+.message {
+  max-inline-size: 72%;
+  padding: var(--fe-space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius);
+  background: var(--surf2);
+}
+
+.message--outbound {
+  background: var(--pri);
+  color: var(--pri-ink);
+  border-color: var(--pri);
+  /* Pushed to the inline-end, which is the left edge in Arabic. */
+  align-self: flex-end;
+}
+
+.message__head {
+  display: flex;
+  align-items: center;
+  gap: var(--fe-space-2);
+  flex-wrap: wrap;
+  margin-block-end: var(--fe-space-1);
+}
+
+.message__author {
+  font-size: var(--fe-text-xs);
+  font-weight: 600;
+}
+
+.message__body {
+  font-size: var(--fe-text-base);
+  /* Preserved so a pasted list or an address does not reflow into prose. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message__failure {
+  color: var(--bad);
+}
+
+/* --- composer ------------------------------------------------------------ */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+  padding-block-start: var(--fe-space-3);
+  border-block-start: 1px solid var(--line);
+}
+
+.composer__input {
+  resize: vertical;
+  min-block-size: 5rem;
+}
+
+.resolution {
+  margin-block-start: var(--fe-space-4);
+  padding-block-start: var(--fe-space-3);
+  border-block-start: 1px solid var(--line);
+}
+
+.resolution summary {
+  cursor: pointer;
+  font-size: var(--fe-text-sm);
+  font-weight: 600;
+  color: var(--ink);
+  min-block-size: var(--fe-control-height);
+  display: flex;
+  align-items: center;
+}
+
+.resolution__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-3);
+  margin-block-start: var(--fe-space-3);
+}
+
+.field--check {
+  display: flex;
+  align-items: center;
+  gap: var(--fe-space-2);
+}
+
+/*
+ * The required marker on a resolution field.
+ *
+ * `aria-hidden`, because the requirement is carried by the control's own `required`
+ * attribute and by the error message a screen reader reads with the field — a marker
+ * announced as "asterisk" helps nobody. It is visible so the requirement is available
+ * without hovering, and it is coloured with the danger token rather than the muted one
+ * so it reads as a requirement rather than as decoration.
+ */
+.field__required {
+  color: var(--fe-danger);
+  margin-inline-start: var(--fe-space-1);
+}
+
+.chips {
+  list-style: none;
+  margin: 0 0 var(--fe-space-3);
+  padding: 0;
+  display: flex;
+  gap: var(--fe-space-1);
+  flex-wrap: wrap;
+}
+
+/* --- responsive ---------------------------------------------------------- */
+
+/*
+ * One pane at a time below 1100px. The switcher appears at the same breakpoint,
+ * so the tab strip and the single-column layout are always consistent — a layout
+ * that hides two panes without offering a way to reach them is the defect this
+ * avoids.
+ */
+@media (max-width: 1100px) {
+  .pane-switcher {
+    display: flex;
+  }
+
+  .inbox {
+    grid-template-columns: 1fr;
+  }
+
+  .pane {
+    max-block-size: none;
+  }
+
+  .pane[data-pane-active='false'] {
+    display: none;
+  }
+
+  .message {
+    max-inline-size: 86%;
+  }
+}

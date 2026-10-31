@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic JUnit report fixture for the no-hidden-skips self-test.
+  Shaped exactly like Gradle's output (one <testsuite> root per class, the
+  tests/skipped/failures/errors/time attributes) so the checker exercises
+  the real parser. Not a real suite result and not a claim about any
+  module's behaviour.
+-->
+<testsuite name="com.firstelement.security.TenantContextTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-04T00:00:00.000Z" hostname="fixture" time="0.100">
+  <properties/>
+  <testcase name="organizationId is mandatory: there is no 'no tenant' context" classname="com.firstelement.security.TenantContextTest" time="0.010"/>
+  <testcase name="a capability the principal type may not hold is refused at construction" classname="com.firstelement.security.TenantContextTest" time="0.012"/>
+  <testcase name="the project set is a defensive copy and cannot be mutated after construction" classname="com.firstelement.security.TenantContextTest" time="0.011"/>
+</testsuite>

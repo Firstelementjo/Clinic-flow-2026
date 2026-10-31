@@ -1,0 +1,115 @@
+-- =====================================================================
+-- V20261005120000__ai_run_child_tenant_scope_indexes.sql
+-- ADDITIVE, IDEMPOTENT-BY-VERSION, NON-DESTRUCTIVE.
+--
+-- !! READ THIS BEFORE CHANGING "CREATE INDEX" TO "CREATE INDEX CONCURRENTLY" !!
+--
+--   ADR-0005 section 3 asked for CONCURRENTLY here, "because the AI-trace
+--   tables are append-heavy". IT WAS TRIED, IT HUNG, AND IT WAS NOT KEPT.
+--   This header records exactly what was measured so the decision is never
+--   silently reversed.
+--
+-- WHAT WAS MEASURED, ON THIS HOST, 2026-10-05
+--   Attempt 1: one migration containing both the ALTER TABLE ... ADD COLUMN
+--   statements and the CREATE INDEX CONCURRENTLY statements, plus a
+--   `V20261005110000__ai_run_child_tenant_scope.conf` sidecar saying
+--   `executeInTransaction=false`.
+--     -> FlywayException: Detected both transactional and non-transactional
+--        statements within the same migration (even though mixed is false).
+--     Cause: flyway-core 11.7.2 Community has NO per-script
+--     `executeInTransaction` override. The `.conf` sidecar is a Teams/Enterprise
+--     feature; `SqlMigrationResolver` never reads it, and the resolved jar
+--     contains no script-configuration class at all. The parser therefore sees the
+--     global default and refuses a script that mixes statement kinds.
+--
+--   Attempt 2: the same, with `executeInTransaction=mixed`.
+--     -> Identical failure, because there is no per-script override to set.
+--
+--   Attempt 3: SPLIT. `V20261005110000` became the three ADD COLUMNS only
+--   (transactional, atomic); this file became the three index statements only.
+--     -> Flyway ACCEPTED it and logged
+--        `Migrating schema "public" to version "20261005120000 - ai run child
+--         tenant scope indexes" [non-transactional]`
+--        ...and then HUNG, indefinitely, inside
+--        PgStatement.execute -> VisibleBufferedInputStream.read.
+--     Cause (from a jcmd thread dump of the test worker):
+--        Flyway 11.7.2's PostgreSQL adapter takes its schema-history advisory
+--        lock on a SEPARATE connection (`PostgreSQLAdvisoryLockTemplate.execute`
+--        -> `PostgreSQLConnection.lock`). With the default
+--        `flyway.postgresql.transactionalLock=true`, that lock is held INSIDE AN
+--        OPEN TRANSACTION on the lock connection, while `CREATE INDEX
+--        CONCURRENTLY` runs on the migration connection. PostgreSQL's concurrent
+--        index build waits for every transaction older than its snapshot to
+--        finish -- so it waits forever for Flyway's own lock transaction. This is
+--        a Flyway/PostgreSQL interaction, not a schema problem, and it is not
+--        worked around by any script content.
+--
+-- WHY THIS FILE THEREFORE USES PLAIN CREATE INDEX
+--   ADR-0005 section 3 named the alternative explicitly: "Alternatively drop
+--   CONCURRENTLY and accept a SHARE lock during a maintenance window. Decision
+--   required before promotion; do NOT silently lose the CONCURRENTLY." This is
+--   that decision, made on measurement rather than on preference, and it is
+--   recorded in four places (this header, the runbook section 9c, the Phase-7-10a
+--   report, and the fixture's assertions) rather than dropped silently.
+--
+--   THE LOCK IS ACCEPTABLE HERE, and here is why, concretely:
+--     * `CREATE INDEX` takes SHARE, which blocks WRITES but not reads, for the
+--       duration of the build. On an empty table that duration is
+--       milliseconds.
+--     * `ai_run_steps`, `ai_run_retrievals` and `ai_run_tool_calls` are
+--       append-heavy only in PRODUCTION. At the cutover the migration runs
+--       against the first boot of the new API, and the verification bundle
+--       asserts they are EMPTY before this migration's window.
+--     * The alternative -- a boot that HANGS on the first Flyway-enabled start --
+--       is not a trade-off, it is a failure.
+--
+-- THE TWO REAL FIXES, FOR THE ORCHESTRATOR TO CHOOSE BETWEEN
+--   1. `spring.flyway.postgresql.transactional-lock=false`. This makes Flyway
+--      take the advisory lock with a session-level `pg_advisory_lock` in
+--      autocommit mode, so no long-running transaction exists to block a
+--      concurrent build. It is a Spring datasource property owned by the
+--      application module, not by the schema, which is why it is not set here.
+--      With it, this file's three statements may become CONCURRENTLY again -- and
+--      FlywayBaselineAcceptanceTest will then fail the "no CONCURRENTLY" check,
+--      which is the intended direction of travel.
+--   2. Keep plain CREATE INDEX and schedule the migration in a maintenance
+--      window, as ADR-0005 section 3 allows.
+--
+-- WHY NO DO BLOCK IN HERE
+--   A `DO $$ ... $$` statement is transactional. With plain CREATE INDEX this
+--   file could carry one; it does not, because the moment this file is switched
+--   back to CONCURRENTLY (fix 1 above) a DO block would make the script mixed
+--   again and Flyway would refuse the migration for the reason in Attempt 1.
+--   Keeping the file homogeneous means the CONCURRENTLY switch is a three-word
+--   change with no other consequences. The post-conditions live in
+--   V20261005110000 (transactional) and in V14 section 5 and the fixture.
+--
+-- INDEX RATIONALE (FR-1.3)
+--   ("organizationId","projectId","createdAt") on each of the three tables.
+--   Tenant filter first, always. One index rather than two, because the read that
+--   matters -- "this tenant's AI trace for this project, oldest first" -- needs all
+--   three columns in that order, and a tenant-only index would be a second write
+--   cost for a query nobody runs.
+--   Named with the tenant column FIRST in the name so the V9 census classifies
+--   them as tenant-led without anybody having to remember.
+--
+-- TIMESTAMPS
+--   No timestamps are declared here. This file creates indexes and nothing else.
+--
+-- SAFETY
+--   CREATE INDEX IF NOT EXISTS only. No DROP, no RENAME, no data change, no
+--   ALTER, no column added.
+--   Rollback: DROP INDEX -- rehearsed on a throwaway database only
+--   (ops/flyway/rollback/undo_phase7_10a.sql). It must NOT run while a writer is
+--   emitting AI runs that rely on the new indexes.
+--   Every identifier is schema-qualified (the baseline sets search_path = '').
+-- =====================================================================
+
+CREATE INDEX IF NOT EXISTS "ai_run_steps_org_project_created_idx"
+    ON "public"."ai_run_steps" ("organizationId", "projectId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "ai_run_retrievals_org_project_created_idx"
+    ON "public"."ai_run_retrievals" ("organizationId", "projectId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "ai_run_tool_calls_org_project_created_idx"
+    ON "public"."ai_run_tool_calls" ("organizationId", "projectId", "createdAt");

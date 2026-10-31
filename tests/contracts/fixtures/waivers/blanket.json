@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture: a blanket waiver. Must FAIL. There is no supported way to silence an entire suite.",
+  "entries": [
+    {
+      "suite": "*",
+      "test": "*",
+      "reason": "This is the shape the gate exists to reject: it would hide every future skip in every suite.",
+      "ticket": "FE-QA-SELFTEST",
+      "expiresOn": "2026-11-01",
+      "approvedBy": "ops/quality/checks/selftest.ps1"
+    }
+  ]
+}

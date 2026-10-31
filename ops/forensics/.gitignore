@@ -1,0 +1,6 @@
+# Rehearsal artefacts are regenerated on every run and are evidence of
+# one execution, not source. Nothing here should ever be committed: the
+# JSON and logs contain database identifiers and absolute paths from
+# whichever machine ran the rehearsal, and a stale forensic report in a
+# repository is a report nobody knows how fresh it is.
+.rehearsal/

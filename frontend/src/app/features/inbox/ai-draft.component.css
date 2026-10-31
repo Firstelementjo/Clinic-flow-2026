@@ -1,0 +1,139 @@
+/*
+ * The pending AI draft.
+ *
+ * ## Why the card cannot be mistaken for a sent message
+ *
+ * `docs/migration-AGENT.md` §4.5 gives the chat bubbles their shapes: incoming on
+ * `--surf2` with a border, outgoing on a solid `--pri` fill. So the draft takes
+ * the *inverse* of both: a dashed `--line` border, no fill, and a `--warn` badge.
+ * A dashed edge is the one treatment in this design system that appears nowhere
+ * else on a message, and it is what makes "not yet sent" legible before the words
+ * are read.
+ *
+ * Every directional property is logical, so the panel mirrors in RTL with no
+ * second rule — the badge sits on the inline-start edge and the fact list flows
+ * with the document.
+ */
+
+.draft-region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+  margin-block: var(--fe-space-3);
+}
+
+/* --- the card ------------------------------------------------------------- */
+
+.ai-draft {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+  padding: var(--fe-space-4);
+  /* Dashed, and nowhere else in a thread: the shape is the message. */
+  border: 1px dashed var(--line);
+  border-radius: var(--fe-radius);
+  /* `--surf2`, the inset surface, rather than the solid `--pri` of an outbound
+     bubble — the two must never read as the same kind of object. */
+  background: var(--surf2);
+}
+
+.ai-draft__head {
+  display: flex;
+  align-items: center;
+  gap: var(--fe-space-2);
+}
+
+/*
+ * The badge.
+ *
+ * `--warn-soft` on `--warn`, a reserved status pair: amber is for "pending" and
+ * nothing else, which is exactly what a draft is. The word is in the DOM beside
+ * it, so the state is never carried by colour alone.
+ */
+.ai-draft__badge {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--fe-text-xs);
+  font-weight: 500;
+}
+
+.ai-draft__title {
+  font-size: var(--fe-text-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ai-draft__body {
+  /* Left-aligned in both directions: this is text a person reads closely, so it
+     follows the block start rather than centring the way a chat bubble does. */
+  text-align: start;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+/*
+ * The sentence that removes the ambiguity.
+ *
+ * `--mute` because it is a caveat about state rather than content, and it is set
+ * at the small size the design system uses for secondary text.
+ */
+.ai-draft__status {
+  color: var(--mute);
+  font-size: var(--fe-text-sm);
+}
+
+.ai-draft__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fe-space-2) var(--fe-space-5);
+  color: var(--mute);
+  font-size: var(--fe-text-xs);
+}
+
+.ai-draft__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--fe-space-1);
+}
+
+.ai-draft__actions .fe-sub {
+  /* The hint explains what pressing does. It sits under the control rather than
+     in a tooltip, so it is reachable by keyboard and by screen reader. */
+  max-inline-size: 52ch;
+}
+
+/* --- the quiet lines ------------------------------------------------------ */
+
+/*
+ * "No draft", "a person took over", "not permitted".
+ *
+ * All three share one quiet shape. They are states of the region, not cards: the
+ * card is reserved for the one thing worth an operator's attention, and giving
+ * every state the same weight would flatten them.
+ */
+.draft-note {
+  padding: var(--fe-space-2) var(--fe-space-3);
+  border-inline-start: 3px solid var(--line);
+  color: var(--mute);
+  font-size: var(--fe-text-sm);
+}
+
+.draft-note strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.draft-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--fe-space-2);
+  padding: var(--fe-space-2) var(--fe-space-3);
+}
+
+/* Motion is confined to the spinner, and the design system honours
+   `prefers-reduced-motion` globally; nothing here animates on its own. */

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture: a well-formed waiver for a test that is NOT skipped anywhere. Must FAIL as STALE, because an unexercised waiver is how a temporary exception quietly becomes permanent.",
+  "entries": [
+    {
+      "suite": "com.firstelement.security.TenantContextTest",
+      "test": "a user principal may not carry capabilities, and a machine principal may not carry a role",
+      "reason": "Well-formed but stale on purpose so the self-test can prove unused waivers are rejected.",
+      "ticket": "FE-QA-SELFTEST",
+      "expiresOn": "2026-11-01",
+      "approvedBy": "ops/quality/checks/selftest.ps1"
+    }
+  ]
+}

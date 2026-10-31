@@ -1,0 +1,268 @@
+<main class="login">
+  <section class="login__form-pane">
+    <div class="login__inner">
+      <header class="login__header">
+        <span class="mark" aria-hidden="true">
+          <img src="/logo.png" alt="Logo" class="login__logo-img" />
+        </span>
+        <p class="login__brand">{{ 'shell.app.name' | t }}</p>
+        <button
+          type="button"
+          class="fe-btn"
+          [attr.aria-label]="'shell.locale.toggle' | t"
+          (click)="i18n.toggleLocale()"
+        >
+          <span dir="auto">{{ nextLocaleLabel() }}</span>
+        </button>
+      </header>
+
+      <div class="login__title">
+        <h1>{{ 'login.title' | t }}</h1>
+        <p>{{ 'login.subtitle' | t }}</p>
+      </div>
+
+      <div class="fe-card login__card">
+        @if (serverError(); as message) {
+          <div class="fe-alert" role="alert">{{ message }}</div>
+        }
+
+        <form novalidate (submit)="submit($event)">
+          <div class="field">
+            <label class="field__label" for="fe-login-email">{{ 'login.email' | t }}</label>
+            <input
+              #email
+              id="fe-login-email"
+              class="fe-input"
+              type="email"
+              name="email"
+              inputmode="email"
+              autocomplete="email"
+              dir="ltr"
+              [formControl]="form.controls.email"
+              [attr.aria-invalid]="fieldErrors().email ? 'true' : null"
+              [attr.aria-describedby]="fieldErrors().email ? 'fe-login-email-error' : null"
+              [attr.placeholder]="'login.emailPlaceholder' | t"
+            />
+            @if (fieldErrors().email; as error) {
+              <p class="field__error" id="fe-login-email-error">{{ error }}</p>
+            }
+          </div>
+
+          <!--
+            No "forgot password" link.
+
+            There is no `/forgot-password` route and no password-reset endpoint in the
+            contract, so the link inherited from the frozen `LoginPage` led to the
+            not-found screen. A sign-in page whose recovery path resolves to "not found"
+            is worse than having no recovery path: it tells the user the capability
+            exists and then refuses it. It is removed rather than kept as an honest
+            "not available" destination — same decision, without the broken promise —
+            and no reset capability has been invented to fill the gap.
+          -->
+          <div class="field">
+            <div class="field__row">
+              <label class="field__label" for="fe-login-password">{{ 'login.password' | t }}</label>
+              <button
+                type="button"
+                class="login__forgot"
+                (click)="openForgotModal()"
+              >
+                {{ 'login.forgot' | t }}
+              </button>
+            </div>
+            <div class="password">
+              <input
+                #password
+                id="fe-login-password"
+                class="fe-input"
+                [type]="showPassword() ? 'text' : 'password'"
+                name="password"
+                autocomplete="current-password"
+                [formControl]="form.controls.password"
+                [attr.aria-invalid]="fieldErrors().password ? 'true' : null"
+                [attr.aria-describedby]="fieldErrors().password ? 'fe-login-password-error' : null"
+                [attr.placeholder]="'login.passwordPlaceholder' | t"
+              />
+              <button
+                type="button"
+                class="password__toggle"
+                [attr.aria-label]="(showPassword() ? 'login.hidePassword' : 'login.showPassword') | t"
+                [attr.aria-pressed]="showPassword()"
+                (click)="showPassword.set(!showPassword())"
+              >
+                <!-- No emoji: the design system forbids them in the UI, and an
+                     icon-only control needs a shape that reads at 20px. -->
+                @if (showPassword()) {
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                    <path
+                      d="M3 3l18 18M10.6 10.7a2 2 0 002.8 2.8M9.9 4.2A10.8 10.8 0 0112 4c5.5 0 9 6 9 6a16 16 0 01-2.2 2.9M6.6 6.6C4.3 8.1 3 10 3 10s3.5 6 9 6c1 0 1.9-.2 2.7-.5"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.75"
+                    />
+                  </svg>
+                } @else {
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                    <path
+                      d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 2.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5Z"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.75"
+                    />
+                  </svg>
+                }
+              </button>
+            </div>
+            @if (fieldErrors().password; as error) {
+              <p class="field__error" id="fe-login-password-error">{{ error }}</p>
+            }
+          </div>
+
+          <button type="submit" class="fe-btn fe-btn--primary login__submit" [disabled]="submitting()">
+            @if (submitting()) {
+              <span class="fe-spinner" aria-hidden="true"></span>
+              <span>{{ 'login.submitting' | t }}</span>
+            } @else {
+              <span>{{ 'login.submit' | t }}</span>
+            }
+          </button>
+        </form>
+      </div>
+
+      <button
+        type="button"
+        class="fe-btn fe-btn--ghost login__theme"
+        [attr.aria-label]="'shell.theme.toggle' | t"
+        (click)="theme.toggle()"
+      >
+        {{ (theme.isDark() ? 'shell.theme.dark' : 'shell.theme.light') | t }}
+      </button>
+    </div>
+  </section>
+
+  <aside class="login__panel">
+    <div class="login__panel-inner">
+      <h2>{{ 'login.panelTitle' | t }}</h2>
+      <p>{{ 'login.panelBody' | t }}</p>
+      <hr class="login__rule" />
+      <p class="fe-sub">{{ 'login.panelNote' | t }}</p>
+    </div>
+  </aside>
+</main>
+
+@if (showForgotModal()) {
+  <div class="modal-backdrop" (click)="closeForgotModal()">
+    <div class="modal-dialog" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>{{ 'login.forgot.title' | t }}</h3>
+        <button type="button" class="modal-close" (click)="closeForgotModal()">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        @if (forgotSuccess()) {
+          <div class="fe-alert fe-alert--info" role="status">
+            {{ 'login.forgot.success' | t }}
+          </div>
+          <div class="modal-actions" style="margin-top: 1rem;">
+            <button type="button" class="fe-btn fe-btn--primary" style="width: 100%;" (click)="closeForgotModal()">
+              {{ 'login.forgot.close' | t }}
+            </button>
+          </div>
+        } @else {
+          @if (forgotError(); as err) {
+            <div class="fe-alert" role="alert" style="margin-bottom: 1rem; color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 0.5rem 0.75rem; border-radius: 6px;">
+              {{ err }}
+            </div>
+          }
+
+          @if (forgotStep() === 1) {
+            <p class="modal-desc">{{ 'login.forgot.step1Desc' | t }}</p>
+            <div class="field">
+              <label class="field__label">{{ 'login.email' | t }}</label>
+              <input
+                type="email"
+                class="fe-input"
+                dir="ltr"
+                [value]="forgotEmail()"
+                (input)="forgotEmail.set($any($event.target).value)"
+                [placeholder]="'login.emailPlaceholder' | t"
+              />
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="fe-btn fe-btn--ghost" (click)="closeForgotModal()">
+                {{ 'login.forgot.cancel' | t }}
+              </button>
+              <button
+                type="button"
+                class="fe-btn fe-btn--primary"
+                [disabled]="!forgotEmail() || forgotSending()"
+                (click)="sendForgotCode()"
+              >
+                @if (forgotSending()) {
+                  <span class="fe-spinner" aria-hidden="true"></span>
+                }
+                {{ 'login.forgot.sendCode' | t }}
+              </button>
+            </div>
+          } @else {
+            <p class="modal-desc">{{ 'login.forgot.step2Desc' | t }}</p>
+            <div class="field">
+              <label class="field__label">{{ 'login.forgot.codeLabel' | t }}</label>
+              <input
+                type="text"
+                class="fe-input font-mono"
+                dir="ltr"
+                [value]="forgotCode()"
+                (input)="forgotCode.set($any($event.target).value)"
+                placeholder="884210"
+              />
+            </div>
+            <div class="field">
+              <label class="field__label">{{ 'login.forgot.newPassword' | t }}</label>
+              <input
+                type="password"
+                class="fe-input"
+                dir="ltr"
+                [value]="forgotNewPassword()"
+                (input)="forgotNewPassword.set($any($event.target).value)"
+                [placeholder]="'login.passwordPlaceholder' | t"
+              />
+              <span style="font-size: 11px; color: var(--mute); display: block; margin-top: 4px;">
+                {{ 'login.forgot.passwordLengthHint' | t }}
+              </span>
+            </div>
+            <div class="field">
+              <label class="field__label">{{ 'login.forgot.confirmPassword' | t }}</label>
+              <input
+                type="password"
+                class="fe-input"
+                dir="ltr"
+                [value]="forgotConfirmPassword()"
+                (input)="forgotConfirmPassword.set($any($event.target).value)"
+                [placeholder]="'login.passwordPlaceholder' | t"
+              />
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="fe-btn fe-btn--ghost" (click)="forgotStep.set(1)">
+                {{ 'login.forgot.cancel' | t }}
+              </button>
+              <button
+                type="button"
+                class="fe-btn fe-btn--primary"
+                [disabled]="!forgotCode() || !forgotNewPassword() || forgotSending()"
+                (click)="submitPasswordReset()"
+              >
+                @if (forgotSending()) {
+                  <span class="fe-spinner" aria-hidden="true"></span>
+                }
+                {{ 'login.forgot.updateSubmit' | t }}
+              </button>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  </div>
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture: an EXPIRED waiver. Must FAIL with EXPIRED even though it names a real skipped test.",
+  "entries": [
+    {
+      "suite": "com.firstelement.security.TenantContextTest",
+      "test": "the project set is a defensive copy and cannot be mutated after construction",
+      "reason": "Expired on purpose so the self-test can prove an expired waiver stops granting anything.",
+      "ticket": "FE-QA-SELFTEST",
+      "expiresOn": "2020-01-01",
+      "approvedBy": "ops/quality/checks/selftest.ps1"
+    }
+  ]
+}

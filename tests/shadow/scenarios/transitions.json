@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "note": "The status-transition sequence replayed on both runtimes. Each runtime has its OWN identically seeded database; the same sequence is issued to each and the resulting rows are compared. `sequenceVariant` is used by PN-07 to feed one stack a DIFFERENT sequence and assert that the comparison notices.",
+
+  "id": "open-to-closed",
+  "conversationId": "f0000001-0000-4000-8000-000000000001",
+  "principalEmail": "shadow-admin-a@shadow.invalid",
+  "principalWhy": "An ADMIN in both runtimes, deliberately. CHK-6 is about the STATE a transition produces, so it must not be measuring a permission difference. The first run of this harness used an EMPLOYEE and CHK-6 went red with a 403 on steps 2 and 3 -- which turned out to be a real finding about the two runtimes' write-path permissions rather than about the transition (it is recorded in the phase report as SEC-02). Isolating the check from that finding required moving the subject to a principal both stacks authorise the same way, and the finding itself now lives in the read/write authorization evidence instead of being buried inside a transition check.",
+  "why": "CONV_A1_OPEN is seeded OPEN / HUMAN / unassigned / messageCount 2, so the starting state is identical on both sides and the sequence exercises the whole arc the legacy runtime models: a status change, a resolution stamp, and a close. A runtime that silently skips a step leaves a different state vector, which is what CHK-6 compares.",
+
+  "sequence": [
+    {
+      "label": "status -> PENDING",
+      "method": "PATCH",
+      "path": "/conversations/$conversation",
+      "body": { "status": "PENDING" }
+    },
+    {
+      "label": "status -> RESOLVED",
+      "method": "PATCH",
+      "path": "/conversations/$conversation",
+      "body": { "status": "RESOLVED" }
+    },
+    {
+      "label": "close",
+      "method": "PATCH",
+      "path": "/conversations/$conversation/close",
+      "body": {}
+    }
+  ],
+
+  "sequenceVariant": [
+    {
+      "label": "status -> PENDING",
+      "method": "PATCH",
+      "path": "/conversations/$conversation",
+      "body": { "status": "PENDING" }
+    },
+    {
+      "label": "status -> RESOLVED",
+      "method": "PATCH",
+      "path": "/conversations/$conversation",
+      "body": { "status": "RESOLVED" }
+    }
+  ],
+  "sequenceVariantWhy": "The close step is REMOVED. A runtime that treats a missing close as a no-op and one that refuses it both leave a state that differs from the three-step run, so this is the perturbation input for CHK-6. It is the closest thing to a silent write no-op that a read-only harness can provoke, and a silent write no-op is precisely what must not survive a cutover."
+}

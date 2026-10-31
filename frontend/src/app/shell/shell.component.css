@@ -1,0 +1,542 @@
+.shell {
+  display: flex;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* --- ToothLogic Sidebar ------------------------------------------------ */
+.tl-sidebar {
+  width: 250px;
+  height: 100dvh;
+  max-height: 100dvh;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--rb-glass-bg);
+  backdrop-filter: blur(16px);
+  border-inline-end: 1px solid var(--rb-card-border);
+  box-shadow: var(--shadow-soft);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tl-sidebar--collapsed {
+  width: 76px;
+}
+
+.tl-brand {
+  height: 52px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 14px 8px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+
+.tl-brand-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tl-tooth-logo {
+  width: 28px;
+  height: 28px;
+  color: var(--tl-teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tl-tooth-logo img,
+.tl-tooth-logo svg {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.tl-brand-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--tl-teal);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.tl-collapse-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--tl-teal);
+  color: var(--on-accent);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: absolute;
+  inset-inline-end: -13px;
+  top: 50%;
+  transform: translateY(-50%);
+  box-shadow: var(--glow-teal);
+  z-index: 40;
+  transition: all 0.15s ease;
+}
+
+.tl-collapse-btn:hover {
+  background: var(--tl-teal-hover);
+  transform: translateY(-50%) scale(1.08);
+}
+
+.tl-collapse-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+[dir="rtl"] .tl-collapse-btn svg {
+  transform: scaleX(-1);
+}
+
+/* Nav Groups & Links */
+.tl-nav {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 0;
+}
+
+.tl-nav-group-title {
+  padding: 10px 16px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute-2);
+}
+
+.tl-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tl-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  margin: 2px 10px;
+  border-radius: 8px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tl-nav-link:hover {
+  background: var(--pri-soft);
+  color: var(--tl-teal);
+}
+
+.tl-nav-link--active {
+  background: var(--rb-active-pill) !important;
+  color: var(--on-accent) !important;
+  font-weight: 600;
+  box-shadow: var(--glow-teal);
+}
+
+.tl-nav-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tl-sidebar--collapsed .tl-nav-link {
+  justify-content: center;
+  padding: 8px 0;
+  margin: 2px 8px;
+}
+
+/* --- Main Layout Wrap -------------------------------------------------- */
+.tl-main-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* --- Topbar ------------------------------------------------------------ */
+.tl-topbar {
+  height: 52px;
+  background: var(--rb-glass-bg);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--rb-card-border);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  flex: none;
+  z-index: 20;
+}
+
+/* Horizontal Tabs */
+.tl-topbar-tabs {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+}
+
+.tl-tab-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mute);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.tl-tab-link:hover {
+  color: var(--tl-teal);
+}
+
+.tl-tab-link--active {
+  color: var(--tl-teal);
+  font-weight: 600;
+  border-bottom-color: var(--tl-teal);
+}
+
+.tl-tab-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Topbar Right Controls */
+.tl-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tl-topbar-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surf2);
+  border: 1px solid var(--line);
+  color: var(--mute);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tl-topbar-btn:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+.tl-topbar-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tl-notify-wrapper {
+  position: relative;
+}
+
+.tl-notify-badge {
+  position: absolute;
+  top: -2px;
+  inset-inline-end: -2px;
+  background: var(--bad);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--on-accent);
+}
+
+/* The notification panel. A dropdown over the page, anchored to the bell. */
+.tl-notify-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  inset-inline-end: 0;
+  width: 340px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-panel);
+  z-index: 60;
+  padding: 6px 0;
+}
+
+.tl-notify-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tl-notify-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.tl-notify-panel-action {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--tl-teal);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tl-notify-panel-action:hover {
+  text-decoration: underline;
+}
+
+.tl-notify-panel-empty {
+  margin: 0;
+  padding: 18px 14px;
+  font-size: 12px;
+  color: var(--mute);
+  text-align: center;
+}
+
+.tl-notify-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tl-notify-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--surf2);
+}
+
+.tl-notify-item:last-child {
+  border-bottom: none;
+}
+
+.tl-notify-item--unread {
+  background: var(--pri-soft);
+}
+
+.tl-notify-item-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+
+.tl-notify-item-body {
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.tl-notify-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--mute-2);
+}
+
+.tl-lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 15px;
+  background: var(--surf2);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tl-lang-btn:hover {
+  background: var(--line);
+  color: var(--tl-teal);
+}
+
+.tl-globe-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Avatar & Dropdown */
+.tl-profile-menu {
+  position: relative;
+}
+
+.tl-avatar-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.tl-avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--line);
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  border: 2px solid var(--on-accent);
+  box-shadow: var(--shadow-ring);
+}
+
+.tl-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  width: 220px;
+  background: var(--surf);
+  border-radius: 8px;
+  box-shadow: var(--shadow-float);
+  border: 1px solid var(--line);
+  padding: 10px 0;
+  z-index: 50;
+}
+
+.tl-dropdown-section-title {
+  padding: 4px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--mute-2);
+  letter-spacing: 0.05em;
+}
+
+.tl-dropdown-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+/* The icon is decoration: the label beside it carries the meaning, and the
+   glyph itself is hidden from assistive technology by the icon component. */
+.tl-dropdown-icon {
+  color: var(--mute);
+  flex: none;
+}
+
+.tl-dropdown-link:hover {
+  background: var(--surf2);
+  color: var(--tl-teal);
+}
+
+.tl-dropdown-link:hover .tl-dropdown-icon {
+  color: var(--tl-teal);
+}
+
+.tl-dropdown-user {
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tl-dropdown-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.tl-dropdown-role {
+  font-size: 11px;
+  color: var(--mute);
+}
+
+.tl-dropdown-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 6px 0;
+}
+
+.tl-dropdown-item {
+  width: 100%;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  text-align: start;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-dropdown-item:hover {
+  background: var(--surf2);
+  color: var(--bad);
+}
+
+/* Content Area */
+.tl-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--rb-canvas-bg);
+}
+
+.tl-content:has(fe-clinic-prescriptions-page) {
+  overflow: hidden !important;
+}

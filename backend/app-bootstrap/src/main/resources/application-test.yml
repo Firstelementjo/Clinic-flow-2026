@@ -1,0 +1,11 @@
+firstelement:
+  environment: TEST
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/firstelement_test}
+
+management:
+  tracing:
+    sampling:
+      probability: 0.0

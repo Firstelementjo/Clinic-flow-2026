@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/config" },
+    { "path": "packages/shared" },
+    { "path": "packages/database" },
+    { "path": "packages/auth" },
+    { "path": "packages/events" },
+    { "path": "packages/connectors" },
+    { "path": "packages/ai" },
+    { "path": "packages/knowledge-base" },
+    { "path": "packages/routing" },
+    { "path": "packages/messaging" },
+    { "path": "apps/api" },
+    { "path": "apps/worker" }
+  ]
+}

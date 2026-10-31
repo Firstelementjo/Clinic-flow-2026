@@ -1,0 +1,825 @@
+<div class="fe-page" data-testid="finance">
+  <fe-page-header [title]="'finance.title'" [description]="'finance.description'">
+    <button type="button" class="fe-btn" (click)="load()">{{ 'finance.refresh' | t }}</button>
+  </fe-page-header>
+
+  <div
+    class="tabs"
+    role="tablist"
+    [attr.aria-label]="'finance.title' | t"
+    (keydown)="onTabKeydown($event)"
+  >
+    @for (entry of tabs(); track entry.id) {
+      <button
+        type="button"
+        role="tab"
+        class="tabs__tab"
+        [id]="'finance-tab-' + entry.id"
+        [attr.aria-selected]="tab() === entry.id"
+        [attr.aria-controls]="'finance-panel-' + entry.id"
+        [attr.tabindex]="tab() === entry.id ? 0 : -1"
+        (click)="tab.set(entry.id)"
+      >
+        {{ entry.key | t }}
+      </button>
+    }
+  </div>
+
+  <!-- ============================================================= usage -->
+  @if (tab() === 'usage') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="finance-panel-usage"
+      aria-labelledby="finance-tab-usage"
+      tabindex="0"
+      [attr.aria-label]="'finance.usage.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'finance.usage.title' | t }}</h3>
+      <p class="fe-sub">{{ 'finance.usage.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="daily.loading() && !daily.value()"
+        [empty]="daily.value() !== null && usageRows().length === 0"
+        [error]="daily.error()"
+        [hasValue]="daily.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [loadingHint]="'state.loadingHint' | t"
+        [emptyTitle]="'finance.usage.empty' | t"
+        [emptyBody]="'finance.usage.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(daily)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (usageRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of usageRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span class="fe-num">{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <h4 class="fe-eyebrow">{{ 'finance.usage.title' | t }}</h4>
+      <fe-async-state
+        [loading]="forecast.loading() && !forecast.value()"
+        [empty]="forecast.value() !== null && forecastRows().length === 0"
+        [error]="forecast.error()"
+        [hasValue]="forecast.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(forecast)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+      @if (forecastRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of forecastRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span class="fe-num">{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <!--
+        The drill-through routes exist and work, but they take a snapshot or event id
+        that no list route publishes, so there is nothing here to drill from. Saying so
+        is better than a link that goes nowhere.
+      -->
+      <fe-not-available
+        [title]="'finance.unavailable.drill'"
+        [body]="'finance.unavailable.drillBody'"
+        [missing]="'GET /api/v1/finance/drill/snapshots/{snapshotId}, /drill/events/{eventId}/corrections'"
+      />
+    </section>
+  }
+
+  <!-- =========================================================== periods -->
+  @if (tab() === 'periods') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="finance-panel-periods"
+      aria-labelledby="finance-tab-periods"
+      tabindex="0"
+      [attr.aria-label]="'finance.periods.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'finance.periods.title' | t }}</h3>
+      <p class="fe-sub">{{ 'finance.periods.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="periods.loading() && !periods.value()"
+        [empty]="periods.value() !== null && periodRows().length === 0"
+        [error]="periods.error()"
+        [hasValue]="periods.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'finance.periods.empty' | t"
+        [emptyBody]="'finance.periods.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(periods)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (periodRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of periodRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <h4 class="fe-eyebrow">{{ 'finance.rates.title' | t }}</h4>
+      <fe-async-state
+        [loading]="rateCards.loading() && !rateCards.value()"
+        [empty]="rateCards.value() !== null && rateCardRows().length === 0"
+        [error]="rateCards.error()"
+        [hasValue]="rateCards.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'finance.rates.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(rateCards)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+      @if (rateCardRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of rateCardRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <h4 class="fe-eyebrow">{{ 'finance.legacy.title' | t }}</h4>
+      <fe-async-state
+        [loading]="legacy.loading() && !legacy.value()"
+        [empty]="legacy.value() !== null && legacyRows().length === 0"
+        [error]="legacy.error()"
+        [hasValue]="legacy.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'finance.legacy.empty' | t"
+        [emptyBody]="'finance.legacy.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(legacy)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+      @if (legacyRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of legacyRows(); track row.key) {
+            <li class="fe-row">
+              <span>{{ row.rawLabel }}</span>
+              <span class="fe-num">{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  <!-- ==================================================== reconciliation -->
+  @if (tab() === 'reconciliation') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="finance-panel-reconciliation"
+      aria-labelledby="finance-tab-reconciliation"
+      tabindex="0"
+      [attr.aria-label]="'finance.reconciliation.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'finance.reconciliation.title' | t }}</h3>
+      <p class="fe-sub">{{ 'finance.reconciliation.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="reconciliation.loading() && !reconciliation.value()"
+        [empty]="reconciliation.value() !== null && reconciliationRows().length === 0"
+        [error]="reconciliation.error()"
+        [hasValue]="reconciliation.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'finance.reconciliation.empty' | t"
+        [emptyBody]="'finance.reconciliation.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(reconciliation)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (reconciliationRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of reconciliationRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span class="fe-num">{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <!-- The eleven writes, named, with the reason they are not buttons. -->
+      <section class="fe-card fe-card--inset" [attr.aria-labelledby]="'finance-writes-title'">
+        <h4 class="fe-card__title" id="finance-writes-title">{{ 'finance.writes.title' | t }}</h4>
+        <p>{{ 'finance.writes.body' | t }}</p>
+      </section>
+    </section>
+  }
+
+  <!-- ============================================================ exports -->
+  @if (tab() === 'exports') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="finance-panel-exports"
+      aria-labelledby="finance-tab-exports"
+      tabindex="0"
+      [attr.aria-label]="'finance.exports.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'finance.exports.title' | t }}</h3>
+      <p class="fe-sub">{{ 'finance.exports.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="exportList.loading() && !exportList.value()"
+        [empty]="exportList.value() !== null && exportRows().length === 0"
+        [error]="exportList.error()"
+        [hasValue]="exportList.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'finance.exports.empty' | t"
+        [emptyBody]="'finance.exports.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(exportList)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (exportRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of exportRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span class="fe-num">{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <!-- ======================================= catalogue and creation -->
+      <h4 class="fe-eyebrow">{{ 'finance.catalogue.title' | t }}</h4>
+      <p class="fe-sub">{{ 'finance.catalogue.hint' | t }}</p>
+
+      <!--
+        The catalogue's own loading and failure states.
+
+        **No empty gate here, deliberately.** An empty catalogue is not an empty *list*:
+        the response is a rich document — formats, locales, defaults, subjects, fields,
+        metadata placeholders, redaction policies and a note — and on a fresh tenant it
+        arrives with `reportDefinitions: []`. An `[empty]` branch keyed on that would
+        replace the whole document with three sentences and hide everything the server
+        actually said, so emptiness is expressed *inside* the rendered document instead
+        (see `catalogue.emptyBody` below).
+
+        Concretely, an `[empty]` gate here once swallowed the whole catalogue and the
+        screen showed "Loading" forever next to an empty create form — which reads as a
+        hang rather than as an absence.
+      -->
+      <fe-async-state
+        [loading]="catalogue.loading() && !catalogue.value()"
+        [empty]="false"
+        [error]="catalogue.error()"
+        [hasValue]="catalogue.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [loadingHint]="'state.loadingHint' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(catalogue)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (catalogue.value(); as cat) {
+        <!--
+          ## What the catalogue published, stated as data
+          -->
+        <dl class="facts">
+          <div>
+            <dt class="fe-eyebrow">{{ 'finance.catalogue.formats' | t }}</dt>
+            <dd class="fe-mono" dir="ltr">{{ cat.formats?.join(', ') ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt class="fe-eyebrow">{{ 'finance.create.locale' | t }}</dt>
+            <dd class="fe-mono" dir="ltr">{{ cat.locales?.join(', ') ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt class="fe-eyebrow">{{ 'finance.catalogue.definitionsCount' | t }}</dt>
+            <dd class="fe-num">{{ reportDefinitions().length }}</dd>
+          </div>
+          <div>
+            <dt class="fe-eyebrow">{{ 'finance.catalogue.templatesCount' | t }}</dt>
+            <dd class="fe-num">{{ documentTemplates().length }}</dd>
+          </div>
+          <div>
+            <dt class="fe-eyebrow">{{ 'finance.create.filters' | t }}</dt>
+            <dd class="fe-num">{{ catalogueFields().length }}</dd>
+          </div>
+        </dl>
+        <!--
+          The catalogue's own note, verbatim.
+
+          It explains limits the enums do not — and it is the **server's** words about
+          what this project can produce, so substituting a client paraphrase would be
+          replacing an authoritative statement with a guess.
+        -->
+        @if (cat.note; as note) {
+          <p class="fe-sub catalogue__note" dir="auto">{{ note }}</p>
+        }
+
+        <ul class="catalogue">
+          @for (row of reportDefinitions(); track row.key) {
+            <li class="catalogue__item">
+              <span class="catalogue__name">{{ row.name }}</span>
+              @if (row.detail) {
+                <span class="fe-sub">{{ row.detail }}</span>
+              }
+              <span class="fe-sub">
+                {{ 'finance.catalogue.versions' | t }}: {{ row.versionsLabel }}
+              </span>
+            </li>
+          }
+        </ul>
+
+        @if (reportDefinitions().length === 0 && documentTemplates().length === 0) {
+          <!--
+            The catalogue answered, and it holds nothing exportable.
+
+            This is the state of **every fresh tenant**: migration
+            `V20261005060000` creates `report_definitions` and `document_templates`
+            without inserting a row, and no route creates them (Hook 19). So the empty
+            state is named here rather than presented as a picker with nothing in it,
+            and the create form's submit stays disabled — the four identity fields
+            cannot be satisfied from an empty catalogue, and a request without them
+            would be refused.
+          -->
+          <p class="fe-sub catalogue__empty">{{ 'finance.catalogue.emptyBody' | t }}</p>
+        }
+      }
+
+      <!--
+        The create form.
+
+        Only rendered when a project is selected, because `GET /api/v1/exports/catalogue`
+        **requires** `projectId` — asking without one is a request the contract forbids.
+        When no project is chosen the section says so rather than loading a whole-tenant
+        catalogue that would then be filtered back down.
+      -->
+      @if (canCreate()) {
+        <!--
+          Loading and failure are stated **inside** the create section, rather than being
+          left to the catalogue's own async-state above. Without them the section renders
+          as an empty box for as long as the read takes — which looks exactly like a
+          screen that has nothing — and the operator cannot tell "still asking" from
+          "there is nothing here".
+        -->
+        <section class="fe-card fe-card--inset create" [attr.aria-labelledby]="'finance-create-title'">
+          <h4 class="fe-card__title" id="finance-create-title">{{ 'finance.create.title' | t }}</h4>
+          <p class="fe-sub">{{ 'finance.create.description' | t }}</p>
+
+          <form class="create__form" novalidate (submit)="createExport($event)">
+            <div class="field">
+              <label class="field__label" for="fe-export-definition">
+                {{ 'finance.create.report' | t }}
+              </label>
+              <select
+                id="fe-export-definition"
+                class="fe-input"
+                [formControl]="creationForm.controls.reportDefinitionId"
+              >
+                <option value="">{{ 'finance.create.choose' | t }}</option>
+                @for (row of reportDefinitions(); track row.key) {
+                  <option [value]="row.id">{{ row.name }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-export-report-version">
+                {{ 'finance.create.reportVersion' | t }}
+              </label>
+              <select
+                id="fe-export-report-version"
+                class="fe-input"
+                [formControl]="creationForm.controls.reportVersion"
+              >
+                <option value="">{{ 'finance.create.chooseVersion' | t }}</option>
+                @for (version of selectableVersions(selectedDefinition()); track version.version) {
+                  <!--
+                    A version the catalogue marks not-exportable is listed but cannot be
+                    chosen.
+
+                    The option's label is **just the version number**. The catalogue's own
+                    refusal — the sentence explaining *why* this version may not be pinned —
+                    is rendered as page text in the list immediately below, not crammed into
+                    the option. Two reasons, and the second is the important one:
+
+                    1. an `<option>`'s text is not page text. It is not in the accessibility
+                       tree the way an element's text is, so a screen reader announces it
+                       only when the operator opens the list — and a reason that long, read
+                       one option at a time out of context, is not a usable explanation;
+                    2. a refusal is information, not a label. It has to be readable without
+                       interacting with the control.
+
+                    So the select carries the choice and the list carries the reasons, and
+                    the reasons are the server's own words rather than a reason this client
+                    invented.
+                  -->
+                  <option [ngValue]="version.version" [disabled]="!version.exportable">
+                    {{ version.label }}
+                  </option>
+                }
+              </select>
+
+              <!--
+                Why each version is or is not available, in words, without opening anything.
+
+                Rendered as a list rather than a tooltip or a `title`, because a `title` is
+                unreachable by keyboard and by touch, and this is the sentence that tells an
+                operator their export cannot be made.
+              -->
+              @if (versionExplanations().length > 0) {
+                <ul class="create__versions" data-testid="export-version-explanations">
+                  @for (entry of versionExplanations(); track entry.number) {
+                    <li class="create__version">
+                      <span class="fe-num">{{ entry.number }}</span>
+                      <span class="fe-mono" dir="ltr">{{ entry.state }}</span>
+                      <span
+                        class="fe-chip"
+                        [class.fe-chip--on]="entry.exportable"
+                        [attr.data-exportable]="entry.exportable"
+                      >
+                        {{
+                          (entry.exportable
+                            ? 'finance.create.versionExportable'
+                            : 'finance.create.versionWithheld') | t
+                        }}
+                      </span>
+                      <span class="fe-sub">{{ entry.reason }}</span>
+                    </li>
+                  }
+                </ul>
+              }
+              @if (creationForm.controls.reportVersion.touched && creationForm.controls.reportVersion.invalid) {
+                <p class="field__error">{{ 'finance.create.versionRequired' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-export-template">
+                {{ 'finance.create.template' | t }}
+              </label>
+              <select
+                id="fe-export-template"
+                class="fe-input"
+                [formControl]="creationForm.controls.documentTemplateId"
+              >
+                <option value="">{{ 'finance.create.choose' | t }}</option>
+                @for (row of documentTemplates(); track row.key) {
+                  <option [value]="row.id">{{ row.name }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-export-template-version">
+                {{ 'finance.create.templateVersion' | t }}
+              </label>
+              <select
+                id="fe-export-template-version"
+                class="fe-input"
+                [formControl]="creationForm.controls.documentTemplateVersion"
+              >
+                <option value="">{{ 'finance.create.chooseVersion' | t }}</option>
+                @for (version of selectableVersions(selectedTemplate()); track version.version) {
+                  <option
+                    [ngValue]="version.version"
+                    [disabled]="!version.exportable"
+                  >
+                    {{ version.label }}{{ version.exportable ? '' : ' — ' + (version.refusal ?? ('finance.create.withheld' | t)) }}
+                  </option>
+                }
+              </select>
+              @if (creationForm.controls.documentTemplateVersion.touched && creationForm.controls.documentTemplateVersion.invalid) {
+                <p class="field__error">{{ 'finance.create.versionRequired' | t }}</p>
+              }
+            </div>
+
+            <!--
+              The format select is built from `catalogue.formats`, which is `CSV` and
+              `DOCX`. `XLSX`, `PDF` and `JSON` exist in the database's enum and the server
+              refuses them with 422 `EXPORT_FORMAT_UNSUPPORTED`; offering them would offer
+              three choices guaranteed to fail, and a file whose extension lies about its
+              contents is the worst outcome this subsystem has.
+            -->
+            <div class="field">
+              <label class="field__label" for="fe-export-format">
+                {{ 'finance.create.format' | t }}
+              </label>
+              <select
+                id="fe-export-format"
+                class="fe-input"
+                [formControl]="creationForm.controls.format"
+              >
+                <option value="">{{ 'finance.create.chooseFormat' | t }}</option>
+                @for (format of catalogueFormatValues(); track format) {
+                  <option [value]="format">{{ format }}</option>
+                }
+              </select>
+            </div>
+
+            <!--
+              Both languages are always offered regardless of which one the screen is in:
+              this is the **artefact's** language, not the reader's.
+            -->
+            <div class="field">
+              <label class="field__label" for="fe-export-locale">
+                {{ 'finance.create.locale' | t }}
+              </label>
+              <select
+                id="fe-export-locale"
+                class="fe-input"
+                [formControl]="creationForm.controls.locale"
+              >
+                <option value="">{{ 'finance.create.chooseLocale' | t }}</option>
+                @for (value of catalogueLocales(); track value) {
+                  <option [value]="value">{{ value }}</option>
+                }
+              </select>
+              <p class="fe-sub">{{ 'finance.create.localeHint' | t }}</p>
+            </div>
+
+            @if (catalogueFields().length > 0) {
+              <fieldset class="create__filters">
+                <legend class="field__label">{{ 'finance.create.filters' | t }}</legend>
+                <p class="fe-sub">{{ 'finance.create.filtersHint' | t }}</p>
+                @for (field of catalogueFields(); track field.key) {
+                  <!--
+                    `filterControl(key)` rather than indexing the group directly: the set of
+                    keys is whatever the catalogue declared, so the group is dynamic and the
+                    accessor is what keeps it typed.
+                  -->
+                  @if (filterControl(field.key); as control) {
+                    <div class="field">
+                      <label class="field__label" for="fe-export-filter-{{ field.key }}">
+                        {{ field.label }}
+                      </label>
+                      <input
+                        id="fe-export-filter-{{ field.key }}"
+                        class="fe-input"
+                        type="text"
+                        [formControl]="control"
+                      />
+                    </div>
+                  }
+                }
+              </fieldset>
+            }
+
+            <!--
+              The submit is disabled unless the four identity fields are satisfied.
+
+              With an empty catalogue they cannot be, which is the honest state: a POST
+              without a `reportDefinitionId` is refused, and sending one anyway to find
+              out wastes a round trip on a request whose outcome is already known.
+
+              **Always rendered.** A button that is hidden when it cannot be used is worse
+              than one that is present and disabled, because a control that appears when
+              it becomes usable is a control whose arrival an operator has to notice — and
+              because a journey cannot assert the absence of something that was never
+              there in the first place.
+            -->
+            <button
+              type="submit"
+              class="fe-btn"
+              [disabled]="creating() || creationForm.invalid || !creationForm.valid"
+            >
+              {{ (creating() ? 'finance.create.submitting' : 'finance.create.submit') | t }}
+            </button>
+            @if (creationForm.disabled || creationForm.invalid) {
+              <p class="fe-sub">{{ 'finance.create.needsChoices' | t }}</p>
+            }
+          </form>
+
+          @if (creationNotice(); as notice) {
+            <div class="fe-alert fe-alert--info" role="status">{{ notice }}</div>
+          }
+          @if (creationError(); as message) {
+            <div class="fe-alert" role="alert">
+              {{ message }}
+              @if (creationRequestId(); as requestId) {
+                <span class="fe-sub fe-mono" dir="ltr">{{ requestId }}</span>
+              }
+            </div>
+          }
+          @if (queued(); as job) {
+            <dl class="facts">
+              <div>
+                <dt class="fe-eyebrow">{{ 'finance.create.jobId' | t }}</dt>
+                <dd class="fe-mono" dir="ltr">{{ job.jobId ?? '—' }}</dd>
+              </div>
+              <div>
+                <dt class="fe-eyebrow">{{ 'finance.create.status' | t }}</dt>
+                <dd>{{ job.status ?? '—' }}</dd>
+              </div>
+              @if (job.redactionPolicy; as policy) {
+                <div>
+                  <dt class="fe-eyebrow">{{ 'finance.policy.title' | t }}</dt>
+                  <dd class="fe-mono" dir="ltr">{{ policy }}</dd>
+                </div>
+              }
+              @if (job.withheldColumns?.length) {
+                <div>
+                  <dt class="fe-eyebrow">{{ 'finance.create.withheldColumns' | t }}</dt>
+                  <dd class="fe-mono" dir="ltr">{{ job.withheldColumns!.join(', ') }}</dd>
+                </div>
+              }
+            </dl>
+          }
+        </section>
+      } @else if (canReadExports()) {
+        <p class="fe-sub">{{ 'finance.create.needsProject' | t }}</p>
+      }
+
+      <h4 class="fe-eyebrow">{{ 'finance.gate.title' | t }}</h4>
+      @if (canReadFinance()) {
+        <fe-async-state
+          [loading]="financeGate.loading() && !financeGate.value()"
+          [empty]="financeGate.value() !== null && financeGateRows().length === 0"
+          [error]="financeGate.error()"
+          [hasValue]="financeGate.value() !== null"
+          [loadingLabel]="'state.loading' | t"
+          [errorTitle]="'state.error' | t"
+          [errorBody]="'state.errorHint' | t"
+          [requestId]="requestIdOf(financeGate)"
+          [requestIdLabel]="'state.requestId' | t"
+          [retryLabel]="'state.retry' | t"
+          (retry)="load()"
+        />
+        @if (financeGateRows().length > 0) {
+          <ul class="fe-list">
+            @for (row of financeGateRows(); track row.key) {
+              <li class="fe-row">
+                <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+                <span>{{ row.value }}</span>
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <!--
+          Not loaded and not hidden: the operator is told the gate exists and that their
+          permission does not reach it. That is different from an empty card, which
+          would read as "no gate is configured".
+        -->
+        <p class="fe-sub">{{ 'finance.gate.organizationOnly' | t }}</p>
+      }
+
+      <section class="fe-card fe-card--inset" [attr.aria-labelledby]="'finance-export-writes-title'">
+        <h4 class="fe-card__title" id="finance-export-writes-title">
+          {{ 'finance.writes.title' | t }}
+        </h4>
+        <p>{{ 'finance.exportsWrites' | t }}</p>
+      </section>
+
+      <!--
+        The "no route lists report definitions or document templates" card that stood here
+        was **false** and was removed. It claimed the ids an export needs could not be picked
+        and that no create form was offered — while the form above, in this same panel, was
+        offering one, populated from `GET /api/v1/exports/catalogue`.
+
+        It was true when written: the list routes really were absent. Phase 32 added
+        `/api/v1/exports/catalogue`, which lists both, and the authoring routes beneath it.
+        The card was not revisited, and it had become a screen that denies its own
+        capability — worse than an error, because the error would have been traceable and
+        this read as fact.
+
+        It also cost a journey: `getByText('Report definitions')` matched the real count, this
+        heading, and this body, and the strict-mode violation it produced looked like a test
+        bug rather than a screen contradicting itself.
+
+        `unavailable.download` below is the opposite case and **stays**: the route
+        (`POST /api/v1/exports/{exportId}/download-link`) genuinely exists and this client
+        genuinely does not mint the short-lived link it needs, so the absence is real and the
+        copy says so.
+      -->
+      <fe-not-available
+        [title]="'finance.unavailable.download'"
+        [body]="'finance.unavailable.downloadBody'"
+        [missing]="'POST /api/v1/exports/{exportId}/download-link'"
+      />
+    </section>
+  }
+
+<!-- ========================================================== authoring -->
+  @if (tab() === 'authoring') {
+    <!--
+      The authoring surface, on its own tab.
+
+      Its own tab rather than a section of the exports panel because `report:manage` is
+      neither the organization scope nor the project scope: folding it into the exports panel
+      would mean a report author is shown an analytics surface they cannot read, or that a
+      finance reader is shown authoring they cannot do.
+
+      `(catalogueChanged)` is the wiring to export creation. After a publish or a retire the
+      child announces it and this screen re-reads the catalogue, so the create form offers
+      exactly what the server now says is exportable — computed by the server against this
+      caller's own permissions, never by this client.
+    -->
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="finance-panel-authoring"
+      [attr.aria-labelledby]="'finance-tab-authoring'"
+      tabindex="-1"
+    >
+      <fe-exports-authoring (catalogueChanged)="refreshCatalogue()" />
+    </section>
+  }
+
+  <!-- ============================================================= policy -->
+  @if (tab() === 'policy') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="finance-panel-policy"
+      aria-labelledby="finance-tab-policy"
+      tabindex="0"
+      [attr.aria-label]="'finance.policy.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'finance.policy.title' | t }}</h3>
+      <p class="fe-sub">{{ 'finance.policy.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="downloadPolicy.loading() && !downloadPolicy.value()"
+        [empty]="downloadPolicy.value() !== null && policyRows().length === 0"
+        [error]="downloadPolicy.error()"
+        [hasValue]="downloadPolicy.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'finance.policy.empty' | t"
+        [emptyBody]="'finance.policy.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(downloadPolicy)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (policyRows().length > 0) {
+        <dl class="facts">
+          @for (row of policyRows(); track row.key) {
+            <div>
+              <dt class="fe-eyebrow">
+                @if (row.labelKey) {
+                  {{ row.labelKey | t }}
+                } @else {
+                  <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+                }
+              </dt>
+              <dd class="fe-num">{{ row.value }}</dd>
+            </div>
+          }
+        </dl>
+      }
+
+      <!-- Group 12's surface, stated where an operator will look for it. -->
+      <fe-not-available
+        [title]="'finance.unavailable.clinic'"
+        [body]="'finance.unavailable.clinicBody'"
+        [missing]="'GET /api/v1/appointments'"
+      />
+    </section>
+  }
+</div>

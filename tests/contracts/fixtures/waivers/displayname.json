@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture: a waiver whose suite is named by its @DisplayName rather than its fully-qualified class name. Must FAIL, because a display name is not a stable identifier and would silently stop matching after a rename.",
+  "entries": [
+    {
+      "suite": "realtime subscriptions are tenant-scoped",
+      "test": "another tenant's project topic is refused and recorded",
+      "reason": "Display name instead of FQCN on purpose; the suite name must be the class name.",
+      "ticket": "FE-QA-SELFTEST",
+      "expiresOn": "2026-11-01",
+      "approvedBy": "ops/quality/checks/selftest.ps1"
+    }
+  ]
+}

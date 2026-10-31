@@ -1,0 +1,30 @@
+/*
+ * Knowledge, AI governance, channels and escalation.
+ *
+ * The six AI sections are a responsive grid: at desktop three across, at tablet two,
+ * at phone one. `grid-template-columns: repeat(auto-fit, minmax(260px, 1fr))` so the
+ * layout responds to the container rather than to the viewport, and no rule here
+ * mentions a side.
+ */
+
+.fe-card__title {
+  font-size: var(--fe-text-base);
+  font-weight: 600;
+  color: var(--ink);
+  margin-block-end: var(--fe-space-1);
+}
+
+.ai-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--fe-space-4);
+  margin-block-start: var(--fe-space-4);
+}
+
+.ai-section {
+  padding: var(--fe-space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-sm);
+  background: var(--surf2);
+  min-inline-size: 0;
+}

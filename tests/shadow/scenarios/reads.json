@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 1,
+  "note": "The Phase-12 shadow-read matrix. Every entry is issued verbatim to BOTH runtimes; the legacy NestJS runtime serves the same canonical path under /api and the Spring runtime under /api/v1. Values written as $name are resolved from `resources` below so a row is referenced by one literal in one place.",
+
+  "forbiddenStrings": [
+    "Shadow Patient One",
+    "Shadow Patient Two",
+    "Shadow Patient Three",
+    "Shadow Patient Four",
+    "Shadow Patient Five",
+    "#T-000001",
+    "#T-000002",
+    "#T-000003",
+    "#T-000004",
+    "#T-000005",
+    "#T-000006",
+    "#T-000007",
+    "#T-000008",
+    "shadow note one",
+    "shadow note two",
+    "shadow note three",
+    "shadow note four",
+    "shadow inbound one",
+    "shadow inbound two",
+    "shadow inbound three",
+    "shadow inbound four",
+    "shadow inbound five",
+    "shadow inbound six",
+    "shadow inbound seven",
+    "shadow inbound eight",
+    "shadow subject one",
+    "shadow subject two",
+    "shadow subject three",
+    "shadow subject four",
+    "shadow subject five",
+    "shadow subject six",
+    "shadow subject seven",
+    "shadow subject eight"
+  ],
+  "forbiddenStringsNote": "Every one of these is the CONTENT of a row in dataset/seed-core.sql -- a customer display name, a ticket number, a note body, a message body or a subject. None of them may appear in the body of a refusal. The list is the dataset's own contents, not an expectation about what a runtime 'should' hide, so a refusal that echoes any of them is disclosing. A refusal for a request in the `authorization` group is scanned against the whole list.",
+
+  "principals": {
+    "adminA": {
+      "email": "shadow-admin-a@shadow.invalid",
+      "org": "A",
+      "role": "ADMIN",
+      "projects": ["projA1", "projA2"],
+      "why": "two projects in one tenant, so a cross-project ALLOW is a real case rather than an accident of membership"
+    },
+    "agentA1": {
+      "email": "shadow-agent-a1@shadow.invalid",
+      "org": "A",
+      "role": "EMPLOYEE",
+      "projects": ["projA1"],
+      "why": "member of A1 only; every A2 request must be DENIED"
+    },
+    "agentA2": {
+      "email": "shadow-agent-a2@shadow.invalid",
+      "org": "A",
+      "role": "EMPLOYEE",
+      "projects": ["projA2"],
+      "why": "member of A2 only; every A1 request must be DENIED"
+    },
+    "adminB": {
+      "email": "shadow-admin-b@shadow.invalid",
+      "org": "B",
+      "role": "ADMIN",
+      "projects": ["projB1"],
+      "why": "a different tenant; every A request must be DENIED"
+    },
+    "anonymous": {
+      "email": null,
+      "why": "no session at all; every request must be DENIED"
+    }
+  },
+
+  "resources": {
+    "orgA": "11111111-1111-4111-8111-111111111111",
+    "orgB": "22222222-2222-4222-8222-222222222222",
+    "orgC": "33333333-3333-4333-8333-333333333333",
+    "projA1": "a1a1a1a1-0000-4000-8000-000000000001",
+    "projA2": "a1a1a1a1-0000-4000-8000-000000000002",
+    "projB1": "b1b1b1b1-0000-4000-8000-000000000001",
+    "projC1": "c1c1c1c1-0000-4000-8000-000000000001",
+    "custA1": "ca000001-0000-4000-8000-000000000001",
+    "custA1b": "ca000001-0000-4000-8000-000000000002",
+    "custA2": "ca000002-0000-4000-8000-000000000001",
+    "custB1": "cb000001-0000-4000-8000-000000000001",
+    "cxA1": "#33000001",
+    "cxB1": "#33000005",
+    "convA1": "f0000001-0000-4000-8000-000000000001",
+    "convA1b": "f0000001-0000-4000-8000-000000000002",
+    "convA2": "f0000002-0000-4000-8000-000000000001",
+    "convB1": "fb000001-0000-4000-8000-000000000001",
+    "noteA1": "ad000001-0000-4000-8000-000000000001",
+    "appointmentA1": "aa000001-0000-4000-8000-000000000001",
+    "doctorA1": "0d000002-0000-4000-8000-000000000001",
+    "employeeA1": "0e000001-0000-4000-8000-000000000002",
+    "userAdminA": "0a000001-0000-4000-8000-000000000001",
+    "userAdminB": "0a000001-0000-4000-8000-000000000004"
+  },
+
+  "requests": [
+    {
+      "id": "customers.all.adminA",
+      "group": "row-counts",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers",
+      "why": "every project the principal can see; the item count and the id set are the row-count comparison"
+    },
+    {
+      "id": "customers.all.agentA1",
+      "group": "row-counts",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/customers",
+      "why": "same call as adminA from a single-project principal; if the filter were the organization instead of the accessible projects, this is where it shows"
+    },
+    {
+      "id": "customers.all.agentA2",
+      "group": "row-counts",
+      "principal": "agentA2",
+      "method": "GET",
+      "path": "/customers",
+      "why": "the mirror of agentA1; together the two pin the project filter to membership"
+    },
+    {
+      "id": "customers.all.adminB",
+      "group": "row-counts",
+      "principal": "adminB",
+      "method": "GET",
+      "path": "/customers",
+      "why": "a tenant-scoped list must contain zero rows from another tenant"
+    },
+    {
+      "id": "customers.projA1.adminA",
+      "group": "row-counts",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers",
+      "query": { "projectId": "$projA1" },
+      "why": "explicit project filter, the shape the inbox uses"
+    },
+    {
+      "id": "customers.projA2.adminA",
+      "group": "row-counts",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers",
+      "query": { "projectId": "$projA2" },
+      "why": "the second project of the same tenant"
+    },
+    {
+      "id": "customers.projA1.agentA1",
+      "group": "authorization",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/customers",
+      "query": { "projectId": "$projA1" },
+      "why": "ALLOW: the principal is a member of this project"
+    },
+    {
+      "id": "customers.projA2.agentA1",
+      "group": "authorization",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/customers",
+      "query": { "projectId": "$projA2" },
+      "why": "DENY: same tenant, project the principal does not belong to. A client-supplied projectId is a request, not authorization."
+    },
+    {
+      "id": "customers.projA1.agentA2",
+      "group": "authorization",
+      "principal": "agentA2",
+      "method": "GET",
+      "path": "/customers",
+      "query": { "projectId": "$projA1" },
+      "why": "DENY: the mirror of the previous case"
+    },
+    {
+      "id": "customers.projB1.adminA",
+      "group": "authorization",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers",
+      "query": { "projectId": "$projB1" },
+      "why": "DENY: another tenant's project, requested by an administrator of the first"
+    },
+    {
+      "id": "customers.projA1.anonymous",
+      "group": "authorization",
+      "principal": "anonymous",
+      "method": "GET",
+      "path": "/customers",
+      "query": { "projectId": "$projA1" },
+      "why": "DENY: no session"
+    },
+    {
+      "id": "customer.byId.own.adminA",
+      "group": "detail",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers/$custA1",
+      "why": "detail read of a resource inside the principal's own project"
+    },
+    {
+      "id": "customer.byId.crossProject.adminA",
+      "group": "detail",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers/$custA2",
+      "why": "ALLOW for an admin of both projects; this is the case where a blanket project filter would be wrong"
+    },
+    {
+      "id": "customer.byId.crossTenant.adminA",
+      "group": "authorization",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers/$custB1",
+      "why": "DENY: another tenant's customer, by direct id. The denial must not disclose that the row exists."
+    },
+    {
+      "id": "customer.byId.crossProject.agentA1",
+      "group": "authorization",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/customers/$custA2",
+      "why": "DENY: same tenant, other project, by direct id"
+    },
+    {
+      "id": "customer.byId.crossProject.agentA2",
+      "group": "authorization",
+      "principal": "agentA2",
+      "method": "GET",
+      "path": "/customers/$custA1",
+      "why": "DENY: the mirror of the previous case"
+    },
+    {
+      "id": "customer.byId.crossTenant.adminB",
+      "group": "authorization",
+      "principal": "adminB",
+      "method": "GET",
+      "path": "/customers/$custA1",
+      "why": "DENY: the other direction of the tenant boundary"
+    },
+    {
+      "id": "customer.byId.anonymous",
+      "group": "authorization",
+      "principal": "anonymous",
+      "method": "GET",
+      "path": "/customers/$custA1",
+      "why": "DENY: no session, by direct id"
+    },
+    {
+      "id": "customer.byCxId.own.adminA",
+      "group": "identifier",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers/cx/$cxA1",
+      "why": "cxId lookup, the identifier plan.md 6.1 requires preserved"
+    },
+    {
+      "id": "customer.byCxId.crossTenant.adminA",
+      "group": "authorization",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/customers/cx/$cxB1",
+      "why": "DENY: another tenant's cxId must not resolve"
+    },
+    {
+      "id": "customer.byCxId.crossTenant.adminB",
+      "group": "authorization",
+      "principal": "adminB",
+      "method": "GET",
+      "path": "/customers/cx/$cxA1",
+      "why": "DENY: the other direction, through the reference-code namespace"
+    },
+    {
+      "id": "conversations.history.projA1.adminA",
+      "group": "row-counts",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/conversations",
+      "query": { "projectId": "$projA1", "filter": "history", "limit": "100" },
+      "why": "the full project inbox; an explicit filter is sent because the two runtimes do not share a default (ADR 0015)"
+    },
+    {
+      "id": "conversations.history.projA2.adminA",
+      "group": "row-counts",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/conversations",
+      "query": { "projectId": "$projA2", "filter": "history", "limit": "100" },
+      "why": "the second project of the same tenant"
+    },
+    {
+      "id": "conversations.history.projA1.agentA1",
+      "group": "row-counts",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/conversations",
+      "query": { "filter": "history", "limit": "100" },
+      "why": "no project filter: the answer is every project the principal can see, which must not be the organization"
+    },
+    {
+      "id": "conversations.history.projB1.adminB",
+      "group": "row-counts",
+      "principal": "adminB",
+      "method": "GET",
+      "path": "/conversations",
+      "query": { "projectId": "$projB1", "filter": "history", "limit": "100" },
+      "why": "another tenant's inbox"
+    },
+    {
+      "id": "conversations.history.projA2.agentA1",
+      "group": "authorization",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/conversations",
+      "query": { "projectId": "$projA2", "filter": "history", "limit": "100" },
+      "why": "DENY: same tenant, project the principal does not belong to"
+    },
+    {
+      "id": "conversation.byId.own.agentA1",
+      "group": "detail",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/conversations/$convA1",
+      "why": "a conversation inside the principal's own project, with two messages and a ticket number"
+    },
+    {
+      "id": "conversation.byId.crossProject.agentA1",
+      "group": "authorization",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/conversations/$convA2",
+      "why": "DENY: same tenant, other project, by direct id"
+    },
+    {
+      "id": "conversation.byId.crossProject.agentA2",
+      "group": "authorization",
+      "principal": "agentA2",
+      "method": "GET",
+      "path": "/conversations/$convA1",
+      "why": "DENY: the mirror of the previous case"
+    },
+    {
+      "id": "conversation.byId.crossTenant.adminA",
+      "group": "authorization",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/conversations/$convB1",
+      "why": "DENY: another tenant's conversation, by direct id"
+    },
+    {
+      "id": "conversation.byId.anonymous",
+      "group": "authorization",
+      "principal": "anonymous",
+      "method": "GET",
+      "path": "/conversations/$convA1",
+      "why": "DENY: no session"
+    },
+    {
+      "id": "messages.own.agentA1",
+      "group": "un-comparable",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/conversations/$convA1/transcript",
+      "why": "the Spring runtime serves a transcript route; the legacy router maps no GET route under /conversations/:id other than the detail read, so there is no legacy value to compare. Message counts are compared through the conversation projection's messageCount and through the source rows instead."
+    },
+    {
+      "id": "messages.crossProject.agentA1",
+      "group": "un-comparable",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/conversations/$convA2/transcript",
+      "why": "same absence, on a conversation the principal must not read; recorded so the gap is visible rather than inferred from a 404"
+    },
+    {
+      "id": "messages.crossTenant.adminA",
+      "group": "un-comparable",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/conversations/$convB1/transcript",
+      "why": "same absence, another tenant"
+    },
+    {
+      "id": "resolution.own.agentA1",
+      "group": "detail",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/conversations/$convA1b/resolution",
+      "why": "case resolution read; a missing resolution row is synthesized by both runtimes, and comparing the synthesized body is part of the contract"
+    },
+    {
+      "id": "resolution.crossTenant.adminA",
+      "group": "authorization",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/conversations/$convB1/resolution",
+      "why": "DENY: another tenant's case resolution"
+    },
+    {
+      "id": "notes.projectA1.agentA1",
+      "group": "row-counts",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/notes/project",
+      "query": { "projectId": "$projA1" },
+      "why": "the project-wide note list, exposed under this path by both runtimes"
+    },
+    {
+      "id": "notes.projectA2.agentA1",
+      "group": "authorization",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/notes/project",
+      "query": { "projectId": "$projA2" },
+      "why": "DENY: another project's notes"
+    },
+    {
+      "id": "notes.forResource.customerA1.agentA1",
+      "group": "divergence",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/notes",
+      "query": { "resourceType": "CUSTOMER", "resourceId": "$custA1" },
+      "why": "the per-resource note list. The Spring runtime REQUIRES resourceType+resourceId on this path while the legacy runtime treats the same path as a project-filtered list. A real divergence, recorded rather than normalised away."
+    },
+    {
+      "id": "auth.me.anonymous",
+      "group": "authorization",
+      "principal": "anonymous",
+      "method": "GET",
+      "path": "/auth/me",
+      "why": "DENY: the identity route with no session"
+    }
+  ],
+
+  "legacyOnly": [
+    {
+      "id": "legacy.appointments.adminA",
+      "group": "un-comparable",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/appointments",
+      "why": "the legacy runtime serves /api/appointments; the Spring contract has no appointment route, so this is recorded as a migration gap rather than compared"
+    },
+    {
+      "id": "legacy.analytics.summary.adminA",
+      "group": "un-comparable",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/analytics/summary",
+      "why": "the legacy funnel; the Spring runtime has no CRM/clinic analytics read model (ledger section 8)"
+    },
+    {
+      "id": "legacy.analytics.project.adminA",
+      "group": "un-comparable",
+      "principal": "adminA",
+      "method": "GET",
+      "path": "/projects/$projA1/analytics",
+      "why": "per-project legacy analytics; no Spring counterpart"
+    },
+    {
+      "id": "legacy.analytics.employee.agentA1",
+      "group": "un-comparable",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/employees/$employeeA1/analytics",
+      "why": "clinician workload; no Spring counterpart"
+    }
+  ],
+
+  "springOnly": [
+    {
+      "id": "spring.inbox.counts.projA1.agentA1",
+      "group": "un-comparable",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/inbox/counts",
+      "query": { "projectId": "$projA1" },
+      "why": "ADR 0015 named every view in the counts response; the legacy runtime has no such route"
+    },
+    {
+      "id": "spring.inbox.unassigned.projA1.agentA1",
+      "group": "un-comparable",
+      "principal": "agentA1",
+      "method": "GET",
+      "path": "/inbox/unassigned",
+      "query": { "projectId": "$projA1" },
+      "why": "the unassigned queue is a Phase-15 addition with no legacy counterpart"
+    }
+  ]
+}

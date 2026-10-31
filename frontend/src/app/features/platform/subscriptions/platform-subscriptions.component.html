@@ -1,0 +1,550 @@
+<div class="subscriptions-page" [dir]="i18n.direction()">
+  <!-- Header with Title & Actions -->
+  <header class="page-header">
+    <div class="header-titles">
+      <div class="header-badge">
+        <fe-icon name="finance" class="badge-icon"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'المنصة • إدارة الاشتراكات' : 'Platform • Subscriptions' }}</span>
+      </div>
+      <h1 class="page-title">
+        {{ i18n.locale() === 'ar' ? 'الاشتراكات وسجل المدفوعات' : 'Subscriptions & Payments' }}
+      </h1>
+      <p class="page-subtitle">
+        {{ i18n.locale() === 'ar'
+          ? 'إدارة دورة حياة اشتراكات العيادات، وسجل القبض غير القابل للتعديل، ومحرك التنبيهات وفترات السماح.'
+          : 'Manage clinic subscriptions, append-only payment ledgers, automated grace periods, and renewal reminders.' }}
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        type="button"
+        class="action-btn transition-btn"
+        [disabled]="transitionJobRunning()"
+        (click)="triggerTransitionJob()"
+      >
+        <fe-icon name="calendar" class="btn-icon"></fe-icon>
+        <span>
+          {{ transitionJobRunning()
+            ? (i18n.locale() === 'ar' ? 'جاري تشغيل المعالجة...' : 'Running Job...')
+            : (i18n.locale() === 'ar' ? 'تشغيل دورة التحقق' : 'Run Status Job') }}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="action-btn refresh-btn"
+        [disabled]="loading()"
+        (click)="loadSubscriptions()"
+      >
+        <fe-icon name="exports" class="btn-icon"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'تحديث' : 'Refresh' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- KPI Metric Cards -->
+  <section class="kpi-grid">
+    <div class="kpi-card">
+      <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'إجمالي العيادات' : 'Total Clinics' }}</span>
+      <span class="kpi-value">{{ totalClinics() }}</span>
+      <span class="kpi-sub">{{ i18n.locale() === 'ar' ? 'عيادة مسجلة' : 'Registered tenants' }}</span>
+    </div>
+
+    <div class="kpi-card kpi-active">
+      <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'الاشتراكات النشطة' : 'Active' }}</span>
+      <span class="kpi-value">{{ activeCount() }}</span>
+      <span class="kpi-sub">{{ i18n.locale() === 'ar' ? 'حسابات منتظمة' : 'Fully paid & active' }}</span>
+    </div>
+
+    <div class="kpi-card kpi-grace">
+      <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'في فترة السماح' : 'In Grace' }}</span>
+      <span class="kpi-value">{{ graceCount() }}</span>
+      <span class="kpi-sub">{{ i18n.locale() === 'ar' ? 'سماح 7 أيام + إشعار' : 'Full access + banner' }}</span>
+    </div>
+
+    <div class="kpi-card kpi-suspended">
+      <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'الموقوفة والمنتهية' : 'Suspended / Expired' }}</span>
+      <span class="kpi-value">{{ suspendedCount() + expiredCount() }}</span>
+      <span class="kpi-sub">{{ i18n.locale() === 'ar' ? 'قراءة فقط تحت DEC-007' : 'Read-only, data safe' }}</span>
+    </div>
+
+    <div class="kpi-card kpi-revenue">
+      <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'إجمالي المقبوضات' : 'Total Revenue' }}</span>
+      <span class="kpi-value">{{ totalRevenueJod() }} <small>JOD</small></span>
+      <span class="kpi-sub">{{ i18n.locale() === 'ar' ? 'إيرادات الاشتراكات' : 'Append-only ledger sum' }}</span>
+    </div>
+  </section>
+
+  <!-- Filter & Search Bar -->
+  <section class="toolbar">
+    <div class="search-box">
+      <fe-icon name="dashboard" class="search-icon"></fe-icon>
+      <input
+        type="search"
+        [placeholder]="i18n.locale() === 'ar' ? 'بحث عن عيادة أو باقة أو مدينة...' : 'Search clinic, plan, or city...'"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event)"
+      />
+    </div>
+
+    <div class="filter-group">
+      <label class="filter-label">{{ i18n.locale() === 'ar' ? 'الحالة:' : 'Status:' }}</label>
+      <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+        <option value="ALL">{{ i18n.locale() === 'ar' ? 'جميع الحالات' : 'All Statuses' }}</option>
+        <option value="ACTIVE">{{ i18n.locale() === 'ar' ? 'نشط' : 'Active' }}</option>
+        <option value="TRIAL">{{ i18n.locale() === 'ar' ? 'تجريبي' : 'Trial' }}</option>
+        <option value="GRACE">{{ i18n.locale() === 'ar' ? 'فترة سماح' : 'Grace Period' }}</option>
+        <option value="SUSPENDED">{{ i18n.locale() === 'ar' ? 'موقوف' : 'Suspended' }}</option>
+        <option value="EXPIRED">{{ i18n.locale() === 'ar' ? 'منتهي' : 'Expired' }}</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Main Subscriptions Table -->
+  <section class="table-container">
+    @if (loading()) {
+      <div class="state-message">
+        <div class="spinner"></div>
+        <p>{{ i18n.locale() === 'ar' ? 'جاري تحميل سجل الاشتراكات...' : 'Loading subscriptions...' }}</p>
+      </div>
+    } @else if (error()) {
+      <div class="state-message error">
+        <fe-icon name="warning" class="state-icon"></fe-icon>
+        <p>{{ error() }}</p>
+        <button type="button" class="btn-retry" (click)="loadSubscriptions()">
+          {{ i18n.locale() === 'ar' ? 'إعادة المحاولة' : 'Retry' }}
+        </button>
+      </div>
+    } @else if (filteredSubscriptions().length === 0) {
+      <div class="state-message empty">
+        <fe-icon name="finance" class="state-icon"></fe-icon>
+        <p>{{ i18n.locale() === 'ar' ? 'لا توجد اشتراكات مطابقة للبحث' : 'No matching clinic subscriptions found' }}</p>
+      </div>
+    } @else {
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>{{ i18n.locale() === 'ar' ? 'العيادة' : 'Clinic' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'المدينة' : 'City' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'الباقة' : 'Plan' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'الحالة' : 'Status' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'مدفوع حتى' : 'Paid Until' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'فترة السماح' : 'Grace Days' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'سجل القبض' : 'Total Paid' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'العمليات' : 'Payments' }}</th>
+            <th class="actions-col">{{ i18n.locale() === 'ar' ? 'الإجراءات' : 'Actions' }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (sub of filteredSubscriptions(); track sub.subscriptionId) {
+            <tr>
+              <td>
+                <div class="clinic-cell">
+                  <span class="clinic-name">{{ sub.clinicName }}</span>
+                  <span class="clinic-slug">{{ sub.clinicSlug }}</span>
+                </div>
+              </td>
+              <td>{{ sub.city || '—' }}</td>
+              <td>
+                <span class="plan-tag">{{ sub.planName || sub.planCode }}</span>
+              </td>
+              <td>
+                <fe-status-chip [tone]="statusTone(sub.status)">
+                  {{ statusLabel(sub.status) }}
+                </fe-status-chip>
+              </td>
+              <td>
+                <span class="date-cell" [class.date-expired]="sub.status === 'EXPIRED' || sub.status === 'GRACE'">
+                  {{ formatDate(sub.paidUntil) }}
+                </span>
+              </td>
+              <td>{{ sub.gracePeriodDays }} {{ i18n.locale() === 'ar' ? 'يوم' : 'days' }}</td>
+              <td>
+                <span class="amount-cell">{{ sub.totalPaidAmount || '0.000' }} JOD</span>
+              </td>
+              <td>
+                <button type="button" class="link-btn" (click)="openLedger(sub)">
+                  {{ sub.paymentsCount }} {{ i18n.locale() === 'ar' ? 'سندات' : 'records' }}
+                </button>
+              </td>
+              <td class="actions-col">
+                <div class="action-buttons">
+                  <button
+                    type="button"
+                    class="btn-sm btn-pay"
+                    (click)="openRecordPayment(sub)"
+                    [title]="i18n.locale() === 'ar' ? 'تسجيل سند قبض يدوي' : 'Record manual payment'"
+                  >
+                    <fe-icon name="finance"></fe-icon>
+                    <span>{{ i18n.locale() === 'ar' ? 'تسجيل دفعة' : 'Record Payment' }}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn-sm btn-ledger"
+                    (click)="openLedger(sub)"
+                    [title]="i18n.locale() === 'ar' ? 'عرض سجل المقبوضات' : 'View payment ledger'"
+                  >
+                    <fe-icon name="clipboard"></fe-icon>
+                    <span>{{ i18n.locale() === 'ar' ? 'السجل' : 'Ledger' }}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn-sm btn-extend"
+                    (click)="openExtend(sub)"
+                    [title]="i18n.locale() === 'ar' ? 'تمديد استثنائي' : 'Extend subscription'"
+                  >
+                    <fe-icon name="calendar"></fe-icon>
+                    <span>{{ i18n.locale() === 'ar' ? 'تمديد' : 'Extend' }}</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+
+  <!-- MODAL: Record Payment -->
+  @if (paymentModalOpen() && selectedSubscriptionForPayment(); as currentSub) {
+    <div class="modal-backdrop">
+      <div class="modal-dialog">
+        <header class="modal-header">
+          <h2>{{ i18n.locale() === 'ar' ? 'تسجيل دفعة اشتراك يدوية' : 'Record Manual Payment' }}</h2>
+          <button type="button" class="btn-close" (click)="closePaymentModal()">&times;</button>
+        </header>
+
+        <div class="modal-body">
+          <p class="modal-hint">
+            {{ i18n.locale() === 'ar'
+              ? 'تسجيل حركة قبض غير قابلة للحذف أو التعديل في سجل العيادة، مع تمديد تاريخ الصلاحية تلقائياً.'
+              : 'Record an append-only payment entry for this clinic and advance the paid-until expiration date.' }}
+          </p>
+
+          <div class="clinic-summary-box">
+            <strong>{{ currentSub.clinicName }}</strong>
+            <span>{{ currentSub.planName }} ({{ currentSub.planCode }})</span>
+            <span>{{ i18n.locale() === 'ar' ? 'الصلاحية الحالية:' : 'Current Expiry:' }} {{ formatDate(currentSub.paidUntil) }}</span>
+          </div>
+
+          @if (paymentError()) {
+            <div class="alert-error">
+              <fe-icon name="warning"></fe-icon>
+              <span>{{ paymentError() }}</span>
+            </div>
+          }
+
+          <div class="form-grid">
+            <div class="form-field full-width">
+              <label>{{ i18n.locale() === 'ar' ? 'مفتاح منع التكرار (Idempotency Key)' : 'Idempotency Key' }} *</label>
+              <div class="input-with-button">
+                <input type="text" [(ngModel)]="paymentIdempotencyKey" readonly />
+                <button type="button" class="btn-subtle" (click)="regenerateIdempotencyKey()">
+                  {{ i18n.locale() === 'ar' ? 'توليد جديد' : 'New Key' }}
+                </button>
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label>{{ i18n.locale() === 'ar' ? 'المبلغ (د.أ - JOD)' : 'Amount (JOD)' }} *</label>
+              <input type="number" step="0.001" min="0.001" [(ngModel)]="paymentAmount" />
+            </div>
+
+            <div class="form-field">
+              <label>{{ i18n.locale() === 'ar' ? 'وسيلة الدفع' : 'Payment Method' }} *</label>
+              <select [(ngModel)]="paymentMethod">
+                <option value="CLIQ">CliQ</option>
+                <option value="BANK_TRANSFER">{{ i18n.locale() === 'ar' ? 'حوالة بنكية' : 'Bank Transfer' }}</option>
+                <option value="CASH">{{ i18n.locale() === 'ar' ? 'نقداً' : 'Cash' }}</option>
+                <option value="OTHER">{{ i18n.locale() === 'ar' ? 'أخرى' : 'Other' }}</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>{{ i18n.locale() === 'ar' ? 'المدة المغطاة' : 'Period Covered' }} *</label>
+              <select [(ngModel)]="paymentMonths">
+                <option [ngValue]="1">{{ i18n.locale() === 'ar' ? 'شهر واحد (1)' : '1 Month' }}</option>
+                <option [ngValue]="3">{{ i18n.locale() === 'ar' ? '3 أشهر' : '3 Months' }}</option>
+                <option [ngValue]="6">{{ i18n.locale() === 'ar' ? '6 أشهر' : '6 Months' }}</option>
+                <option [ngValue]="12">{{ i18n.locale() === 'ar' ? 'سنة كاملة (12 شهر)' : '12 Months' }}</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>{{ i18n.locale() === 'ar' ? 'رقم الإيصال / الحوالة' : 'Reference / Receipt #' }}</label>
+              <input type="text" [(ngModel)]="paymentRef" [placeholder]="i18n.locale() === 'ar' ? 'مثال: CLIQ-98213' : 'e.g. CLIQ-98213'" />
+            </div>
+
+            <div class="form-field full-width">
+              <label>{{ i18n.locale() === 'ar' ? 'ملاحظات العملية' : 'Payment Notes' }}</label>
+              <textarea rows="2" [(ngModel)]="paymentNotes" [placeholder]="i18n.locale() === 'ar' ? 'تفاصيل إضافية...' : 'Additional notes...'"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="closePaymentModal()">
+            {{ i18n.locale() === 'ar' ? 'إلغاء' : 'Cancel' }}
+          </button>
+          <button type="button" class="btn-primary" [disabled]="paymentSubmitting()" (click)="submitPayment()">
+            {{ paymentSubmitting()
+              ? (i18n.locale() === 'ar' ? 'جاري التسجيل...' : 'Recording...')
+              : (i18n.locale() === 'ar' ? 'تأكيد وقيد السند' : 'Confirm & Record') }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  }
+
+  <!-- MODAL: View Append-Only Ledger -->
+  @if (ledgerModalOpen() && selectedSubscriptionForLedger(); as currentSub) {
+    <div class="modal-backdrop">
+      <div class="modal-dialog ledger-dialog">
+        <header class="modal-header">
+          <h2>{{ i18n.locale() === 'ar' ? 'سجل المقبوضات غير القابل للتعديل' : 'Append-Only Payment Ledger' }}</h2>
+          <button type="button" class="btn-close" (click)="closeLedgerModal()">&times;</button>
+        </header>
+
+        <div class="modal-body">
+          <div class="clinic-summary-box">
+            <strong>{{ currentSub.clinicName }}</strong>
+            <span>{{ i18n.locale() === 'ar' ? 'إجمالي المقبوضات:' : 'Total Collected:' }} {{ currentSub.totalPaidAmount || '0.000' }} JOD</span>
+            <span>{{ i18n.locale() === 'ar' ? 'عدد القيود:' : 'Entries Count:' }} {{ ledgerRecords().length }}</span>
+          </div>
+
+          @if (ledgerLoading()) {
+            <div class="state-message">
+              <div class="spinner"></div>
+              <p>{{ i18n.locale() === 'ar' ? 'جاري تحميل السجل...' : 'Loading ledger entries...' }}</p>
+            </div>
+          } @else if (ledgerError()) {
+            <div class="alert-error">
+              <fe-icon name="warning"></fe-icon>
+              <span>{{ ledgerError() }}</span>
+            </div>
+          } @else if (ledgerRecords().length === 0) {
+            <div class="state-message empty">
+              <fe-icon name="clipboard"></fe-icon>
+              <p>{{ i18n.locale() === 'ar' ? 'لم يتم تسجيل أي سندات قبض لهذه العيادة بعد.' : 'No payments recorded yet for this clinic.' }}</p>
+            </div>
+          } @else {
+            <div class="table-container-ledger">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>{{ i18n.locale() === 'ar' ? 'التاريخ' : 'Date' }}</th>
+                    <th>{{ i18n.locale() === 'ar' ? 'المبلغ' : 'Amount' }}</th>
+                    <th>{{ i18n.locale() === 'ar' ? 'الوسيلة' : 'Method' }}</th>
+                    <th>{{ i18n.locale() === 'ar' ? 'المرجع' : 'Reference' }}</th>
+                    <th>{{ i18n.locale() === 'ar' ? 'المدة' : 'Period' }}</th>
+                    <th>{{ i18n.locale() === 'ar' ? 'النوع' : 'Type' }}</th>
+                    <th>{{ i18n.locale() === 'ar' ? 'الإجراء' : 'Action' }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (record of ledgerRecords(); track record.id) {
+                    <tr [class.reversal-row]="record.isReversal" [class.reversed-row]="record.isReversed">
+                      <td>{{ formatDate(record.createdAt) }}</td>
+                      <td class="amount-cell" [class.negative-amount]="record.isReversal">
+                        {{ record.amount }} {{ record.currency }}
+                      </td>
+                      <td>{{ record.paymentMethod }}</td>
+                      <td><span class="ref-code">{{ record.referenceNumber }}</span></td>
+                      <td>{{ formatDate(record.periodStart) }} - {{ formatDate(record.periodEnd) }}</td>
+                      <td>
+                        @if (record.isReversal) {
+                          <fe-status-chip tone="bad">
+                            {{ i18n.locale() === 'ar' ? 'قيد عكسي' : 'Reversal' }}
+                          </fe-status-chip>
+                        } @else if (record.isReversed) {
+                          <fe-status-chip tone="warn">
+                            {{ i18n.locale() === 'ar' ? 'تم عكسه' : 'Reversed' }}
+                          </fe-status-chip>
+                        } @else {
+                          <fe-status-chip tone="ok">
+                            {{ i18n.locale() === 'ar' ? 'ساري' : 'Valid' }}
+                          </fe-status-chip>
+                        }
+                      </td>
+                      <td>
+                        @if (!record.isReversal && !record.isReversed) {
+                          <button
+                            type="button"
+                            class="btn-xs btn-danger"
+                            (click)="openReversal(record)"
+                            [title]="i18n.locale() === 'ar' ? 'إجراء قيد عكسي تعويضي' : 'Issue compensation reversal'"
+                          >
+                            {{ i18n.locale() === 'ar' ? 'عكس السند' : 'Reverse' }}
+                          </button>
+                        } @else if (record.isReversal) {
+                          <span class="subtle-text">{{ record.reversalReason }}</span>
+                        } @else {
+                          <span class="subtle-text">{{ i18n.locale() === 'ar' ? 'معكوس' : 'Reversed' }}</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="closeLedgerModal()">
+            {{ i18n.locale() === 'ar' ? 'إغلاق' : 'Close' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  }
+
+  <!-- MODAL: Reverse Payment Confirmation -->
+  @if (reversalModalOpen() && selectedPaymentForReversal(); as payment) {
+    <div class="modal-backdrop">
+      <div class="modal-dialog">
+        <header class="modal-header">
+          <h2>{{ i18n.locale() === 'ar' ? 'قيد عكسي تعويضي' : 'Compensation Reversal' }}</h2>
+          <button type="button" class="btn-close" (click)="closeReversalModal()">&times;</button>
+        </header>
+
+        <div class="modal-body">
+          <div class="alert-warn">
+            <fe-icon name="warning"></fe-icon>
+            <div>
+              <strong>{{ i18n.locale() === 'ar' ? 'تنبيه: سجل المدفوعات غير قابل للحذف' : 'Notice: Ledger is Append-Only' }}</strong>
+              <p>
+                {{ i18n.locale() === 'ar'
+                  ? 'لن يتم حذف السند الأصلي، بل سيتم إضافة قيد عكسي بقيمة سالبة واسترجاع تاريخ الصلاحية إلى ما قبل هذه الدفعة.'
+                  : 'The original record is never deleted. A new negative compensation entry will be appended, and paid-until restored.' }}
+              </p>
+            </div>
+          </div>
+
+          <div class="clinic-summary-box">
+            <span>{{ i18n.locale() === 'ar' ? 'المبلغ المراد عكسه:' : 'Amount to reverse:' }} <strong>{{ payment.amount }} {{ payment.currency }}</strong></span>
+            <span>{{ i18n.locale() === 'ar' ? 'المرجع:' : 'Reference:' }} {{ payment.referenceNumber }}</span>
+          </div>
+
+          @if (reversalError()) {
+            <div class="alert-error">
+              <fe-icon name="warning"></fe-icon>
+              <span>{{ reversalError() }}</span>
+            </div>
+          }
+
+          <div class="form-field full-width">
+            <label>{{ i18n.locale() === 'ar' ? 'سبب العكس والتعويض' : 'Reversal Reason' }} *</label>
+            <textarea
+              rows="3"
+              [(ngModel)]="reversalReason"
+              [placeholder]="i18n.locale() === 'ar' ? 'مثال: خطأ في إيداع الحوالة، أو إرجاع المبلغ للعميل...' : 'e.g. Wire transfer bounced, customer refunded...'"
+            ></textarea>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="closeReversalModal()">
+            {{ i18n.locale() === 'ar' ? 'إلغاء' : 'Cancel' }}
+          </button>
+          <button type="button" class="btn-danger" [disabled]="reversalSubmitting()" (click)="submitReversal()">
+            {{ reversalSubmitting()
+              ? (i18n.locale() === 'ar' ? 'جاري العكس...' : 'Reversing...')
+              : (i18n.locale() === 'ar' ? 'تأكيد القيد العكسي' : 'Confirm Reversal') }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  }
+
+  <!-- MODAL: Extend Subscription -->
+  @if (extendModalOpen() && selectedSubscriptionForExtend(); as currentSub) {
+    <div class="modal-backdrop">
+      <div class="modal-dialog">
+        <header class="modal-header">
+          <h2>{{ i18n.locale() === 'ar' ? 'تمديد استثنائي للاشتراك' : 'Extend Subscription' }}</h2>
+          <button type="button" class="btn-close" (click)="closeExtendModal()">&times;</button>
+        </header>
+
+        <div class="modal-body">
+          <div class="clinic-summary-box">
+            <strong>{{ currentSub.clinicName }}</strong>
+            <span>{{ i18n.locale() === 'ar' ? 'الصلاحية الحالية:' : 'Current Expiry:' }} {{ formatDate(currentSub.paidUntil) }}</span>
+          </div>
+
+          @if (extendError()) {
+            <div class="alert-error">
+              <fe-icon name="warning"></fe-icon>
+              <span>{{ extendError() }}</span>
+            </div>
+          }
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label>{{ i18n.locale() === 'ar' ? 'عدد أيام التمديد' : 'Days to extend' }} *</label>
+              <input type="number" min="1" max="365" [(ngModel)]="extendDays" />
+            </div>
+
+            <div class="form-field full-width">
+              <label>{{ i18n.locale() === 'ar' ? 'سبب التمديد الاستثنائي' : 'Reason for extension' }} *</label>
+              <textarea rows="2" [(ngModel)]="extendReason"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="closeExtendModal()">
+            {{ i18n.locale() === 'ar' ? 'إلغاء' : 'Cancel' }}
+          </button>
+          <button type="button" class="btn-primary" [disabled]="extendSubmitting()" (click)="submitExtend()">
+            {{ extendSubmitting()
+              ? (i18n.locale() === 'ar' ? 'جاري التمديد...' : 'Extending...')
+              : (i18n.locale() === 'ar' ? 'تأكيد التمديد' : 'Confirm Extension') }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  }
+
+  <!-- MODAL: Job Result -->
+  @if (transitionJobResult(); as res) {
+    <div class="modal-backdrop">
+      <div class="modal-dialog">
+        <header class="modal-header">
+          <h2>{{ i18n.locale() === 'ar' ? 'نتيجة تشغيل معالجة الاشتراكات' : 'Transition Job Results' }}</h2>
+          <button type="button" class="btn-close" (click)="closeJobResultModal()">&times;</button>
+        </header>
+
+        <div class="modal-body">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'تم فحصها' : 'Evaluated' }}</span>
+              <span class="kpi-value">{{ res.activeChecked }}</span>
+            </div>
+            <div class="kpi-card kpi-grace">
+              <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'تحولت إلى سماح' : 'Moved to Grace' }}</span>
+              <span class="kpi-value">{{ res.movedToGrace }}</span>
+            </div>
+            <div class="kpi-card kpi-suspended">
+              <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'تحولت إلى منتهية' : 'Moved to Expired' }}</span>
+              <span class="kpi-value">{{ res.movedToExpired }}</span>
+            </div>
+            <div class="kpi-card kpi-active">
+              <span class="kpi-label">{{ i18n.locale() === 'ar' ? 'تنبيهات أرسلت' : 'Reminders Sent' }}</span>
+              <span class="kpi-value">{{ res.remindersLogged }}</span>
+            </div>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="btn-primary" (click)="closeJobResultModal()">
+            {{ i18n.locale() === 'ar' ? 'تم' : 'Done' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  }
+</div>

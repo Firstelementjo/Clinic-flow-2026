@@ -1,0 +1,151 @@
+/**
+ * Report authoring.
+ *
+ * ## Logical properties only
+ *
+ * Every inset, margin and size here is a `block`/`inline` property, so the whole section
+ * mirrors correctly under `dir="rtl"` with no separate RTL rulesheet. The one thing that
+ * *is* direction-sensitive is handled in markup instead: the server's own note and the wire
+ * values — keys, permission literals, locales, redaction policies, ids — carry `dir="ltr"` on
+ * the element, because a UUID or `analytics:read-organization` must read the same way in an
+ * Arabic paragraph. Getting that wrong produces bidi-reordered identifiers, which look like
+ * typos and are not.
+ */
+.authoring {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-4);
+}
+
+/* The server's own statement, set apart from the controls it describes. */
+.authoring__server {
+  padding-block: var(--fe-space-3);
+  border-block-start: 1px solid var(--line);
+  border-block-end: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+}
+
+.authoring__form {
+  display: grid;
+  /* Two columns on a wide screen, one when narrow. `auto-fit` with a `min` is what makes
+     this reflow without a media query, so a narrow pane and a small window behave alike. */
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--fe-space-3);
+  align-items: start;
+}
+
+/* A form nested inside a list item needs the full width, not the two-column grid. */
+.authoring__subform {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-3);
+  margin-block-start: var(--fe-space-3);
+  padding-inline-start: var(--fe-space-3);
+  border-inline-start: 2px solid var(--line);
+}
+
+.authoring__list,
+.authoring__versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-3);
+}
+
+.authoring__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+  padding-block: var(--fe-space-3);
+  border-block-end: 1px solid var(--line);
+}
+
+.authoring__version {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-1);
+  padding: var(--fe-space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-sm);
+  background: var(--surf);
+}
+
+/*
+ * A row of label/value pairs.
+
+ * `justify-content: space-between` with the label first in source order means the value sits
+ * at the inline end in both directions, without a `[dir]` override.
+ */
+.authoring__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fe-space-2);
+}
+
+.authoring__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fe-space-2);
+}
+
+/* The column picker. `display: flex` on a `<fieldset>` removes the default min-width. */
+.authoring__columns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+  margin: 0;
+  padding: var(--fe-space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-sm);
+  min-inline-size: 0;
+}
+
+/*
+ * One checkbox row.
+
+ * `align-items: baseline` rather than `center`, so the label's text and the monospace key
+ * share a baseline and the row reads as one line rather than three stacked words.
+ */
+.authoring__column {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--fe-space-2);
+}
+
+/*
+ * The checkboxes are small targets on their own; the label carries the hit area, so the
+ * whole row is clickable rather than just the 13-pixel box.
+ */
+.authoring__column input[type='checkbox'] {
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
+  flex: none;
+}
+
+.authoring__column label {
+  cursor: pointer;
+  /* Grows to take the row, so clicking anywhere on it toggles the column. */
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+}
+
+/* Visible focus on the column rows, which are interactive but not themselves controls. */
+.authoring__column:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--fe-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .authoring__server,
+  .authoring__item {
+    transition: none;
+  }
+}

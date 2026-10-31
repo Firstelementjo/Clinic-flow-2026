@@ -1,0 +1,109 @@
+# ==============================================================================
+# Clinic Flow - Main Docker Compose Architecture
+# Spring Boot 3 + Angular 19 + PostgreSQL 16 (pgvector) + Redis 7
+# ==============================================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: clinicflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-firstelement}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-firstelement}
+      POSTGRES_DB: ${DATABASE_NAME:-firstelement}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - clinicflow-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USER:-firstelement} -d ${DATABASE_NAME:-firstelement}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - clinicflow-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: clinicflow-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - clinicflow-redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - clinicflow-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: clinicflow-backend:${VERSION:-latest}
+    container_name: clinicflow-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DATABASE_NAME:-firstelement}
+      DATABASE_USER: ${DATABASE_USER:-firstelement}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-firstelement}
+      REDIS_URL: redis://redis:6379
+      APP_ENV: ${APP_ENV:-PRODUCTION}
+      API_PORT: 4000
+      MANAGEMENT_PORT: 4101
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
+      SESSION_SECRET: ${SESSION_SECRET:-wVj2K9yNqL7xP3sT6uB1eR5aZ8dF0mC4hI9gO2vY1nU=}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      PLATFORM_CONSOLE_ENABLED: ${PLATFORM_CONSOLE_ENABLED:-true}
+    ports:
+      - '4000:4000'
+      - '4101:4101'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4101/actuator/health/readiness']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 25s
+    networks:
+      - clinicflow-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: clinicflow-frontend:${VERSION:-latest}
+    container_name: clinicflow-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '${WEB_PORT:-80}:80'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - clinicflow-net
+
+volumes:
+  clinicflow-pgdata:
+    name: clinicflow-pgdata
+  clinicflow-redisdata:
+    name: clinicflow-redisdata
+
+networks:
+  clinicflow-net:
+    name: clinicflow-network
+    driver: bridge

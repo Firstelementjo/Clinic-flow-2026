@@ -1,0 +1,205 @@
+<div class="fe-page" data-testid="knowledge">
+  <fe-page-header [title]="'knowledge.title'" [description]="'knowledge.description'">
+    <button type="button" class="fe-btn" (click)="load()">{{ 'knowledge.refresh' | t }}</button>
+  </fe-page-header>
+
+  <!-- =================================================== search freshness -->
+  @if (canReadKnowledge()) {
+    <section class="fe-card" [attr.aria-labelledby]="'knowledge-freshness-title'">
+      <h3 class="fe-card__title" id="knowledge-freshness-title">
+        {{ 'knowledge.freshness.title' | t }}
+      </h3>
+      <p class="fe-sub">{{ 'knowledge.freshness.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="freshness.loading() && !freshness.value()"
+        [empty]="freshness.value() !== null && freshnessRows().length === 0"
+        [error]="freshness.error()"
+        [hasValue]="freshness.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [loadingHint]="'state.loadingHint' | t"
+        [emptyTitle]="'knowledge.freshness.empty' | t"
+        [emptyBody]="'knowledge.freshness.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="freshnessErrorRequestId()"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (freshnessRows().length > 0) {
+        <dl class="facts facts--wide">
+          @for (row of freshnessRows(); track row.key) {
+            <div>
+              <dt class="fe-eyebrow">{{ row.label }}</dt>
+              <dd class="fe-mono" dir="ltr">{{ row.value }}</dd>
+            </div>
+          }
+        </dl>
+      }
+    </section>
+
+    <!-- ===================================================== knowledge gaps -->
+    <section class="fe-card" [attr.aria-labelledby]="'knowledge-gaps-title'">
+      <h3 class="fe-card__title" id="knowledge-gaps-title">{{ 'knowledge.gaps.title' | t }}</h3>
+      <p class="fe-sub">{{ 'knowledge.gaps.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="gaps.loading() && !gaps.value()"
+        [empty]="gaps.value() !== null && gapRows().length === 0"
+        [error]="gaps.error()"
+        [hasValue]="gaps.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'knowledge.gaps.empty' | t"
+        [emptyBody]="'knowledge.gaps.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (gapRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of gapRows(); track row.key) {
+            <li class="fe-row">
+              <span>{{ row.value }}</span>
+              <span class="fe-sub fe-num">
+                {{ 'knowledge.gaps.hits' | t }}: {{ row.label }}
+              </span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+
+    <!--
+      Documents and knowledge bases have no route, so there is nothing to show and
+      no form is offered. Naming the gap is the honest state; a drop area that
+      submits to a 404 is not.
+    -->
+    <fe-not-available
+      [title]="'knowledge.unavailable.documents'"
+      [body]="'knowledge.unavailable.documentsBody'"
+    />
+  }
+
+  <!-- ======================================================= AI governance -->
+  @if (canReadAi()) {
+    <section class="fe-card" [attr.aria-labelledby]="'knowledge-ai-title'">
+      <h3 class="fe-card__title" id="knowledge-ai-title">{{ 'knowledge.ai.title' | t }}</h3>
+      <p class="fe-sub">{{ 'knowledge.ai.hint' | t }}</p>
+      <!-- Read-only, and said so: every decision here is an explicit command. -->
+      <p class="fe-sub">{{ 'knowledge.ai.readOnly' | t }}</p>
+
+      <div class="ai-sections">
+        @for (section of aiSections(); track section.key) {
+          <div class="ai-section">
+            <h4 class="fe-eyebrow">{{ section.titleKey | t }}</h4>
+            <fe-async-state
+              [loading]="section.store.loading() && !section.store.value()"
+              [empty]="section.store.value() !== null && aiRows(section.store).length === 0"
+              [error]="section.store.error()"
+              [hasValue]="section.store.value() !== null"
+              [loadingLabel]="'state.loading' | t"
+              [emptyTitle]="'knowledge.ai.empty' | t"
+              [emptyBody]="'knowledge.ai.emptyBody' | t"
+              [errorTitle]="'state.error' | t"
+              [errorBody]="'state.errorHint' | t"
+              [retryLabel]="'state.retry' | t"
+              (retry)="load()"
+            />
+            @if (aiRows(section.store).length > 0) {
+              <ul class="fe-list">
+                @for (row of aiRows(section.store); track row.key) {
+                  <li class="fe-row">
+                    <span>{{ row.label }}</span>
+                    <span class="fe-mono" dir="ltr">{{ row.value }}</span>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- AI agents have no route at all; the policy surface above is what exists. -->
+    <fe-not-available
+      [title]="'knowledge.unavailable.agents'"
+      [body]="'knowledge.unavailable.agentsBody'"
+    />
+  }
+
+  <!-- ============================================================ channels -->
+  @if (canReadChannels()) {
+    <section class="fe-card" [attr.aria-labelledby]="'knowledge-channels-title'">
+      <h3 class="fe-card__title" id="knowledge-channels-title">
+        {{ 'knowledge.channels.title' | t }}
+      </h3>
+      <p class="fe-sub">{{ 'knowledge.channels.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="capabilities.loading() && !capabilities.value()"
+        [empty]="capabilities.value() !== null && channelCapabilityRows().length === 0"
+        [error]="capabilities.error()"
+        [hasValue]="capabilities.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'knowledge.channels.empty' | t"
+        [emptyBody]="'knowledge.channels.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (channelCapabilityRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of channelCapabilityRows(); track row.key) {
+            <li class="fe-row">
+              <span>{{ row.label }}</span>
+              <fe-status-chip tone="neutral">{{ row.value }}</fe-status-chip>
+            </li>
+          }
+        </ul>
+      }
+
+      <!--
+        Connection health, stated as unavailable.
+
+        `GET /api/v1/channels/connections` declares a **required** `context` query
+        parameter typed as `TenantContext`. No client can serialise that object onto a
+        query string, and the server resolves the context from the session regardless
+        — so calling it would produce a 400 that says nothing about the channels. The
+        gap is stated rather than hidden, and the reason is given so it can be filed.
+      -->
+      <div class="fe-alert fe-alert--info" role="note">
+        {{ 'knowledge.channels.connectionsUnavailable' | t }}
+      </div>
+    </section>
+  }
+
+  <!-- ========================================================== escalation -->
+  <section class="fe-card" [attr.aria-labelledby]="'knowledge-escalation-title'">
+    <h3 class="fe-card__title" id="knowledge-escalation-title">
+      {{ 'knowledge.escalation.title' | t }}
+    </h3>
+    <p>{{ 'knowledge.escalation.body' | t }}</p>
+
+    <!--
+      Escalation is two fields on a case resolution. Pointing at where it is
+      recorded is more useful than an empty queue that looks like nothing has been
+      escalated.
+    -->
+    <dl class="facts">
+      <div>
+        <dt class="fe-eyebrow">{{ 'knowledge.escalation.requested' | t }}</dt>
+        <dd>{{ 'knowledge.escalation.inConversation' | t }}</dd>
+      </div>
+      <div>
+        <dt class="fe-eyebrow">{{ 'knowledge.escalation.toSupervisor' | t }}</dt>
+        <dd>{{ 'knowledge.escalation.inConversation' | t }}</dd>
+      </div>
+    </dl>
+  </section>
+</div>

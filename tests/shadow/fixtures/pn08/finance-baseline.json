@@ -1,0 +1,27 @@
+{
+  "kind": "shadow-finance-comparison",
+  "capturedAtUtc": "2026-01-20T00:00:00.000Z",
+  "scope": {
+    "projectId": "a1a1a1a1-0000-4000-8000-000000000001",
+    "from": "2026-01-01",
+    "to": "2026-01-31",
+    "database": "shadow_check_spring"
+  },
+  "computeStatus": 200,
+  "computedBuckets": 5,
+  "derivedFromSourceRows": [
+    { "dimension": "AI_REQUEST", "sourceEventCount": 1, "quantity": 4, "cost": 4, "unit": "request", "priced": true, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "expectedRevenue": 6, "expectedMargin": 2 },
+    { "dimension": "DOCUMENT_CHUNK", "sourceEventCount": 1, "quantity": 3, "cost": 3, "unit": "chunk", "priced": false, "markup": null, "rateCardVersionId": null, "expectedRevenue": null, "expectedMargin": null },
+    { "dimension": "MESSAGE", "sourceEventCount": 1, "quantity": 10, "cost": 10, "unit": "message", "priced": true, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "expectedRevenue": 15, "expectedMargin": 5 },
+    { "dimension": "STORAGE", "sourceEventCount": 1, "quantity": 1.5, "cost": 1.5, "unit": "byte_day", "priced": true, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "expectedRevenue": 2.25, "expectedMargin": 0.75 },
+    { "dimension": "WORKFLOW_RUN", "sourceEventCount": 1, "quantity": 2, "cost": 2, "unit": "run", "priced": true, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "expectedRevenue": 3, "expectedMargin": 1 }
+  ],
+  "currentGeneration": [
+    { "dimension": "AI_REQUEST", "generation": 1, "cost": 4, "revenue": 6, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "unpricedQuantity": 0, "unpricedCost": 4, "supersedesSnapshotId": null, "sourceEventCount": 1 },
+    { "dimension": "DOCUMENT_CHUNK", "generation": 1, "cost": 3, "revenue": null, "markup": null, "rateCardVersionId": null, "unpricedQuantity": 3, "unpricedCost": 3, "supersedesSnapshotId": null, "sourceEventCount": 1 },
+    { "dimension": "MESSAGE", "generation": 1, "cost": 10, "revenue": 15, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "unpricedQuantity": 0, "unpricedCost": 10, "supersedesSnapshotId": null, "sourceEventCount": 1 },
+    { "dimension": "STORAGE", "generation": 1, "cost": 1.5, "revenue": 2.25, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "unpricedQuantity": 0, "unpricedCost": 1.5, "supersedesSnapshotId": null, "sourceEventCount": 1 },
+    { "dimension": "WORKFLOW_RUN", "generation": 1, "cost": 2, "revenue": 3, "markup": 1.5, "rateCardVersionId": "e1000001-0000-4000-8000-000000000001", "unpricedQuantity": 0, "unpricedCost": 2, "supersedesSnapshotId": null, "sourceEventCount": 1 }
+  ],
+  "olderGenerations": []
+}

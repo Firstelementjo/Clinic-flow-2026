@@ -1,0 +1,226 @@
+<div class="plans-container" [attr.dir]="i18n.direction()">
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-titles">
+      <h1 class="page-title">{{ i18n.locale() === 'ar' ? 'باقات الاشتراك وحدود السعة' : 'Plans & Entitlements' }}</h1>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn btn-secondary" (click)="loadPlans()" [disabled]="loadingPlans()">
+        <fe-icon name="rotate-ccw" [size]="16"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'تحديث' : 'Refresh' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Error Alert -->
+  @if (error()) {
+    <div class="alert alert-danger" role="alert">
+      <fe-icon name="alert-triangle" [size]="18"></fe-icon>
+      <span>{{ error() }}</span>
+    </div>
+  }
+
+  <!-- Section 1: Subscription Tier Cards -->
+  <section class="tiers-section">
+    <div class="section-header">
+      <h2 class="section-title">{{ i18n.locale() === 'ar' ? 'باقات الاشتراك المعتمدة' : 'Subscription Plans' }}</h2>
+      <span class="badge badge-teal">{{ plans().length }} {{ i18n.locale() === 'ar' ? 'باقات معتمدة' : 'Active Plans' }}</span>
+    </div>
+
+    @if (loadingPlans()) {
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>{{ i18n.locale() === 'ar' ? 'جاري تحميل باقات الاشتراك والحدود...' : 'Loading subscription plans and quotas...' }}</p>
+      </div>
+    } @else {
+      <div class="plans-grid">
+        @for (plan of plans(); track plan.id) {
+          <article class="plan-card">
+            <div class="plan-card-header">
+              <div class="plan-info">
+                <h3 class="plan-name">{{ plan.name }}</h3>
+                <span class="plan-id">{{ plan.code }}</span>
+              </div>
+              <div class="plan-pricing">
+                <span class="price-amount">{{ plan.priceAmount | number:'1.3-3' }}</span>
+                <span class="price-currency">{{ plan.currency }}</span>
+                <span class="price-interval">/ {{ plan.billingInterval }}</span>
+              </div>
+            </div>
+
+            <p class="plan-desc">{{ plan.description || (i18n.locale() === 'ar' ? 'باقة اشتراك عيادات معتمدة' : 'Standard clinic subscription plan') }}</p>
+
+            <div class="plan-limits-list">
+              <div class="limit-item">
+                <span class="limit-label">{{ i18n.locale() === 'ar' ? 'الأطباء والمستخدمين' : 'Max Users (Staff & Doctors)' }}</span>
+                <span class="limit-val">{{ plan.maxUsers }}</span>
+              </div>
+              <div class="limit-item">
+                <span class="limit-label">{{ i18n.locale() === 'ar' ? 'الفروع المسموحة' : 'Max Clinic Branches' }}</span>
+                <span class="limit-val">{{ plan.maxBranches }}</span>
+              </div>
+              <div class="limit-item">
+                <span class="limit-label">{{ i18n.locale() === 'ar' ? 'حصة الذكاء الاصطناعي' : 'Monthly AI Quota' }}</span>
+                <span class="limit-val">{{ plan.monthlyAiQuota }} {{ i18n.locale() === 'ar' ? 'عملية/شهر' : 'runs' }}</span>
+              </div>
+              <div class="limit-item">
+                <span class="limit-label">{{ i18n.locale() === 'ar' ? 'المساحة التخزينية' : 'Storage Quota' }}</span>
+                <span class="limit-val">{{ plan.storageQuotaMb }} MB</span>
+              </div>
+            </div>
+
+            <div class="plan-features">
+              <span class="features-title">{{ i18n.locale() === 'ar' ? 'الميزات والصلاحيات المضمنة:' : 'Entitlements:' }}</span>
+              <div class="feature-badges">
+                @for (ent of availableEntitlements; track ent.key) {
+                  <span class="feature-pill" [class.enabled]="plan.enabledFeatures.includes(ent.key)" [class.disabled]="!plan.enabledFeatures.includes(ent.key)">
+                    <fe-icon [name]="plan.enabledFeatures.includes(ent.key) ? 'check' : 'x'" [size]="12"></fe-icon>
+                    <span>{{ ent.label }}</span>
+                  </span>
+                }
+              </div>
+            </div>
+
+            <div class="plan-card-footer">
+              <button type="button" class="btn btn-outline" (click)="openEditPlan(plan.id)">
+                <fe-icon name="edit" [size]="14"></fe-icon>
+                <span>{{ i18n.locale() === 'ar' ? 'تعديل الباقة والحدود' : 'Edit Plan & Limits' }}</span>
+              </button>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  <!-- Edit Plan Modal -->
+  @if (editingPlan() && selectedPlan(); as plan) {
+    <div class="modal-backdrop" (click)="closeEditPlan()">
+      <div class="modal-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="editPlanModalTitle">
+        <header class="modal-header">
+          <div>
+            <h2 id="editPlanModalTitle" class="modal-title">Edit Plan: {{ plan.name }}</h2>
+            <p class="modal-subtitle">Update baseline quotas and feature entitlements for this tier.</p>
+          </div>
+          <button type="button" class="btn-close" (click)="closeEditPlan()" aria-label="Close modal">&times;</button>
+        </header>
+
+        <form (ngSubmit)="submitPlanUpdate()" class="modal-form">
+          <div class="form-group">
+            <label for="planNameInput" class="form-label">Plan Name</label>
+            <input
+              id="planNameInput"
+              type="text"
+              class="form-control"
+              [ngModel]="planForm().name"
+              (ngModelChange)="planForm.set({ ...planForm(), name: $event })"
+              name="name"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="planDescInput" class="form-label">Description</label>
+            <input
+              id="planDescInput"
+              type="text"
+              class="form-control"
+              [ngModel]="planForm().description"
+              (ngModelChange)="planForm.set({ ...planForm(), description: $event })"
+              name="description"
+            />
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="planUsersInput" class="form-label">Max Users</label>
+              <input
+                id="planUsersInput"
+                type="number"
+                class="form-control"
+                [ngModel]="planForm().maxUsers"
+                (ngModelChange)="planForm.set({ ...planForm(), maxUsers: +$event })"
+                name="maxUsers"
+                min="1"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="planBranchesInput" class="form-label">Max Branches</label>
+              <input
+                id="planBranchesInput"
+                type="number"
+                class="form-control"
+                [ngModel]="planForm().maxBranches"
+                (ngModelChange)="planForm.set({ ...planForm(), maxBranches: +$event })"
+                name="maxBranches"
+                min="1"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="planAiInput" class="form-label">Monthly AI Quota</label>
+              <input
+                id="planAiInput"
+                type="number"
+                class="form-control"
+                [ngModel]="planForm().monthlyAiQuota"
+                (ngModelChange)="planForm.set({ ...planForm(), monthlyAiQuota: +$event })"
+                name="monthlyAiQuota"
+                min="0"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="planStorageInput" class="form-label">Storage Quota (MB)</label>
+              <input
+                id="planStorageInput"
+                type="number"
+                class="form-control"
+                [ngModel]="planForm().storageQuotaMb"
+                (ngModelChange)="planForm.set({ ...planForm(), storageQuotaMb: +$event })"
+                name="storageQuotaMb"
+                min="100"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="entitlements-selector">
+            <span class="form-label">Plan Entitlements</span>
+            <div class="checkbox-list">
+              @for (ent of availableEntitlements; track ent.key) {
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    [checked]="hasPlanEntitlement(ent.key)"
+                    (change)="togglePlanEntitlement(ent.key)"
+                  />
+                  <div>
+                    <span class="ent-title">{{ ent.label }}</span>
+                    <span class="ent-desc">{{ ent.desc }}</span>
+                  </div>
+                </label>
+              }
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeEditPlan()" [disabled]="savingPlan()">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" [disabled]="savingPlan()">
+              @if (savingPlan()) {
+                <div class="spinner-sm"></div>
+              }
+              <span>Save Plan Changes</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

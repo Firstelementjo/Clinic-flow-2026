@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "note": "Recorded ceilings for rules that cannot be decided by a source scan. Each number is a RATCHET: it may fall (and should be tightened in the same commit), never rise. It exists so an unscoped SQL fragment or a missing test suite has to be triaged instead of appearing quietly.",
+  "owner": "Agent L (quality)",
+
+  "tenantSqlFragmentCeiling": 3,
+
+  "tenantSqlFragmentDetail": {
+    "countedAt": "2026-10-05",
+    "measuredAgainst": "ops/flyway/sql/V20260814000000__baseline_verified_live_schema.sql (45 tables)",
+    "excludedTables": [
+      "organizations",
+      "sessions"
+    ],
+    "excludedReason": "`organizations` is the tenant root and `sessions` is resolved by an opaque token hash; neither has an organizationId column to scope by. Every other table in the verified schema is tenant-owned.",
+    "phase6Tightening": "The ceiling was 19 and the count reached 20 when Phase 6 added RoutingRepository, whose `where %s` is filled by scope.predicate(\"r\"). That fragment is genuinely scoped. Rather than raise the ceiling, the scan now recognises an explicit scope marker composed right after the text block (scope.predicate(/ScopedWhere/CrmQueryScope/.formatted(scope) and stops counting it. The count fell 20 -> 3, so the ceiling was tightened to 3 in the same commit. A fragment that stops composing the scope stops being excused.",
+    "whyItIsNotABoolean": "The predicate is frequently appended by CrmQueryScope.select(...) or ScopedWhere rather than written inside the literal, so a text scan sees a fragment with no organizationId in a statement that IS scoped. Example: crm-core CaseRepository.QUESTION_SELECT is completed by scope.select(...). Deciding this soundly needs a call-graph engine (ArchUnit, PMD, or an explicit scope marker); until a backend-owned Gradle module exists, the count is ratcheted and every new fragment is triaged by hand.",
+    "filesAtTheTimeOfMeasurement": [
+      "backend/channels/src/main/java/com/firstelement/channels/persistence/CustomerChannelIdentityRepository.java",
+      "backend/channels/src/main/java/com/firstelement/channels/persistence/OutboundDeliveryRepository.java",
+      "backend/crm-core/src/main/java/com/firstelement/crm/persistence/CaseRepository.java",
+      "backend/crm-core/src/main/java/com/firstelement/crm/persistence/ConversationRepository.java",
+      "backend/crm-core/src/main/java/com/firstelement/crm/persistence/CustomerRepository.java",
+      "backend/crm-core/src/main/java/com/firstelement/crm/timeline/ConversationTimelineStore.java",
+      "backend/inbox-helpdesk/src/main/java/com/firstelement/inbox/persistence/MockChannelProbe.java"
+    ]
+  }
+}

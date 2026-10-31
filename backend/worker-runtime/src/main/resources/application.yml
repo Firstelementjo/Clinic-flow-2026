@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: firstelement-worker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/firstelement}
+    username: ${DATABASE_USER:firstelement}
+    password: ${DATABASE_PASSWORD:firstelement}
+    # Every timestamp in this schema is `timestamp without time zone` and every stored value is
+    # UTC (V20261004000100). The canonical claim statements compare with
+    # (now() AT TIME ZONE 'UTC') so a lease is judged against UTC regardless, but Phase-5a risk 5
+    # is explicit that every connection must also be UTC. Setting it here makes the rule a
+    # configuration fact instead of a hope.
+    hikari:
+      connection-init-sql: "SET TIME ZONE 'UTC'"
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${WORKER_PORT:4100}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_PROBABILITY:0.1}
+
+firstelement:
+  environment: ${APP_ENV:LOCAL}
+  api:
+    # Not used by this process; declared so FirstElementProperties binds without a blank value.
+    web-origin: ${WEB_ORIGIN:http://localhost:5173}
+    session-secret: ${SESSION_SECRET:change-me-to-a-long-random-string-min-32-chars}
+  worker:
+    concurrency: ${WORKER_CONCURRENCY:4}
+    shutdown-drain-seconds: ${WORKER_SHUTDOWN_DRAIN_SECONDS:20}
+    dispatcher:
+      # The API process disables this and serves management endpoints only; see the phase report.
+      enabled: ${WORKER_DISPATCHER_ENABLED:true}
+      batch-size: ${WORKER_BATCH_SIZE:20}
+      # Must exceed the slowest handler. A lease shorter than its own handler guarantees a
+      # double-delivery, because the reaper reclaims the row while attempt one is still running.
+      lease-seconds: ${WORKER_LEASE_SECONDS:60}
+      poll-millis: ${WORKER_POLL_MILLIS:500}
+      reap-millis: ${WORKER_REAP_MILLIS:5000}
+      reap-batch-size: ${WORKER_REAP_BATCH_SIZE:100}
+      max-in-flight-per-tenant: ${WORKER_MAX_IN_FLIGHT_PER_TENANT:4}
+      drain-seconds: ${WORKER_DRAIN_SECONDS:20}
+      failure-window-seconds: ${WORKER_FAILURE_WINDOW_SECONDS:900}
+
+logging:
+  level:
+    root: info

@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture: an empty required-suite list, used to prove the checker still fails on a skip when nothing is required to be present. The skip check must not depend on the manifest.",
+  "suites": []
+}

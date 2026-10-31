@@ -1,0 +1,895 @@
+<div class="platform-clinics-page fe-page" data-testid="platform-clinics" [dir]="i18n.direction()">
+  <!-- Top Header Bar -->
+  <header class="page-topbar">
+    <div class="page-topbar__titles">
+      <h1 class="page-topbar__title">{{ i18n.locale() === 'ar' ? 'إدارة عيادات ومؤسسات المنصة' : 'Clinic Tenants' }}</h1>
+    </div>
+    <div class="page-topbar__actions">
+      <button type="button" class="btn btn--outline" (click)="loadClinics()" [disabled]="loading()">
+        <fe-icon name="admin" [class.fe-spin]="loading()"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'تحديث' : 'Refresh' }}</span>
+      </button>
+      <button type="button" class="btn btn--outline" (click)="exportCsv()" [disabled]="filteredClinics().length === 0">
+        <fe-icon name="exports"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'تصدير CSV' : 'Export CSV' }}</span>
+      </button>
+      <button type="button" class="btn btn--primary" (click)="openWizard()">
+        <fe-icon name="clinic"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'إنشاء عيادة جديدة' : 'Create Clinic' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Filter & Search Controls Bar -->
+  <section class="controls-bar fe-card">
+    <div class="controls-bar__search">
+      <fe-icon name="audit" class="search-icon"></fe-icon>
+      <input
+        type="search"
+        class="fe-input search-input"
+        [placeholder]="i18n.locale() === 'ar' ? 'بحث عن عيادة بالاسم، المدينة، اسم أو بريد السوبر أدمن...' : 'Search by clinic name, slug, city, admin name or email...'"
+        [value]="searchQuery()"
+        (input)="searchQuery.set($any($event.target).value)"
+        aria-label="Search clinics"
+      />
+      @if (searchQuery()) {
+        <button type="button" class="clear-search-btn" (click)="searchQuery.set('')" title="Clear search">
+          &times;
+        </button>
+      }
+    </div>
+
+    <div class="controls-bar__filter">
+      <label for="statusFilterSelect" class="filter-label">{{ i18n.locale() === 'ar' ? 'الحالة:' : 'Status:' }}</label>
+      <select
+        id="statusFilterSelect"
+        class="fe-select filter-select"
+        [value]="statusFilter()"
+        (change)="statusFilter.set($any($event.target).value)"
+      >
+        <option value="ALL">{{ i18n.locale() === 'ar' ? 'كافة الحالات' : 'All Statuses' }} ({{ clinics().length }})</option>
+        <option value="ACTIVE">{{ i18n.locale() === 'ar' ? 'نشط' : 'Active' }}</option>
+        <option value="TRIAL">{{ i18n.locale() === 'ar' ? 'تجريبي' : 'Trial' }}</option>
+        <option value="GRACE">{{ i18n.locale() === 'ar' ? 'فترة سماح' : 'Grace Period' }}</option>
+        <option value="SUSPENDED">{{ i18n.locale() === 'ar' ? 'موقوف' : 'Suspended' }}</option>
+        <option value="EXPIRED">{{ i18n.locale() === 'ar' ? 'منتهي' : 'Expired' }}</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Alerts / Notifications -->
+  @if (copyNotification()) {
+    <div class="banner banner--success" role="status">
+      <fe-icon name="admin"></fe-icon>
+      <span>{{ i18n.locale() === 'ar' ? 'تم نسخ رابط الدعوة إلى الحافظة بنجاح!' : 'Invite link copied to clipboard successfully!' }}</span>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="banner banner--danger" role="alert">
+      <fe-icon name="warning"></fe-icon>
+      <span>{{ error() }}</span>
+      <button type="button" class="btn-text" (click)="loadClinics()">{{ i18n.locale() === 'ar' ? 'إعادة المحاولة' : 'Retry' }}</button>
+    </div>
+  }
+
+  <!-- Main Table Section -->
+  <section class="table-container fe-card">
+    @if (loading() && clinics().length === 0) {
+      <div class="empty-state">
+        <fe-icon name="admin" class="fe-spin empty-state__icon"></fe-icon>
+        <p class="empty-state__title">{{ i18n.locale() === 'ar' ? 'جاري تحميل سجل العيادات...' : 'Loading clinic tenants...' }}</p>
+        <p class="empty-state__hint">{{ i18n.locale() === 'ar' ? 'استرجاع بيانات المستأجرين وحالات الاشتراكات.' : 'Fetching tenant registry and subscription states.' }}</p>
+      </div>
+    } @else if (filteredClinics().length === 0) {
+      <div class="empty-state">
+        <fe-icon name="clinic" class="empty-state__icon"></fe-icon>
+        <p class="empty-state__title">{{ i18n.locale() === 'ar' ? 'لم يتم العثور على أي عيادات' : 'No clinics found' }}</p>
+        <p class="empty-state__hint">
+          @if (searchQuery() || statusFilter() !== 'ALL') {
+            {{ i18n.locale() === 'ar' ? 'لا توجد عيادة تطابق معايير البحث الحالية.' : 'No clinic matches your current search or status filter. Try clearing filters.' }}
+          } @else {
+            {{ i18n.locale() === 'ar' ? 'لا توجد عيادات مسجلة حالياً على المنصة. انقر على "إنشاء عيادة جديدة" لبدء الإعداد.' : 'No clinics are currently provisioned on the platform. Click "Create Clinic" to launch the onboarding wizard.' }}
+          }
+        </p>
+      </div>
+    } @else {
+      <div class="fe-table-scroll">
+        <table class="fe-table fe-table--interactive" aria-label="Clinic Tenants Table">
+          <thead>
+            <tr>
+              <th scope="col">{{ i18n.locale() === 'ar' ? 'العيادة' : 'Clinic' }}</th>
+              <th scope="col">{{ i18n.locale() === 'ar' ? 'سوبر أدمن العيادة' : 'Clinic Admin' }}</th>
+              <th scope="col">{{ i18n.locale() === 'ar' ? 'الباقة' : 'Plan' }}</th>
+              <th scope="col">{{ i18n.locale() === 'ar' ? 'الحالة' : 'Status' }}</th>
+              <th scope="col">{{ i18n.locale() === 'ar' ? 'الصلاحية / التجربة' : 'Paid Until / Trial' }}</th>
+              <th scope="col">{{ i18n.locale() === 'ar' ? 'آخر نشاط' : 'Last Activity' }}</th>
+              <th scope="col">{{ i18n.locale() === 'ar' ? 'تاريخ الإنشاء' : 'Created' }}</th>
+              <th scope="col" class="table-actions-header">{{ i18n.locale() === 'ar' ? 'الإجراءات' : 'Actions' }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (clinic of filteredClinics(); track clinic.projectId) {
+              <tr [class.row-suspended]="clinic.status === 'SUSPENDED'">
+                <!-- Clinic Column -->
+                <td class="cell-clinic">
+                  <div class="clinic-info">
+                    <span class="clinic-info__name">{{ clinic.clinicName }}</span>
+                    <span class="clinic-info__slug">/{{ clinic.slug }}</span>
+                    <div class="clinic-info__meta">
+                      <span class="badge badge--city">{{ clinic.city || 'Amman' }}</span>
+                      <span class="meta-separator">&bull;</span>
+                      <span class="meta-tz">{{ clinic.timezone || 'Asia/Amman' }}</span>
+                      @if (clinic.contactNumber) {
+                        <span class="meta-separator">&bull;</span>
+                        <span class="meta-phone">{{ clinic.contactNumber }}</span>
+                      }
+                    </div>
+                  </div>
+                </td>
+
+                <!-- Clinic Admin Column (Replaces Front Desk Officer) -->
+                <td class="cell-admin">
+                  <div class="admin-info">
+                    <div class="admin-info__header">
+                      <span class="admin-info__name">{{ clinic.adminName || (i18n.locale() === 'ar' ? 'بانتظار التعيين' : 'Admin Pending') }}</span>
+                      @if (clinic.adminInvitePending) {
+                        <span class="chip-pending" [title]="i18n.locale() === 'ar' ? 'دعوة معلقة بانتظار التفعيل' : 'Invite pending claim'">{{ i18n.locale() === 'ar' ? 'أُرسلت الدعوة' : 'Invite Sent' }}</span>
+                      }
+                      @if (clinic.adminMfaEnrolled) {
+                        <span class="chip-mfa" title="MFA Enrolled">MFA</span>
+                      }
+                    </div>
+                    <span class="admin-info__email">{{ clinic.adminEmail || 'No email' }}</span>
+                    @if (clinic.adminPhone) {
+                      <span class="admin-info__phone">{{ clinic.adminPhone }}</span>
+                    }
+                    @if (!clinic.adminIsActive) {
+                      <span class="badge badge--danger-soft">{{ i18n.locale() === 'ar' ? 'الحساب معطل' : 'Account Disabled' }}</span>
+                    }
+                  </div>
+                </td>
+
+                <!-- Plan Column -->
+                <td class="cell-plan">
+                  <div class="plan-info">
+                    <span class="plan-info__name">{{ clinic.planName || clinic.planCode || 'GROWTH' }}</span>
+                    <span class="plan-info__limits">
+                      {{ clinic.maxUsers || 5 }} {{ i18n.locale() === 'ar' ? 'أطباء/مستخدمين' : 'users' }} &bull; {{ clinic.maxBranches || 1 }} {{ i18n.locale() === 'ar' ? 'فرع' : 'branch' }}
+                    </span>
+                  </div>
+                </td>
+
+                <!-- Status Column -->
+                <td class="cell-status">
+                  <fe-status-chip [tone]="statusTone(clinic.status || clinic.subscriptionStatus)">
+                    {{ clinic.status || clinic.subscriptionStatus || 'ACTIVE' }}
+                  </fe-status-chip>
+                </td>
+
+                <!-- Paid Until / Trial Ends Column -->
+                <td class="cell-dates">
+                  @if (clinic.paidUntil) {
+                    <div class="date-val">
+                      <span class="date-val__label">{{ i18n.locale() === 'ar' ? 'صالح لغاية:' : 'Paid until:' }}</span>
+                      <span class="date-val__date">{{ formatDate(clinic.paidUntil) }}</span>
+                    </div>
+                  } @else if (clinic.trialEndsAt) {
+                    <div class="date-val date-val--trial">
+                      <span class="date-val__label">{{ i18n.locale() === 'ar' ? 'تنتهي التجربة:' : 'Trial ends:' }}</span>
+                      <span class="date-val__date">{{ formatDate(clinic.trialEndsAt) }}</span>
+                    </div>
+                  } @else {
+                    <span class="text-muted">{{ i18n.locale() === 'ar' ? 'غير محدد' : 'Not set' }}</span>
+                  }
+                </td>
+
+                <!-- Last Activity Column -->
+                <td class="cell-activity">
+                  <span class="activity-text">{{ formatDate(clinic.lastActivity) }}</span>
+                </td>
+
+                <!-- Created Column -->
+                <td class="cell-created">
+                  <span class="created-text">{{ formatDate(clinic.createdAt) }}</span>
+                </td>
+
+                <!-- Actions Column -->
+                <td class="cell-actions">
+                  <div class="action-buttons-group">
+                    <!-- Quick actions -->
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [title]="i18n.locale() === 'ar' ? 'تعديل بيانات العيادة' : 'Edit Clinic Profile'"
+                      (click)="openEdit(clinic)"
+                    >
+                      <fe-icon name="clipboard"></fe-icon>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [title]="i18n.locale() === 'ar' ? 'تمديد الاشتراك' : 'Extend Subscription'"
+                      (click)="openExtend(clinic)"
+                    >
+                      <fe-icon name="calendar"></fe-icon>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [title]="i18n.locale() === 'ar' ? 'الحدود وسعة حسابات FDO' : 'Capacity & FDO Limits'"
+                      (click)="openLimits(clinic)"
+                    >
+                      <fe-icon name="settings"></fe-icon>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      [title]="i18n.locale() === 'ar' ? 'إضافة مشرف عيادة جديد (Clinic Admin)' : 'Add Additional Clinic Admin'"
+                      (click)="openAddAdmin(clinic)"
+                    >
+                      <fe-icon name="team"></fe-icon>
+                    </button>
+
+                    @if (clinic.status === 'SUSPENDED') {
+                      <button
+                        type="button"
+                        class="btn-icon btn-icon--success"
+                        [title]="i18n.locale() === 'ar' ? 'إعادة تفعيل العيادة' : 'Reactivate Clinic'"
+                        (click)="openReactivatePrompt(clinic)"
+                      >
+                        <fe-icon name="clinic"></fe-icon>
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="btn-icon btn-icon--danger"
+                        [title]="i18n.locale() === 'ar' ? 'إيقاف مؤقت للعيادة (DEC-007)' : 'Suspend Clinic (DEC-007 compliant)'"
+                        (click)="openSuspendPrompt(clinic)"
+                      >
+                        <fe-icon name="warning"></fe-icon>
+                      </button>
+                    }
+
+                    <!-- Admin Account Management Menu -->
+                    <div class="admin-action-dropdown">
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        [title]="i18n.locale() === 'ar' ? 'إدارة حساب المشرف' : 'Admin Credentials & Security'"
+                        [id]="'menu-btn-' + clinic.projectId"
+                      >
+                        <fe-icon name="admin"></fe-icon>
+                      </button>
+                      <div class="dropdown-panel">
+                        <button type="button" class="dropdown-item" (click)="openAddAdmin(clinic)">
+                          <fe-icon name="team"></fe-icon>
+                          <span>{{ i18n.locale() === 'ar' ? 'إضافة مدير عيادة جديد (Clinic Admin)' : 'Add Clinic Admin' }}</span>
+                        </button>
+                        <button type="button" class="dropdown-item" (click)="resendInvite(clinic)">
+                          <fe-icon name="mail"></fe-icon>
+                          <span>{{ i18n.locale() === 'ar' ? 'إعادة إرسال رابط الدعوة' : 'Resend Single-Use Invite' }}</span>
+                        </button>
+                        @if (clinic.adminMfaEnrolled) {
+                          <button type="button" class="dropdown-item" (click)="resetMfa(clinic)">
+                            <fe-icon name="admin"></fe-icon>
+                            <span>{{ i18n.locale() === 'ar' ? 'إعادة تعيين التحقق الثنائي MFA' : 'Reset MFA Secret' }}</span>
+                          </button>
+                        }
+                        <button type="button" class="dropdown-item dropdown-item--danger" (click)="toggleAdminActive(clinic)">
+                          <fe-icon name="warning"></fe-icon>
+                          <span>{{ clinic.adminIsActive ? (i18n.locale() === 'ar' ? 'تعطيل حساب السوبر أدمن' : 'Disable Admin Account') : (i18n.locale() === 'ar' ? 'تفعيل حساب السوبر أدمن' : 'Enable Admin Account') }}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- DRAWER: CREATE CLINIC WIZARD                                              -->
+  <!-- ========================================================================= -->
+  <fe-tl-drawer
+    [open]="wizardOpen()"
+    [title]="i18n.locale() === 'ar' ? 'إنشاء عيادة جديدة وتعيين حساب السوبر أدمن' : 'Create Clinic Tenant'"
+    [subtitle]="i18n.locale() === 'ar' ? 'معالج التهيئة السريعة وتخصيص الباقة وبيانات الدخول' : 'Quick Provisioning Wizard'"
+    (closed)="closeWizard()"
+  >
+    <div class="wizard-drawer-content" [dir]="i18n.direction()">
+      <div class="wizard-steps-indicator">
+        <span class="step-dot" [class.step-dot--active]="wizardStep() === 1" [class.step-dot--done]="wizardStep() > 1">
+          {{ i18n.locale() === 'ar' ? '1. العيادة' : '1. Clinic' }}
+        </span>
+        <span class="step-connector"></span>
+        <span class="step-dot" [class.step-dot--active]="wizardStep() === 2" [class.step-dot--done]="wizardStep() > 2">
+          {{ i18n.locale() === 'ar' ? '2. باقة الاشتراك' : '2. Subscription' }}
+        </span>
+        <span class="step-connector"></span>
+        <span class="step-dot" [class.step-dot--active]="wizardStep() === 3" [class.step-dot--done]="wizardStep() > 3">
+          {{ i18n.locale() === 'ar' ? '3. حساب المشرف' : '3. Admin' }}
+        </span>
+        <span class="step-connector"></span>
+        <span class="step-dot" [class.step-dot--active]="wizardStep() === 4">
+          {{ i18n.locale() === 'ar' ? '4. رمز التفعيل' : '4. Token' }}
+        </span>
+      </div>
+
+      @if (wizardError()) {
+        <div class="banner banner--danger">
+          <fe-icon name="warning"></fe-icon>
+          <span>{{ wizardError() }}</span>
+        </div>
+      }
+
+      <!-- Step 1: Clinic Profile -->
+          @if (wizardStep() === 1) {
+            <div class="wizard-step">
+              <h3 class="step-title">{{ i18n.locale() === 'ar' ? 'بيانات المؤسسة والعيادة' : 'Clinic Organization Details' }}</h3>
+              <p class="step-desc">{{ i18n.locale() === 'ar' ? 'أدخل البيانات الأساسية والإعدادات الجغرافية لتشغيل العيادة.' : 'Enter the clinic\'s core operational profile and geographical settings.' }}</p>
+
+              <div class="form-grid">
+                <div class="fe-field form-grid__full">
+                  <label class="fe-label" for="wizName">{{ i18n.locale() === 'ar' ? 'اسم العيادة *' : 'Clinic Name *' }}</label>
+                  <input
+                    id="wizName"
+                    type="text"
+                    class="fe-input"
+                    [placeholder]="i18n.locale() === 'ar' ? 'مثال: مركز الأمل لطب الأسنان' : 'e.g. Al-Amal Dental Center'"
+                    [(ngModel)]="wizardForm.clinicName"
+                    required
+                  />
+                </div>
+
+                <div class="fe-field">
+                  <label class="fe-label" for="wizCity">{{ i18n.locale() === 'ar' ? 'المدينة' : 'City' }}</label>
+                  <input
+                    id="wizCity"
+                    type="text"
+                    class="fe-input"
+                    [placeholder]="i18n.locale() === 'ar' ? 'عمان' : 'Amman'"
+                    [(ngModel)]="wizardForm.city"
+                  />
+                </div>
+
+                <div class="fe-field">
+                  <label class="fe-label" for="wizPhone">{{ i18n.locale() === 'ar' ? 'هاتف التواصل' : 'Contact Phone' }}</label>
+                  <input
+                    id="wizPhone"
+                    type="tel"
+                    class="fe-input"
+                    placeholder="+962 6 500 0000"
+                    [(ngModel)]="wizardForm.contactNumber"
+                  />
+                </div>
+
+                <div class="fe-field">
+                  <label class="fe-label" for="wizTz">{{ i18n.locale() === 'ar' ? 'المنطقة الزمنية' : 'Time Zone' }}</label>
+                  <select id="wizTz" class="fe-select" [(ngModel)]="wizardForm.timezone">
+                    <option value="Asia/Amman">Asia/Amman (Default)</option>
+                    <option value="Asia/Riyadh">Asia/Riyadh</option>
+                    <option value="Asia/Dubai">Asia/Dubai</option>
+                    <option value="UTC">UTC</option>
+                  </select>
+                </div>
+
+                <div class="fe-field">
+                  <label class="fe-label" for="wizLang">{{ i18n.locale() === 'ar' ? 'اللغة الافتراضية' : 'Default Language' }}</label>
+                  <select id="wizLang" class="fe-select" [(ngModel)]="wizardForm.language">
+                    <option value="ar">{{ i18n.locale() === 'ar' ? 'العربية (موصى بها)' : 'العربية (Arabic - Recommended)' }}</option>
+                    <option value="en">English</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- Step 2: Subscription & Plan -->
+          @if (wizardStep() === 2) {
+            <div class="wizard-step">
+              <h3 class="step-title">{{ i18n.locale() === 'ar' ? 'اختيار باقة الاشتراك وحالة البدء' : 'Select Plan & Initial Billing State' }}</h3>
+              <p class="step-desc">{{ i18n.locale() === 'ar' ? 'اختر خطة السعة المناسبة ونمط التفعيل الأولي للعيادة.' : 'Choose the capacity tier and trial or paid provisioning mode.' }}</p>
+
+              <div class="plan-selector">
+                <label class="plan-card" [class.plan-card--selected]="wizardForm.planCode === 'STARTER'">
+                  <input type="radio" name="planCode" value="STARTER" [(ngModel)]="wizardForm.planCode" />
+                  <div class="plan-card__content">
+                    <span class="plan-card__tier">{{ i18n.locale() === 'ar' ? 'البداية (Starter)' : 'Starter' }}</span>
+                    <span class="plan-card__price">{{ i18n.locale() === 'ar' ? '29 د.أ / شهرياً' : '29 JOD / month' }}</span>
+                    <span class="plan-card__specs">{{ i18n.locale() === 'ar' ? 'حتى 3 مستخدمين • فرع واحد • 2 جيجابايت' : 'Up to 3 Users &bull; 1 Branch &bull; 2 GB Storage' }}</span>
+                  </div>
+                </label>
+
+                <label class="plan-card" [class.plan-card--selected]="wizardForm.planCode === 'GROWTH'">
+                  <input type="radio" name="planCode" value="GROWTH" [(ngModel)]="wizardForm.planCode" />
+                  <div class="plan-card__content">
+                    <span class="plan-card__tier">{{ i18n.locale() === 'ar' ? 'النمو (Growth - موصى بها)' : 'Growth (Recommended)' }}</span>
+                    <span class="plan-card__price">{{ i18n.locale() === 'ar' ? '59 د.أ / شهرياً' : '59 JOD / month' }}</span>
+                    <span class="plan-card__specs">{{ i18n.locale() === 'ar' ? 'حتى 10 مستخدمين • فرعين • 10 جيجابايت • المساعد الذكي' : 'Up to 10 Users &bull; 2 Branches &bull; 10 GB Storage &bull; AI Assistant' }}</span>
+                  </div>
+                </label>
+
+                <label class="plan-card" [class.plan-card--selected]="wizardForm.planCode === 'ENTERPRISE'">
+                  <input type="radio" name="planCode" value="ENTERPRISE" [(ngModel)]="wizardForm.planCode" />
+                  <div class="plan-card__content">
+                    <span class="plan-card__tier">{{ i18n.locale() === 'ar' ? 'المؤسسات (Enterprise)' : 'Enterprise' }}</span>
+                    <span class="plan-card__price">{{ i18n.locale() === 'ar' ? '119 د.أ / شهرياً' : '119 JOD / month' }}</span>
+                    <span class="plan-card__specs">{{ i18n.locale() === 'ar' ? 'حتى 50 مستخدماً • 5 فروع • 50 جيجابايت • قنوات غير محدودة' : 'Up to 50 Users &bull; 5 Branches &bull; 50 GB Storage &bull; Unlimited Channels' }}</span>
+                  </div>
+                </label>
+              </div>
+
+              <div class="billing-start-type">
+                <span class="fe-label">{{ i18n.locale() === 'ar' ? 'نمط التفعيل الأولي' : 'Provisioning Start Mode' }}</span>
+                <div class="radio-row">
+                  <label class="radio-option">
+                    <input type="radio" name="startType" value="TRIAL" [(ngModel)]="wizardForm.startType" />
+                    <span><strong>{{ i18n.locale() === 'ar' ? 'فترة تجريبية 14 يوماً' : '14-Day Free Trial' }}</strong> {{ i18n.locale() === 'ar' ? '(لا تتطلب دفعاً فورياً)' : '(No immediate payment required)' }}</span>
+                  </label>
+                  <label class="radio-option">
+                    <input type="radio" name="startType" value="PAID" [(ngModel)]="wizardForm.startType" />
+                    <span><strong>{{ i18n.locale() === 'ar' ? 'اشتراك مدفوع مباشر' : 'Paid Start' }}</strong> {{ i18n.locale() === 'ar' ? '(تفعيل 30 يوماً مقدماً)' : '(Active 30 days upfront)' }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- Step 3: Admin Account Provisioning -->
+          @if (wizardStep() === 3) {
+            <div class="wizard-step">
+              <h3 class="step-title">حساب السوبر أدمن للعيادة (Super Admin Account)</h3>
+              
+              <div class="mode-selection-box">
+                <span class="fe-label">طريقة تهيئة كلمة المرور:</span>
+                <div class="radio-row">
+                  <label class="radio-option">
+                    <input type="radio" name="directPasswordMode" [value]="true" [checked]="directPasswordMode()" (change)="directPasswordMode.set(true)" />
+                    <span><strong>تعيين فوري مباشر (موصى به)</strong> - تزويد العميل بكلمة المرور فوراً</span>
+                  </label>
+                  <label class="radio-option">
+                    <input type="radio" name="directPasswordMode" [value]="false" [checked]="!directPasswordMode()" (change)="directPasswordMode.set(false)" />
+                    <span><strong>رابط دعوة فقط</strong> - يقوم العميل بتعيين كلمة المرور بنفسه</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="fe-field form-grid__full">
+                  <label class="fe-label" for="wizAdminName">اسم المدير المسؤول (Super Admin Full Name) *</label>
+                  <input
+                    id="wizAdminName"
+                    type="text"
+                    class="fe-input"
+                    placeholder="د. رامي الحداد"
+                    [(ngModel)]="wizardForm.adminName"
+                    required
+                  />
+                </div>
+
+                <div class="fe-field form-grid__full">
+                  <label class="fe-label" for="wizAdminEmail">البريد الإلكتروني لتسجيل الدخول (Login Email) *</label>
+                  <input
+                    id="wizAdminEmail"
+                    type="email"
+                    class="fe-input"
+                    placeholder="rami@clinicdomain.com"
+                    [(ngModel)]="wizardForm.adminEmail"
+                    required
+                  />
+                  <span class="fe-hint">سيكون هذا الإيميل هو الحساب الرئيسي لدخول المنصة وإدارة العيادة.</span>
+                </div>
+
+                @if (directPasswordMode()) {
+                  <div class="fe-field form-grid__full">
+                    <label class="fe-label" for="wizAdminPassword">كلمة مرور السوبر أدمن (Super Admin Password) *</label>
+                    <div class="password-input-group">
+                      <input
+                        id="wizAdminPassword"
+                        [type]="showAdminPassword() ? 'text' : 'password'"
+                        class="fe-input"
+                        placeholder="كلمة مرور قوية (8 أحرف كحد أدنى)"
+                        [(ngModel)]="wizardForm.adminPassword"
+                        required
+                      />
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        [title]="showAdminPassword() ? 'إخفاء' : 'إظهار'"
+                        (click)="togglePasswordVisibility()"
+                      >
+                        <fe-icon [name]="showAdminPassword() ? 'warning' : 'admin'"></fe-icon>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn--outline"
+                        title="توليد كلمة مرور عشوائية قوية"
+                        (click)="generateAdminPassword()"
+                      >
+                        <fe-icon name="settings"></fe-icon>
+                        <span>توليد تلقائي</span>
+                      </button>
+                    </div>
+                    <span class="fe-hint">ستتمكن من نسخ رسالة الترحيب مع كلمة المرور وتسليمها للعميل بضغطة زر.</span>
+                  </div>
+                }
+
+                <div class="fe-field form-grid__full">
+                  <label class="fe-label" for="wizAdminPhone">رقم هاتف / واتساب الطبيب أو المدير</label>
+                  <input
+                    id="wizAdminPhone"
+                    type="tel"
+                    class="fe-input"
+                    placeholder="+962 7 9000 0000"
+                    [(ngModel)]="wizardForm.adminPhone"
+                  />
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- Step 4: Confirmation & Credentials Handoff -->
+          @if (wizardStep() === 4 && wizardResult()) {
+            <div class="wizard-step wizard-step--success">
+              <div class="success-banner">
+                <fe-icon name="admin" class="success-banner__icon"></fe-icon>
+                <h3 class="success-banner__title">تم إنشاء وتفعيل حساب العيادة بنجاح!</h3>
+                <p class="success-banner__desc">
+                  تم تجهيز مساحة العمل وحساب السوبر أدمن لعيادة <strong>{{ wizardResult()?.clinicName }}</strong>.
+                </p>
+              </div>
+
+              <!-- Dedicated Credentials Card for Handoff -->
+              <div class="credentials-card">
+                <div class="credentials-card__header">
+                  <span class="credentials-card__title">بيانات الدخول للعميل (Client Credentials)</span>
+                  <button
+                    type="button"
+                    class="btn btn--primary"
+                    (click)="copyCredentials()"
+                  >
+                    <fe-icon name="clipboard"></fe-icon>
+                    <span>{{ credentialsCopied() ? 'تم النسخ بنجاح!' : 'نسخ بيانات الدخول للعميل' }}</span>
+                  </button>
+                </div>
+
+                <div class="credentials-grid">
+                  <div class="cred-item">
+                    <span class="cred-item__label">رابط تسجيل الدخول:</span>
+                    <span class="cred-item__value">/auth/login</span>
+                  </div>
+                  <div class="cred-item">
+                    <span class="cred-item__label">البريد الإلكتروني:</span>
+                    <strong class="cred-item__value">{{ wizardResult()?.administratorEmail }}</strong>
+                  </div>
+                  @if (wizardForm.adminPassword && directPasswordMode()) {
+                    <div class="cred-item">
+                      <span class="cred-item__label">كلمة المرور:</span>
+                      <strong class="cred-item__value cred-item__value--pwd">{{ wizardForm.adminPassword }}</strong>
+                    </div>
+                  }
+                  <div class="cred-item">
+                    <span class="cred-item__label">الخطة المعتمدة:</span>
+                    <span class="cred-item__value">{{ wizardResult()?.planCode }}</span>
+                  </div>
+                  <div class="cred-item">
+                    <span class="cred-item__label">حالة الحساب:</span>
+                    <span class="cred-item__value" style="color: var(--ok, #10b981); font-weight: 600;">مفعل ونشط (Active)</span>
+                  </div>
+                </div>
+              </div>
+
+              @if (wizardResult()?.inviteLink && !directPasswordMode()) {
+                <div class="token-display-box">
+                  <span class="fe-label">رابط تفعيل الدعوة لمرة واحدة (صالح لمدة 7 أيام):</span>
+                  <div class="token-copy-row">
+                    <input
+                      type="text"
+                      class="fe-input token-input"
+                      readonly
+                      [value]="wizardResult()?.inviteLink"
+                      #inviteLinkInput
+                    />
+                    <button
+                      type="button"
+                      class="btn btn--primary"
+                      (click)="copyLink(wizardResult()?.inviteLink || '')"
+                    >
+                      <fe-icon name="clipboard"></fe-icon>
+                      <span>نسخ الرابط</span>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+    </div>
+
+    <div drawerFooter class="drawer-footer-actions">
+      @if (wizardStep() < 4) {
+        <button
+          type="button"
+          class="btn btn--outline"
+          [disabled]="wizardSubmitting()"
+          (click)="wizardStep() === 1 ? closeWizard() : prevWizardStep()"
+        >
+          {{ wizardStep() === 1 ? (i18n.locale() === 'ar' ? 'إلغاء' : 'Cancel') : (i18n.locale() === 'ar' ? 'السابق' : 'Back') }}
+        </button>
+        <button
+          type="button"
+          class="btn btn--primary"
+          [disabled]="wizardSubmitting()"
+          (click)="nextWizardStep()"
+        >
+          @if (wizardSubmitting()) {
+            <fe-icon name="admin" class="fe-spin"></fe-icon>
+            <span>{{ i18n.locale() === 'ar' ? 'جاري تهيئة وتفعيل العيادة...' : 'Provisioning...' }}</span>
+          } @else {
+            <span>{{ wizardStep() === 3 ? (i18n.locale() === 'ar' ? 'تأكيد وإنشاء العيادة وإصدار الحساب' : 'Create Clinic & Issue Invite') : (i18n.locale() === 'ar' ? 'التالي' : 'Next') }}</span>
+          }
+        </button>
+      } @else {
+        <button type="button" class="btn btn--primary" (click)="closeWizard()">
+          {{ i18n.locale() === 'ar' ? 'تم والعودة لقائمة العيادات' : 'Done & Return to Clinics' }}
+        </button>
+      }
+    </div>
+  </fe-tl-drawer>
+
+  <!-- ========================================================================= -->
+  <!-- DRAWER: ACTIONS (EXTEND, LIMITS, EDIT, SUSPEND, REACTIVATE, INVITE_LINK)  -->
+  <!-- ========================================================================= -->
+  <fe-tl-drawer
+    [open]="actionModalOpen()"
+    [title]="actionDrawerTitle()"
+    [subtitle]="actionDrawerSubtitle()"
+    (closed)="closeActionModal()"
+  >
+    <div class="action-drawer-content" [dir]="i18n.direction()">
+          @if (actionError()) {
+            <div class="banner banner--danger">
+              <fe-icon name="warning"></fe-icon>
+              <span>{{ actionError() }}</span>
+            </div>
+          }
+          @if (actionSuccessMessage()) {
+            <div class="banner banner--success">
+              <fe-icon name="admin"></fe-icon>
+              <span>{{ actionSuccessMessage() }}</span>
+            </div>
+          }
+
+          <!-- EXTEND ACTION -->
+          @if (actionType() === 'EXTEND') {
+            <div class="form-grid">
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="extendDays">Days to Extend *</label>
+                <input
+                  id="extendDays"
+                  type="number"
+                  class="fe-input"
+                  min="1"
+                  max="365"
+                  [(ngModel)]="extendDays"
+                />
+              </div>
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="extendReason">Administrative Reason *</label>
+                <input
+                  id="extendReason"
+                  type="text"
+                  class="fe-input"
+                  placeholder="e.g. Bank transfer verified / Customer goodwill"
+                  [(ngModel)]="extendReason"
+                  required
+                />
+              </div>
+            </div>
+          }
+
+          <!-- LIMITS ACTION -->
+          @if (actionType() === 'LIMITS') {
+            <div class="form-grid">
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="limUsers">{{ i18n.locale() === 'ar' ? 'الحد الأقصى لموظفي العيادة (FDO / الأطباء / الاستقبال / المحاسبين)' : 'Max Active FDO / Staff Accounts' }}</label>
+                <input id="limUsers" type="number" class="fe-input" min="1" [(ngModel)]="limitsForm.maxUsers" />
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="limBranches">{{ i18n.locale() === 'ar' ? 'الحد الأقصى للفروع' : 'Max Branches' }}</label>
+                <input id="limBranches" type="number" class="fe-input" min="1" [(ngModel)]="limitsForm.maxBranches" />
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="limStorage">{{ i18n.locale() === 'ar' ? 'سعة التخزين (MB)' : 'Storage Quota (MB)' }}</label>
+                <input id="limStorage" type="number" class="fe-input" min="100" [(ngModel)]="limitsForm.storageQuotaMb" />
+              </div>
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="limAi">{{ i18n.locale() === 'ar' ? 'حصة الذكاء الاصطناعي الشهرية' : 'Monthly AI Quota (Tokens / Queries)' }}</label>
+                <input id="limAi" type="number" class="fe-input" min="0" [(ngModel)]="limitsForm.monthlyAiQuota" />
+              </div>
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="limReason">{{ i18n.locale() === 'ar' ? 'سبب تعديل السعة' : 'Reason for Quota Adjustment' }}</label>
+                <input id="limReason" type="text" class="fe-input" [(ngModel)]="limitsForm.reason" />
+              </div>
+            </div>
+          }
+
+          <!-- ADD CLINIC ADMIN ACTION -->
+          @if (actionType() === 'ADD_ADMIN') {
+            <div class="form-grid">
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="addAdminName">{{ i18n.locale() === 'ar' ? 'الاسم الكامل لمدير العيادة (Clinic Admin) *' : 'Clinic Admin Full Name *' }}</label>
+                <input
+                  id="addAdminName"
+                  type="text"
+                  class="fe-input"
+                  [placeholder]="i18n.locale() === 'ar' ? 'د. أحمد الخطيب' : 'Dr. Ahmad Al-Khatib'"
+                  [(ngModel)]="addAdminForm.adminName"
+                  required
+                />
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="addAdminEmail">{{ i18n.locale() === 'ar' ? 'البريد الإلكتروني (لتسجيل الدخول) *' : 'Login Email *' }}</label>
+                <input
+                  id="addAdminEmail"
+                  type="email"
+                  class="fe-input"
+                  placeholder="admin2@clinic.com"
+                  [(ngModel)]="addAdminForm.adminEmail"
+                  required
+                />
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="addAdminPhone">{{ i18n.locale() === 'ar' ? 'رقم الهاتف' : 'Phone Number' }}</label>
+                <input
+                  id="addAdminPhone"
+                  type="tel"
+                  class="fe-input"
+                  placeholder="+962 79 000 0000"
+                  [(ngModel)]="addAdminForm.adminPhone"
+                />
+              </div>
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="addAdminPassword">{{ i18n.locale() === 'ar' ? 'كلمة المرور المباشرة (اختياري - اتركه فارغاً لإصدار رابط دعوة)' : 'Direct Password (Optional - leave blank for invite link)' }}</label>
+                <input
+                  id="addAdminPassword"
+                  type="text"
+                  class="fe-input"
+                  [placeholder]="i18n.locale() === 'ar' ? '8 أحرف على الأقل للتفعيل الفوري' : 'Min 8 characters for instant activation'"
+                  [(ngModel)]="addAdminForm.adminPassword"
+                />
+              </div>
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="addAdminReason">{{ i18n.locale() === 'ar' ? 'ملاحظات التنسيب الإداري' : 'Administrative Assignment Note' }}</label>
+                <input
+                  id="addAdminReason"
+                  type="text"
+                  class="fe-input"
+                  [(ngModel)]="addAdminForm.reason"
+                />
+              </div>
+            </div>
+          }
+
+          <!-- EDIT ACTION -->
+          @if (actionType() === 'EDIT') {
+            <div class="form-grid">
+              <div class="fe-field form-grid__full">
+                <label class="fe-label" for="editName">Clinic Name *</label>
+                <input id="editName" type="text" class="fe-input" [(ngModel)]="editForm.clinicName" required />
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="editCity">City</label>
+                <input id="editCity" type="text" class="fe-input" [(ngModel)]="editForm.city" />
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="editPhone">Contact Phone</label>
+                <input id="editPhone" type="tel" class="fe-input" [(ngModel)]="editForm.contactNumber" />
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="editTz">Time Zone</label>
+                <select id="editTz" class="fe-select" [(ngModel)]="editForm.timezone">
+                  <option value="Asia/Amman">Asia/Amman</option>
+                  <option value="Asia/Riyadh">Asia/Riyadh</option>
+                  <option value="Asia/Dubai">Asia/Dubai</option>
+                  <option value="UTC">UTC</option>
+                </select>
+              </div>
+              <div class="fe-field">
+                <label class="fe-label" for="editLang">Default Language</label>
+                <select id="editLang" class="fe-select" [(ngModel)]="editForm.language">
+                  <option value="ar">العربية (Arabic)</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+            </div>
+          }
+
+          <!-- SUSPEND ACTION -->
+          @if (actionType() === 'SUSPEND') {
+            <div class="confirm-box confirm-box--danger">
+              <fe-icon name="warning" class="confirm-box__icon"></fe-icon>
+              <div class="confirm-box__text">
+                <p>Are you sure you want to suspend <strong>{{ selectedClinic()?.clinicName }}</strong>?</p>
+                <p class="confirm-box__note">
+                  <strong>DEC-007 Retention Guarantee:</strong> Data will <em>never</em> be deleted. Staff will be placed in read-only mode, and mutating actions (records, encounters, billing) will be rejected on the server with HTTP 403.
+                </p>
+              </div>
+            </div>
+          }
+
+          <!-- REACTIVATE ACTION -->
+          @if (actionType() === 'REACTIVATE') {
+            <div class="confirm-box confirm-box--success">
+              <fe-icon name="admin" class="confirm-box__icon"></fe-icon>
+              <div class="confirm-box__text">
+                <p>Reactivate clinic <strong>{{ selectedClinic()?.clinicName }}</strong>?</p>
+                <p class="confirm-box__note">Full read/write operational access will be immediately restored.</p>
+              </div>
+            </div>
+          }
+
+          <!-- RESEND INVITE LINK ACTION -->
+          @if (actionType() === 'INVITE_LINK') {
+            <div class="token-display-box">
+              <span class="fe-label">Single-Use Invite Link for {{ selectedClinic()?.adminEmail }}:</span>
+              <div class="token-copy-row">
+                <input type="text" class="fe-input token-input" readonly [value]="activeInviteLink()" />
+                <button type="button" class="btn btn--primary" (click)="copyLink(activeInviteLink() || '')">
+                  <fe-icon name="clipboard"></fe-icon>
+                  <span>Copy</span>
+                </button>
+              </div>
+              <p class="token-expiry-hint">
+                A new secure token has been hashed and stored. Any prior invite token has been invalidated.
+              </p>
+            </div>
+          }
+    </div>
+
+    <div drawerFooter class="drawer-footer-actions">
+      <button type="button" class="btn btn--outline" (click)="closeActionModal()">
+        {{ i18n.locale() === 'ar' ? 'إغلاق' : 'Close' }}
+      </button>
+      @switch (actionType()) {
+        @case ('EXTEND') {
+          <button type="button" class="btn btn--primary" [disabled]="actionSubmitting()" (click)="executeExtend()">
+            {{ i18n.locale() === 'ar' ? 'تأكيد التمديد' : 'Confirm Extension' }}
+          </button>
+        }
+        @case ('LIMITS') {
+          <button type="button" class="btn btn--primary" [disabled]="actionSubmitting()" (click)="executeLimits()">
+            {{ i18n.locale() === 'ar' ? 'حفظ الحدود' : 'Save Limits' }}
+          </button>
+        }
+        @case ('ADD_ADMIN') {
+          <button type="button" class="btn btn--primary" [disabled]="actionSubmitting()" (click)="executeAddAdmin()">
+            {{ i18n.locale() === 'ar' ? 'إنشاء وتنسيب مدير العيادة' : 'Create & Assign Admin' }}
+          </button>
+        }
+        @case ('EDIT') {
+          <button type="button" class="btn btn--primary" [disabled]="actionSubmitting()" (click)="executeEdit()">
+            {{ i18n.locale() === 'ar' ? 'حفظ التعديلات' : 'Save Changes' }}
+          </button>
+        }
+        @case ('SUSPEND') {
+          <button type="button" class="btn btn--danger" [disabled]="actionSubmitting()" (click)="executeSuspend()">
+            {{ i18n.locale() === 'ar' ? 'تأكيد الإيقاف' : 'Suspend Clinic' }}
+          </button>
+        }
+        @case ('REACTIVATE') {
+          <button type="button" class="btn btn--primary" [disabled]="actionSubmitting()" (click)="executeReactivate()">
+            {{ i18n.locale() === 'ar' ? 'تأكيد إعادة التنشيط' : 'Reactivate Clinic' }}
+          </button>
+        }
+      }
+    </div>
+  </fe-tl-drawer>
+</div>

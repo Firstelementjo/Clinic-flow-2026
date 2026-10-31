@@ -1,0 +1,12 @@
+firstelement:
+  environment: STAGING
+
+logging:
+  structured:
+    format:
+      console: logstash
+
+management:
+  tracing:
+    sampling:
+      probability: 0.2

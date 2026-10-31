@@ -1,0 +1,17 @@
+firstelement:
+  environment: PRODUCTION
+
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    root: warn
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+  endpoint:
+    health:
+      show-details: never

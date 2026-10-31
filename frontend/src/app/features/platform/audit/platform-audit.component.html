@@ -1,0 +1,425 @@
+<div class="audit-page" [dir]="i18n.direction()">
+  <!-- Header with Title & Global Actions -->
+  <header class="page-header">
+    <div class="header-titles">
+      <div class="header-badge">
+        <fe-icon name="audit" class="badge-icon"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'المنصة • الحوكمة والتدقيق الأمني' : 'Platform • Security Governance & Audit' }}</span>
+      </div>
+      <h1 class="page-title">
+        {{ i18n.locale() === 'ar' ? 'سجل التدقيق الأمني والعمليات' : 'Platform Audit Trail' }}
+      </h1>
+      <p class="page-subtitle">
+        {{ i18n.locale() === 'ar'
+          ? 'سجل تدقيق غير قابل للتعديل يتتبع كافة إجراءات المشرفين، والتحقق الأمني، وحسابات العيادات، وسجل الاشتراكات، وصلاحيات الدعم الفني الطارئ.'
+          : 'Immutable cross-tenant audit log tracking operator actions, authentication events, clinic lifecycle changes, subscription payments, and break-glass support access.' }}
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        type="button"
+        class="action-btn export-btn"
+        [disabled]="loading() || filteredEvents().length === 0"
+        (click)="exportCsv()"
+      >
+        <fe-icon name="exports" class="btn-icon"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'تصدير CSV' : 'Export CSV' }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="action-btn refresh-btn"
+        [disabled]="loading()"
+        (click)="loadEvents()"
+      >
+        <fe-icon name="exports" class="btn-icon"></fe-icon>
+        <span>{{ i18n.locale() === 'ar' ? 'تحديث' : 'Refresh' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Summary Stats Bar -->
+  <section class="stats-bar" aria-label="Audit summary metrics">
+    <div class="stat-pill">
+      <span class="stat-label">{{ i18n.locale() === 'ar' ? 'إجمالي الأحداث' : 'Total Events' }}</span>
+      <span class="stat-val">{{ filteredEvents().length }}</span>
+    </div>
+    <div class="stat-pill stat-allowed">
+      <span class="stat-label">{{ i18n.locale() === 'ar' ? 'عمليات مقبولة' : 'Allowed' }}</span>
+      <span class="stat-val">{{ allowedCount() }}</span>
+    </div>
+    <div class="stat-pill stat-denied">
+      <span class="stat-label">{{ i18n.locale() === 'ar' ? 'محاولات مرفوضة' : 'Denied / Blocked' }}</span>
+      <span class="stat-val">{{ deniedCount() }}</span>
+    </div>
+  </section>
+
+  <!-- Error Banner -->
+  @if (error()) {
+    <div class="state-banner error-banner" role="alert">
+      <fe-icon name="warning" class="state-icon"></fe-icon>
+      <div class="state-content">
+        <span class="state-title">{{ i18n.locale() === 'ar' ? 'تعذر تحميل سجل التدقيق' : 'Failed to retrieve audit events' }}</span>
+        <span class="state-desc">{{ error() }}</span>
+      </div>
+      <button type="button" class="action-btn retry-btn" (click)="loadEvents()">
+        {{ i18n.locale() === 'ar' ? 'إعادة المحاولة' : 'Retry' }}
+      </button>
+    </div>
+  }
+
+  <!-- Comprehensive Filter Bar -->
+  <section class="filter-section" aria-label="Audit filter controls">
+    <form class="filter-grid" (ngSubmit)="loadEvents()">
+      <!-- Clinic Filter -->
+      <div class="filter-group">
+        <label for="filter-clinic" class="filter-label">
+          {{ i18n.locale() === 'ar' ? 'العيادة / المؤسسة' : 'Clinic / Tenant' }}
+        </label>
+        <select
+          id="filter-clinic"
+          class="filter-select"
+          [ngModel]="clinicFilter()"
+          (ngModelChange)="clinicFilter.set($event)"
+          name="clinic"
+        >
+          <option value="">{{ i18n.locale() === 'ar' ? 'كافة العيادات' : 'All Clinics' }}</option>
+          @for (c of clinics(); track c.projectId) {
+            <option [value]="c.projectId">{{ c.clinicName }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Actor Search -->
+      <div class="filter-group">
+        <label for="filter-actor" class="filter-label">
+          {{ i18n.locale() === 'ar' ? 'المشرف (البريد / الاسم)' : 'Actor (Email / Name)' }}
+        </label>
+        <input
+          id="filter-actor"
+          type="text"
+          class="filter-input"
+          [placeholder]="i18n.locale() === 'ar' ? 'اسم أو بريد المشرف...' : 'Operator email or name...'"
+          [ngModel]="actorFilter()"
+          (ngModelChange)="actorFilter.set($event)"
+          name="actor"
+        />
+      </div>
+
+      <!-- Action Type Filter -->
+      <div class="filter-group">
+        <label for="filter-action" class="filter-label">
+          {{ i18n.locale() === 'ar' ? 'نوع الإجراء' : 'Action Type' }}
+        </label>
+        <select
+          id="filter-action"
+          class="filter-select"
+          [ngModel]="actionFilter()"
+          (ngModelChange)="actionFilter.set($event)"
+          name="action"
+        >
+          <option value="">{{ i18n.locale() === 'ar' ? 'كافة الإجراءات' : 'All Actions' }}</option>
+          @for (act of actions(); track act) {
+            <option [value]="act">{{ act }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Outcome Filter -->
+      <div class="filter-group">
+        <label for="filter-outcome" class="filter-label">
+          {{ i18n.locale() === 'ar' ? 'النتيجة' : 'Outcome' }}
+        </label>
+        <select
+          id="filter-outcome"
+          class="filter-select"
+          [ngModel]="outcomeFilter()"
+          (ngModelChange)="outcomeFilter.set($event)"
+          name="outcome"
+        >
+          <option value="">{{ i18n.locale() === 'ar' ? 'الكل' : 'All Outcomes' }}</option>
+          <option value="ALLOWED">{{ i18n.locale() === 'ar' ? 'مقبول (ALLOWED)' : 'ALLOWED' }}</option>
+          <option value="DENIED">{{ i18n.locale() === 'ar' ? 'مرفوض (DENIED)' : 'DENIED' }}</option>
+          <option value="FAILED">{{ i18n.locale() === 'ar' ? 'فشل (FAILED)' : 'FAILED' }}</option>
+        </select>
+      </div>
+
+      <!-- Date From -->
+      <div class="filter-group">
+        <label for="filter-from" class="filter-label">
+          {{ i18n.locale() === 'ar' ? 'من تاريخ' : 'From Date' }}
+        </label>
+        <input
+          id="filter-from"
+          type="date"
+          class="filter-input"
+          [ngModel]="dateFromFilter()"
+          (ngModelChange)="dateFromFilter.set($event)"
+          name="from"
+        />
+      </div>
+
+      <!-- Date To -->
+      <div class="filter-group">
+        <label for="filter-to" class="filter-label">
+          {{ i18n.locale() === 'ar' ? 'إلى تاريخ' : 'To Date' }}
+        </label>
+        <input
+          id="filter-to"
+          type="date"
+          class="filter-input"
+          [ngModel]="dateToFilter()"
+          (ngModelChange)="dateToFilter.set($event)"
+          name="to"
+        />
+      </div>
+
+      <!-- Buttons -->
+      <div class="filter-buttons-group">
+        <button type="submit" class="action-btn apply-btn" [disabled]="loading()">
+          <fe-icon name="search" class="btn-icon"></fe-icon>
+          <span>{{ i18n.locale() === 'ar' ? 'تطبيق الفلترة' : 'Apply Filter' }}</span>
+        </button>
+        <button
+          type="button"
+          class="action-btn clear-btn"
+          [disabled]="loading()"
+          (click)="clearFilters()"
+        >
+          <span>{{ i18n.locale() === 'ar' ? 'إعادة ضبط' : 'Reset' }}</span>
+        </button>
+      </div>
+    </form>
+
+    <!-- Quick in-table search -->
+    <div class="search-bar-row">
+      <div class="search-box-wrap">
+        <fe-icon name="search" class="search-icon"></fe-icon>
+        <input
+          type="search"
+          class="search-box-input"
+          [placeholder]="i18n.locale() === 'ar' ? 'بحث سريع في نتائج الجدول...' : 'Quick search in results...'"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQuery.set($event)"
+        />
+      </div>
+      <span class="count-indicator">
+        {{ filteredEvents().length }} {{ i18n.locale() === 'ar' ? 'حدث مطابق' : 'events shown' }}
+      </span>
+    </div>
+  </section>
+
+  <!-- Table Container -->
+  @if (loading() && events().length === 0) {
+    <div class="state-card loading-card">
+      <div class="spinner-ring" aria-hidden="true"></div>
+      <span class="state-text">
+        {{ i18n.locale() === 'ar' ? 'جاري استرجاع سجلات التدقيق الأمني...' : 'Retrieving immutable platform audit log...' }}
+      </span>
+    </div>
+  } @else if (filteredEvents().length === 0) {
+    <div class="empty-state-card">
+      <fe-icon name="audit" class="empty-icon"></fe-icon>
+      <span class="empty-title">
+        {{ i18n.locale() === 'ar' ? 'لا توجد سجلات تدقيق تطابق معايير الفلترة' : 'No audit events match current criteria' }}
+      </span>
+      <span class="empty-desc">
+        {{ i18n.locale() === 'ar' ? 'قم بتوسيع نطاق التواريخ أو مسح الفلاتر لعرض مزيد من السجلات.' : 'Try adjusting the date range, clearing action filters, or resetting search.' }}
+      </span>
+      <button type="button" class="action-btn reset-btn" (click)="clearFilters()">
+        {{ i18n.locale() === 'ar' ? 'مسح الفلاتر' : 'Clear Filters' }}
+      </button>
+    </div>
+  } @else {
+    <div class="table-container">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>{{ i18n.locale() === 'ar' ? 'الوقت والتاريخ' : 'Timestamp' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'المشرف (الفاعل)' : 'Actor' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'الإجراء' : 'Action' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'الهدف / العيادة' : 'Target (Clinic / Resource)' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'المستأجر' : 'Tenant' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'النتيجة' : 'Outcome' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'عنوان IP' : 'IP Address' }}</th>
+            <th>{{ i18n.locale() === 'ar' ? 'التفاصيل والسبب' : 'Details & Reason' }}</th>
+            <th class="actions-col">{{ i18n.locale() === 'ar' ? 'معاينة' : 'Inspect' }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of filteredEvents(); track row.id) {
+            <tr [class.denied-row]="row.outcome === 'DENIED' || row.outcome === 'FAILED'">
+              <!-- 1. Timestamp (Single, exact) -->
+              <td>
+                <span class="timestamp-cell">{{ formatDateTime(row.occurredAt) }}</span>
+              </td>
+
+              <!-- 2. Actor -->
+              <td>
+                <div class="actor-cell">
+                  <span class="actor-name">{{ row.operatorName || row.operatorEmail || 'System Actor' }}</span>
+                  @if (row.operatorName && row.operatorEmail) {
+                    <span class="actor-email">{{ row.operatorEmail }}</span>
+                  }
+                </div>
+              </td>
+
+              <!-- 3. Action -->
+              <td>
+                <span class="action-badge">{{ row.action }}</span>
+              </td>
+
+              <!-- 4. Target (Clinic / User / Resource) -->
+              <td>
+                <div class="target-cell">
+                  @if (row.clinicName) {
+                    <span class="target-name">{{ row.clinicName }}</span>
+                    <span class="target-sub">{{ row.resourceType }} @if (row.resourceId) { • {{ row.resourceId }} }</span>
+                  } @else {
+                    <span class="target-name">{{ row.resourceType || 'Platform' }}</span>
+                    @if (row.resourceId) {
+                      <span class="target-sub">{{ row.resourceId }}</span>
+                    }
+                  }
+                </div>
+              </td>
+
+              <!-- 5. Tenant -->
+              <td>
+                <span class="tenant-name">{{ row.organizationName || '—' }}</span>
+              </td>
+
+              <!-- 6. Outcome -->
+              <td>
+                <fe-status-chip [tone]="outcomeTone(row.outcome)">
+                  {{ row.outcome }}
+                </fe-status-chip>
+              </td>
+
+              <!-- 7. IP Address -->
+              <td>
+                <span class="ip-cell">{{ row.ipAddress || '—' }}</span>
+              </td>
+
+              <!-- 8. Details & Reason -->
+              <td>
+                <div class="details-cell" [title]="(row.detail || '') + ' ' + (row.reason || '')">
+                  <span class="detail-line">{{ row.detail || row.reason || '—' }}</span>
+                </div>
+              </td>
+
+              <!-- Actions / Inspect Modal -->
+              <td class="actions-col">
+                <button
+                  type="button"
+                  class="inspect-btn"
+                  [title]="i18n.locale() === 'ar' ? 'معاينة سجل الحدث كاملاً' : 'Inspect full audit event record'"
+                  (click)="openEventDetails(row)"
+                >
+                  <fe-icon name="search" class="mini-icon"></fe-icon>
+                  <span>{{ i18n.locale() === 'ar' ? 'تفاصيل' : 'View' }}</span>
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- Event Details Modal / Drawer -->
+  @if (selectedEvent(); as evt) {
+    <div class="modal-backdrop" (click)="closeEventDetails()">
+      <div class="modal-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+        <header class="modal-header">
+          <div class="modal-title-wrap">
+            <fe-icon name="audit" class="modal-icon"></fe-icon>
+            <h2 class="modal-title">
+              {{ i18n.locale() === 'ar' ? 'تفاصيل سجل التدقيق الأمني' : 'Audit Event Record Details' }}
+            </h2>
+          </div>
+          <button type="button" class="close-btn" (click)="closeEventDetails()" aria-label="Close modal">
+            &times;
+          </button>
+        </header>
+
+        <div class="modal-body">
+          <div class="detail-grid">
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'معرف الحدث (Event ID)' : 'Event ID' }}</span>
+              <span class="field-val mono-val">{{ evt.id }}</span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'وقت الحدوث' : 'Occurred At' }}</span>
+              <span class="field-val">{{ formatDateTime(evt.occurredAt) }}</span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'المشرف (الفاعل)' : 'Actor / Operator' }}</span>
+              <span class="field-val">{{ evt.operatorName || '—' }} ({{ evt.operatorEmail || 'System' }})</span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'نوع الإجراء' : 'Action' }}</span>
+              <span class="field-val"><span class="action-badge">{{ evt.action }}</span></span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'النتيجة' : 'Outcome' }}</span>
+              <span class="field-val">
+                <fe-status-chip [tone]="outcomeTone(evt.outcome)">{{ evt.outcome }}</fe-status-chip>
+              </span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'عنوان IP' : 'IP Address' }}</span>
+              <span class="field-val mono-val">{{ evt.ipAddress || '—' }}</span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'العيادة المستهدفة' : 'Target Clinic' }}</span>
+              <span class="field-val">{{ evt.clinicName || '—' }}</span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'المؤسسة / المستأجر' : 'Tenant / Organization' }}</span>
+              <span class="field-val">{{ evt.organizationName || '—' }}</span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'نوع الهدف والمعرف' : 'Resource Type & ID' }}</span>
+              <span class="field-val mono-val">{{ evt.resourceType || '—' }} / {{ evt.resourceId || '—' }}</span>
+            </div>
+
+            <div class="detail-field">
+              <span class="field-label">{{ i18n.locale() === 'ar' ? 'معرف الارتباط (Correlation ID)' : 'Correlation ID' }}</span>
+              <span class="field-val mono-val">{{ evt.correlationId || '—' }}</span>
+            </div>
+          </div>
+
+          @if (evt.reason) {
+            <div class="modal-section">
+              <h3 class="modal-section-title">{{ i18n.locale() === 'ar' ? 'سبب العملية (Reason)' : 'Stated Reason' }}</h3>
+              <p class="section-text-block">{{ evt.reason }}</p>
+            </div>
+          }
+
+          @if (evt.detail) {
+            <div class="modal-section">
+              <h3 class="modal-section-title">{{ i18n.locale() === 'ar' ? 'تفاصيل التنفيذ (Execution Details)' : 'Execution Details' }}</h3>
+              <pre class="section-pre-block">{{ evt.detail }}</pre>
+            </div>
+          }
+        </div>
+
+        <footer class="modal-footer">
+          <button type="button" class="action-btn" (click)="closeEventDetails()">
+            {{ i18n.locale() === 'ar' ? 'إغلاق' : 'Close' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,367 @@
+<div class="tl-page" data-testid="dashboard">
+  <!-- Breadcrumbs -->
+  <div class="tl-breadcrumbs">
+    <a routerLink="/app/dashboard" class="active">{{ 'dashboard.breadcrumb' | t }}</a>
+  </div>
+
+  <!-- Greeting Header -->
+  <div class="tl-greeting-row">
+    <h1 class="tl-greeting">
+      {{ greeting() }} <span class="tl-greeting-bold">{{ userName() }}</span>
+    </h1>
+  </div>
+
+  <!-- Some cards are behind permissions the caller does not hold. The server
+       decided that, and the screen says so rather than looking broken. -->
+  @if (withheld()) {
+    <p class="tl-withheld" data-testid="dashboard-withheld">
+      {{ 'dashboard.withheld' | t }}
+    </p>
+  }
+
+  <!-- Performance Header with Date Filter -->
+  <div class="tl-performance-bar">
+    <h2 class="tl-section-title">{{ 'dashboard.performance.title' | t }}</h2>
+    <div class="tl-date-filter">
+      <label class="tl-date-label" for="dashboard-select-date">
+        {{ 'dashboard.performance.date' | t }}
+      </label>
+      <input
+        id="dashboard-select-date"
+        type="date"
+        class="tl-date-input"
+        [value]="draftDate()"
+        (change)="onDateInput($event)"
+      />
+      <button
+        type="button"
+        class="tl-btn tl-btn-dark"
+        [disabled]="loading()"
+        (click)="applyDateFilter()"
+      >
+        {{ 'dashboard.performance.submit' | t }}
+      </button>
+    </div>
+  </div>
+
+  <!-- The window the figures below were computed for. -->
+  <div class="tl-window-caption">
+    @if (loading()) {
+      <span>{{ 'dashboard.performance.loading' | t }}</span>
+    } @else if (performanceError(); as error) {
+      <span class="is-error" role="alert" data-testid="dashboard-error">{{ error }}</span>
+      @if (performanceRequestId(); as requestId) {
+        <span class="tl-request-id">{{ 'state.requestId' | t }}: {{ requestId }}</span>
+      }
+    } @else {
+      <span>{{ windowLabel() }}</span>
+    }
+  </div>
+
+  <!-- 2-Column Dashboard Grid -->
+  <div class="tl-dashboard-layout">
+    <!-- Left Column: 6 Performance Cards + Total Revenue Chart -->
+    <div class="tl-layout-main">
+      <!-- 6 Metrics Grid (3x2) -->
+      <div class="tl-stats-grid">
+        <!-- 1. Total Number of Clinics -->
+        <div class="tl-stat-card" (click)="navigateTo('/app/clinic/branches')">
+          <div class="tl-stat-left">
+            <span class="tl-stat-title">{{ 'dashboard.card.clinics' | t }}</span>
+            <span class="tl-stat-value">{{ display(clinicCount()) }}</span>
+          </div>
+          <div class="tl-stat-icon clinic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 21h18M5 21V7l8-4 8 4v14M10 9v4M14 9v4"></path>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 2. Total Active Services -->
+        <div class="tl-stat-card" (click)="navigateTo('/app/clinic/services-and-resources')">
+          <div class="tl-stat-left">
+            <span class="tl-stat-title">{{ 'dashboard.card.services' | t }}</span>
+            <span class="tl-stat-value">{{ display(serviceCount()) }}</span>
+          </div>
+          <div class="tl-stat-icon service">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V3a2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 1-1.51 1z"></path>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 3. Total Appointments -->
+        <div class="tl-stat-card" (click)="navigateTo('/app/clinic/calendar')">
+          <div class="tl-stat-left">
+            <span class="tl-stat-title">{{ 'dashboard.card.appointments' | t }}</span>
+            <span class="tl-stat-value">{{ display(appointmentCount()) }}</span>
+          </div>
+          <div class="tl-stat-icon calendar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 4. Total Number Of Doctors -->
+        <div class="tl-stat-card" (click)="navigateTo('/app/clinic/doctors-and-schedules')">
+          <div class="tl-stat-left">
+            <span class="tl-stat-title">{{ 'dashboard.card.doctors' | t }}</span>
+            <span class="tl-stat-value">{{ display(doctorCount()) }}</span>
+          </div>
+          <div class="tl-stat-icon doctor">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 5. Total Number of Patients -->
+        <div class="tl-stat-card" (click)="navigateTo('/app/clinic/patients')">
+          <div class="tl-stat-left">
+            <span class="tl-stat-title">{{ 'dashboard.card.patients' | t }}</span>
+            <span class="tl-stat-value">{{ display(patientCount()) }}</span>
+          </div>
+          <div class="tl-stat-icon patient">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- 6. Total Revenue -->
+        <div class="tl-stat-card" (click)="navigateTo('/app/clinic/invoices')">
+          <div class="tl-stat-left">
+            <span class="tl-stat-title">{{ 'dashboard.card.revenue' | t }}</span>
+            <span class="tl-stat-value">{{ totalRevenue() }}</span>
+          </div>
+          <div class="tl-stat-icon revenue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="8" cy="8" r="6"/>
+              <path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h2v4H7z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Total Revenue Chart Card -->
+      <div class="tl-chart-card">
+        <div class="tl-chart-header">
+          <div class="tl-chart-header-left">
+            <h3 class="tl-chart-title">{{ 'dashboard.chart.title' | t }}</h3>
+            @if (hoveredPoint(); as hp) {
+              <div class="tl-chart-hover-pill">
+                <span class="tl-hover-point-label">{{ hp.label }}:</span>
+                <span class="tl-hover-point-val">{{ formatRevenueValue(hp.value) }}</span>
+              </div>
+            }
+          </div>
+          <div class="tl-period-picker">
+            <button
+              type="button"
+              class="tl-btn-year"
+              [attr.aria-expanded]="periodMenuOpen()"
+              [attr.aria-haspopup]="true"
+              (click)="togglePeriodMenu()"
+            >
+              {{ periodLabel() }}
+              <svg class="tl-period-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            @if (periodMenuOpen()) {
+              <ul class="tl-period-menu" role="menu">
+                @for (option of periodOptions; track option.id) {
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class="tl-period-option"
+                      [class.is-active]="option.id === chartPeriod()"
+                      (click)="selectPeriod(option.id)"
+                    >
+                      {{ option.labelKey | t }}
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        </div>
+        <div class="tl-chart-content">
+          @if (chartLoading()) {
+            <div class="tl-no-data"><p>{{ 'dashboard.chart.loading' | t }}</p></div>
+          } @else {
+            <div class="tl-chart-wrapper">
+              <!-- Y Axis Scale -->
+              <div class="tl-chart-y-axis">
+                <span class="tl-chart-scale-val">{{ display(chartMax()) }}</span>
+                <span class="tl-chart-scale-val">{{ display(chartMid()) }}</span>
+                <span class="tl-chart-scale-val">0</span>
+              </div>
+
+              <!-- Main Canvas Area -->
+              <div class="tl-chart-plot-area">
+                <svg viewBox="0 0 1000 200" class="tl-chart-svg" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="var(--pri)" stop-opacity="0.25"/>
+                      <stop offset="100%" stop-color="var(--pri)" stop-opacity="0.0"/>
+                    </linearGradient>
+                  </defs>
+
+                  <!-- Modern Horizontal Grid Lines -->
+                  <line x1="0" y1="25" x2="1000" y2="25" class="tl-chart-grid" stroke-width="1" stroke-dasharray="4 4"/>
+                  <line x1="0" y1="100" x2="1000" y2="100" class="tl-chart-grid" stroke-width="1" stroke-dasharray="4 4"/>
+                  <line x1="0" y1="175" x2="1000" y2="175" class="tl-chart-grid-base" stroke-width="1.5"/>
+
+                  <!-- Revenue Curve & Area -->
+                  @if (hasChartData()) {
+                    <path [attr.d]="chartAreaPath()" fill="url(#chartGrad)"/>
+                    <path [attr.d]="chartLinePath()" fill="none" class="tl-chart-line" stroke-width="2.5"/>
+
+                    <!-- Hover Guideline -->
+                    @if (hoveredPoint(); as hp) {
+                      <line
+                        [attr.x1]="hp.x"
+                        y1="25"
+                        [attr.x2]="hp.x"
+                        y2="175"
+                        class="tl-chart-hover-line"
+                        stroke-width="1.5"
+                        stroke-dasharray="3 3"
+                      />
+                    }
+
+                    <!-- Data Points -->
+                    @for (point of chartPoints(); track point.label) {
+                      <circle
+                        [attr.cx]="point.x"
+                        [attr.cy]="point.y"
+                        [attr.r]="hoveredPoint()?.label === point.label ? 6 : 3.5"
+                        class="tl-chart-dot"
+                        [class.is-hovered]="hoveredPoint()?.label === point.label"
+                        (mouseenter)="setHoveredPoint(point)"
+                        (mouseleave)="clearHoveredPoint()"
+                      >
+                        <title>{{ point.label }}: {{ formatRevenueValue(point.value) }}</title>
+                      </circle>
+                    }
+                  } @else {
+                    <line x1="0" y1="175" x2="1000" y2="175" class="tl-chart-line" stroke-width="2"/>
+                  }
+                </svg>
+
+                <!-- HTML X Axis Labels: 100% distortion-free typography -->
+                <div
+                  class="tl-chart-x-axis"
+                  [style.grid-template-columns]="'repeat(' + chartSeries().length + ', 1fr)'"
+                >
+                  @for (point of chartPoints(); track point.label) {
+                    <div
+                      class="tl-chart-x-tick"
+                      [class.is-active]="hoveredPoint()?.label === point.label"
+                      (mouseenter)="setHoveredPoint(point)"
+                      (mouseleave)="clearHoveredPoint()"
+                    >
+                      <span>{{ point.label }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+
+            @if (!hasChartData()) {
+              <p class="tl-chart-empty">{{ 'dashboard.chart.empty' | t }}</p>
+            }
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Age Demographics + Upcoming Appointments -->
+    <div class="tl-layout-side">
+      <!-- Visited Patient by Age Card -->
+      <div class="tl-card tl-side-card">
+        <h3 class="tl-card-header-title">{{ 'dashboard.age.title' | t }}</h3>
+        <div class="tl-age-row">
+          <!-- 0-25 age -->
+          <div class="tl-age-col">
+            <div class="tl-age-icons-wrap">
+              <svg viewBox="0 0 36 42" class="tl-age-art">
+                <circle cx="12" cy="10" r="5" class="tl-age-1"/>
+                <path d="M8 18 h8 v16 h-8 Z" class="tl-age-1" rx="2"/>
+                <circle cx="24" cy="10" r="5" class="tl-age-2"/>
+                <path d="M20 18 h8 v16 h-8 Z" class="tl-age-2" rx="2"/>
+              </svg>
+            </div>
+            <span class="tl-age-tag">{{ 'dashboard.age.band1' | t }}</span>
+            <span class="tl-age-number">{{ display(patientAge0to25()) }}</span>
+          </div>
+
+          <!-- 26-50 age -->
+          <div class="tl-age-col">
+            <div class="tl-age-icons-wrap">
+              <svg viewBox="0 0 36 42" class="tl-age-art">
+                <circle cx="12" cy="9" r="5" class="tl-age-3"/>
+                <path d="M7 17 h10 v18 h-10 Z" class="tl-age-3" rx="2"/>
+                <circle cx="24" cy="9" r="5" class="tl-age-4"/>
+                <path d="M19 17 h10 v18 h-10 Z" class="tl-age-4" rx="2"/>
+              </svg>
+            </div>
+            <span class="tl-age-tag">{{ 'dashboard.age.band2' | t }}</span>
+            <span class="tl-age-number">{{ display(patientAge26to50()) }}</span>
+          </div>
+
+          <!-- 50+ age -->
+          <div class="tl-age-col">
+            <div class="tl-age-icons-wrap">
+              <svg viewBox="0 0 36 42" class="tl-age-art">
+                <circle cx="12" cy="10" r="5" class="tl-age-5"/>
+                <path d="M7 18 h10 v18 h-10 Z" class="tl-age-5" rx="2"/>
+                <circle cx="24" cy="10" r="5" class="tl-age-6"/>
+                <path d="M19 18 h10 v18 h-10 Z" class="tl-age-6" rx="2"/>
+              </svg>
+            </div>
+            <span class="tl-age-tag">{{ 'dashboard.age.band3' | t }}</span>
+            <span class="tl-age-number">{{ display(patientAge50Plus()) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upcoming Appointment Card -->
+      <div class="tl-card tl-side-card">
+        <h3 class="tl-card-header-title">{{ 'dashboard.upcoming.title' | t }}</h3>
+        @if (upcomingAppointments().length === 0) {
+          <div class="tl-no-data" data-testid="dashboard-upcoming-empty">
+            <p>{{ 'dashboard.upcoming.empty' | t }}</p>
+          </div>
+        } @else {
+          <div class="tl-upcoming-items">
+            @for (apt of upcomingAppointments(); track apt.id) {
+              <div class="tl-upcoming-row" (click)="navigateTo('/app/clinic/calendar')">
+                <div class="tl-upcoming-main">
+                  <span class="tl-apt-patient">{{ apt.patientName }}</span>
+                  <span class="tl-apt-service">{{ apt.service }}</span>
+                </div>
+                <div class="tl-upcoming-meta">
+                  <span class="tl-apt-time">{{ apt.formattedTime }}</span>
+                  <span class="tl-apt-doc">{{ apt.doctorName }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Tooth Logic Footer -->
+  <footer class="tl-footer">
+    {{ 'dashboard.footer' | t }}
+  </footer>
+</div>

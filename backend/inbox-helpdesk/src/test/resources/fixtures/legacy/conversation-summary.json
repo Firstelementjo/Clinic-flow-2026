@@ -1,0 +1,27 @@
+{
+  "name": "an inbox row: unassigned, no transcript yet",
+  "source": "apps/api/src/conversations/conversations.service.ts -> inbox + toSummary (legacy reference)",
+  "seed": "InboxFixture.reset(); a freshly received customer message on an open, unassigned thread with an explicit subject.",
+  "volatile": ["id", "lastMessageAt"],
+  "response": {
+    "id": "<volatile>",
+    "projectId": "aaaaaaaa-0000-0000-0000-0000000000a1",
+    "projectName": "Alpha One",
+    "ticketNumber": "#0814000000001",
+    "channel": "MOCK",
+    "status": "OPEN",
+    "mode": "HUMAN",
+    "modeVersion": 0,
+    "priority": "NORMAL",
+    "subject": "Booking problem",
+    "customer": {
+      "id": "aaaaaaaa-0000-0000-0000-0000000cc001",
+      "cxId": "#33000001",
+      "displayName": "Alpha One Clinic"
+    },
+    "assignedEmployee": null,
+    "lastMessagePreview": "I cannot book an appointment",
+    "messageCount": 1,
+    "lastMessageAt": "<volatile>"
+  }
+}

@@ -1,0 +1,313 @@
+<div class="fe-page" data-testid="team">
+  <fe-page-header
+    [title]="'team.title'"
+    [description]="'team.description'"
+    [unavailableReason]="'team.unavailableNote'"
+  >
+    <button type="button" class="fe-btn" (click)="load()">{{ 'team.refresh' | t }}</button>
+  </fe-page-header>
+
+  @if (!canRead()) {
+    <!--
+      The permission was not held, so nothing below is even fetched. Saying so is
+      better than rendering an empty table, which reads as "there are no staff".
+    -->
+    <fe-not-available
+      [title]="'state.noPermission'"
+      [body]="'state.notAvailable.noPermission'"
+    />
+  } @else {
+    <fe-async-state
+      [loading]="directory.loading() && !directory.value()"
+      [error]="directory.error()"
+      [hasValue]="directory.value() !== null"
+      [loadingLabel]="'state.loading' | t"
+      [loadingHint]="'state.loadingHint' | t"
+      [errorTitle]="'state.error' | t"
+      [errorBody]="'state.errorHint' | t"
+      [requestId]="directoryErrorRequestId()"
+      [requestIdLabel]="'state.requestId' | t"
+      [retryLabel]="'state.retry' | t"
+      (retry)="load()"
+    />
+
+    @if (directory.value(); as view) {
+      <section class="fe-card" [attr.aria-labelledby]="'team-summary-title'">
+        <h3 class="fe-card__title" id="team-summary-title">
+          {{ 'team.summary.totalUsers' | t }}
+        </h3>
+        <dl class="facts facts--wide">
+          @for (fact of summaryFacts(); track fact.key) {
+            <div>
+              <dt class="fe-eyebrow">{{ fact.label }}</dt>
+              <dd class="fe-num">{{ fact.value }}</dd>
+            </div>
+          }
+        </dl>
+      </section>
+
+      <!-- The table. One row per user, with membership and session counts inline
+           so an operator does not have to open each person to learn anything. -->
+      <section class="fe-card" [attr.aria-labelledby]="'team-table-title'">
+        <h3 class="fe-card__title" id="team-table-title">{{ 'team.title' | t }}</h3>
+
+        <fe-async-state
+          [loading]="false"
+          [loadingLabel]="'state.loading' | t"
+          [empty]="users().length === 0"
+          [emptyTitle]="'team.table.empty' | t"
+          [emptyBody]="'team.table.emptyBody' | t"
+        />
+
+        @if (users().length > 0) {
+          <table class="fe-table">
+            <thead>
+              <tr>
+                <th scope="col">{{ 'team.table.name' | t }}</th>
+                <th scope="col">{{ 'team.table.email' | t }}</th>
+                <th scope="col">{{ 'team.table.role' | t }}</th>
+                <th scope="col">{{ 'team.table.status' | t }}</th>
+                <th scope="col">{{ 'team.table.projects' | t }}</th>
+                <th scope="col">{{ 'team.table.sessions' | t }}</th>
+                <th scope="col">{{ 'team.table.lastLogin' | t }}</th>
+                <th scope="col">{{ 'team.permissions.title' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (user of users(); track user.id) {
+                <tr>
+                  <td>{{ user.fullName ?? '—' }}</td>
+                  <td class="fe-mono" dir="ltr">{{ user.email ?? '—' }}</td>
+                  <td>
+                    <fe-status-chip [tone]="user.role === 'ADMIN' ? 'human' : 'neutral'">
+                      {{ roleLabel(user.role) }}
+                    </fe-status-chip>
+                  </td>
+                  <!-- Status in words, never by colour alone. -->
+                  <td>
+                    <fe-status-chip [tone]="user.active ? 'ok' : 'bad'">
+                      {{ (user.active ? 'team.table.active' : 'team.table.inactive') | t }}
+                    </fe-status-chip>
+                  </td>
+                  <td class="fe-num">{{ projectsFor(user.id) }}</td>
+                  <td class="fe-num">{{ format.integer(user.liveSessions ?? null) }}</td>
+                  <td class="fe-mono">{{ format.dateTime(user.lastLoginAt) }}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="fe-btn fe-btn--ghost"
+                      [attr.aria-pressed]="inspectedUserId() === user.id"
+                      (click)="inspect(user.id!)"
+                    >
+                      {{ 'team.permissions.granted' | t }}
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </section>
+
+      <!-- One user's effective permissions, from the server's own answer. -->
+      @if (inspectedUserId()) {
+        <section class="fe-card" [attr.aria-labelledby]="'team-permissions-title'">
+          <h3 class="fe-card__title" id="team-permissions-title">
+            {{ 'team.permissions.title' | t }}
+          </h3>
+          <p class="fe-sub">{{ 'team.permissions.hint' | t }}</p>
+
+          <fe-async-state
+            [loading]="inspection.loading() && !inspection.value()"
+            [error]="inspection.error()"
+            [hasValue]="inspection.value() !== null"
+            [loadingLabel]="'state.loading' | t"
+            [errorTitle]="'state.error' | t"
+            [errorBody]="'state.errorHint' | t"
+            [retryLabel]="'state.retry' | t"
+            (retry)="inspect(inspectedUserId()!)"
+          />
+
+          @if (inspection.value(); as view) {
+            <!--
+              Two counts, not a ratio. `PermissionInspection` publishes
+              `effectivePermissions` and `missingPermissions` but **no total**, so
+              "12 of 30" would need a denominator the server does not send — and a
+              client that divides by a number it made up is reporting a figure the
+              server never asserted. Granted and missing are counted separately and
+              the absence of a total is left visible.
+            -->
+            <p class="fe-sub">
+              {{ 'team.permissions.grantedCount' | t: { count: view.effectivePermissions?.length ?? 0 } }}
+              ·
+              {{ 'team.permissions.missingCount' | t: { count: view.missingPermissions?.length ?? 0 } }}
+            </p>
+            <ul class="chips">
+              @for (permission of view.effectivePermissions ?? []; track permission) {
+                <li class="fe-badge fe-badge--neutral fe-mono" dir="ltr">{{ permission }}</li>
+              }
+            </ul>
+            @if ((view.missingPermissions ?? []).length > 0) {
+              <h4 class="fe-eyebrow subtitle">{{ 'team.permissions.missing' | t }}</h4>
+              <ul class="chips">
+                @for (permission of view.missingPermissions; track permission) {
+                  <li class="fe-badge fe-badge--neutral fe-mono" dir="ltr">{{ permission }}</li>
+                }
+              </ul>
+            } @else {
+              <p class="fe-sub">{{ 'team.permissions.none' | t }}</p>
+            }
+          }
+        </section>
+      }
+
+      <!-- Live sessions -->
+      <section class="fe-card" [attr.aria-labelledby]="'team-sessions-title'">
+        <h3 class="fe-card__title" id="team-sessions-title">
+          {{ 'team.sessions.title' | t }}
+        </h3>
+
+        <fe-async-state
+          [loading]="liveSessions.loading() && !liveSessions.value()"
+          [empty]="(liveSessions.value() ?? []).length === 0"
+          [error]="liveSessions.error()"
+          [hasValue]="liveSessions.value() !== null"
+          [loadingLabel]="'state.loading' | t"
+          [emptyTitle]="'team.sessions.empty' | t"
+          [emptyBody]="'team.sessions.emptyBody' | t"
+          [errorTitle]="'state.error' | t"
+          [errorBody]="'state.errorHint' | t"
+          [retryLabel]="'state.retry' | t"
+          (retry)="load()"
+        />
+
+        @if ((liveSessions.value() ?? []).length > 0) {
+          <table class="fe-table">
+            <thead>
+              <tr>
+                <th scope="col">{{ 'team.sessions.id' | t }}</th>
+                <th scope="col">{{ 'team.sessions.user' | t }}</th>
+                <th scope="col">{{ 'team.sessions.agent' | t }}</th>
+                <th scope="col">{{ 'team.sessions.created' | t }}</th>
+                <th scope="col">{{ 'team.sessions.expires' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (session of liveSessions.value(); track session.id) {
+                <tr>
+                  <td class="fe-mono" dir="ltr">{{ session.id ?? '—' }}</td>
+                  <td class="fe-mono" dir="ltr">{{ session.userEmail ?? '—' }}</td>
+                  <td class="fe-mono">{{ session.userAgent ?? '—' }}</td>
+                  <td class="fe-mono">{{ format.dateTime(session.createdAt) }}</td>
+                  <td class="fe-mono">{{ format.dateTime(session.expiresAt) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </section>
+
+      <!-- Service principals -->
+      @if (observedPrincipals().length > 0) {
+        <section class="fe-card" [attr.aria-labelledby]="'team-principals-title'">
+          <h3 class="fe-card__title" id="team-principals-title">
+            {{ 'team.servicePrincipals.title' | t }}
+          </h3>
+          <p class="fe-sub">{{ 'team.servicePrincipals.hint' | t }}</p>
+          <table class="fe-table">
+            <thead>
+              <tr>
+                <th scope="col">{{ 'team.servicePrincipals.type' | t }}</th>
+                <th scope="col">{{ 'team.servicePrincipals.name' | t }}</th>
+                <th scope="col">{{ 'team.servicePrincipals.seen' | t }}</th>
+                <th scope="col">{{ 'team.servicePrincipals.occurrences' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (principal of observedPrincipals(); track principal.principalName) {
+                <tr>
+                  <td>
+                    <fe-status-chip
+                      [tone]="principal.principalType === 'USER' ? 'neutral' : 'human'"
+                    >
+                      {{ principalTypeLabel(principal.principalType) }}
+                    </fe-status-chip>
+                  </td>
+                  <td class="fe-mono" dir="ltr">{{ principal.principalName ?? '—' }}</td>
+                  <td class="fe-mono">{{ format.dateTime(principal.lastSeenAt) }}</td>
+                  <td class="fe-num">{{ format.integer(principal.occurrences ?? null) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+
+      <!--
+        Credentials: presence only.
+
+        The response carries `hasCredentials` and `hasWebhookSecret` as booleans and
+        no secret values, and this screen renders nothing else. A UI that displayed a
+        connector secret would be a defect whatever the server sent.
+      -->
+      @if (credentials().length > 0) {
+        <section class="fe-card" [attr.aria-labelledby]="'team-credentials-title'">
+          <h3 class="fe-card__title" id="team-credentials-title">
+            {{ 'team.credentials.title' | t }}
+          </h3>
+          <p class="fe-sub">{{ 'team.credentials.hint' | t }}</p>
+          <table class="fe-table">
+            <thead>
+              <tr>
+                <th scope="col">{{ 'team.credentials.channel' | t }}</th>
+                <th scope="col">{{ 'team.credentials.name' | t }}</th>
+                <th scope="col">{{ 'team.credentials.status' | t }}</th>
+                <th scope="col">{{ 'team.credentials.present' | t }}</th>
+                <th scope="col">{{ 'team.credentials.secret' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (connection of credentials(); track connection.connectionId) {
+                <tr>
+                  <td class="fe-mono">{{ connection.channel ?? '—' }}</td>
+                  <td>{{ connection.displayName ?? '—' }}</td>
+                  <td>
+                    <fe-status-chip [tone]="connection.enabled ? 'ok' : 'neutral'">
+                      {{ connection.status ?? '—' }}
+                    </fe-status-chip>
+                  </td>
+                  <td>
+                    <fe-status-chip [tone]="connection.hasCredentials ? 'ok' : 'warn'">
+                      {{ (connection.hasCredentials
+                        ? 'team.credentials.present'
+                        : 'team.credentials.absent') | t }}
+                    </fe-status-chip>
+                  </td>
+                  <td>
+                    <fe-status-chip [tone]="connection.hasWebhookSecret ? 'ok' : 'warn'">
+                      {{ (connection.hasWebhookSecret
+                        ? 'team.credentials.present'
+                        : 'team.credentials.absent') | t }}
+                    </fe-status-chip>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+
+      <!--
+        The absent half of the frozen Team page, said plainly.
+
+        Working hours, availability, skills, capacity and CSV/XLSX import have no
+        route in the committed contract. No drop area is rendered, because a file
+        picker that submits to a 404 is a promise the product cannot keep.
+      -->
+      <fe-not-available
+        [title]="'team.unavailable.title'"
+        [body]="'team.unavailable.body'"
+      />
+    }
+  }
+</div>

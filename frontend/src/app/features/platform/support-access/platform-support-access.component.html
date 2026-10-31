@@ -1,0 +1,543 @@
+<div class="support-container">
+  <!-- Page Header -->
+  <header class="page-header">
+    <div class="header-text">
+      <div class="title-with-badge">
+        <h1 class="page-title">Support Access (Break-Glass)</h1>
+        <fe-status-chip tone="warn" text="Audited Emergency Access"></fe-status-chip>
+      </div>
+      <p class="page-subtitle">
+        Time-limited, read-only emergency access grants for investigating clinical issues. All access is audited and notified to clinic administrators.
+      </p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" (click)="openRequestModal()">
+        <fe-icon name="plus" size="16"></fe-icon>
+        Request Break-Glass Access
+      </button>
+    </div>
+  </header>
+
+  <!-- Error Alert -->
+  @if (error()) {
+    <div class="alert alert-danger" role="alert">
+      <fe-icon name="alert" size="18"></fe-icon>
+      <div class="alert-content">
+        <strong>Error</strong>
+        <p>{{ error() }}</p>
+      </div>
+      <button class="alert-close" (click)="error.set(null)">×</button>
+    </div>
+  }
+
+  <!-- Security Policy Notice -->
+  <section class="policy-card">
+    <div class="policy-icon">
+      <fe-icon name="shield" size="24"></fe-icon>
+    </div>
+    <div class="policy-details">
+      <h3 class="policy-title">Strict Zero-Knowledge & Read-Only Policy</h3>
+      <p class="policy-text">
+        Platform operators have <strong>NO</strong> patient data access by default. To investigate production issues, operators must request a time-limited grant with a written justification. Break-glass grants auto-expire within a maximum of 120 minutes, enforce strictly read-only mode (all clinical mutations are blocked with HTTP 403), notify the clinic admin in tamper-evident logs, and are fully audited.
+      </p>
+    </div>
+  </section>
+
+  <!-- Active Grants Live Banners -->
+  @if (activeGrants().length > 0) {
+    <section class="active-grants-section">
+      <h2 class="section-title">Active Support Sessions ({{ activeGrants().length }})</h2>
+      <div class="active-grants-grid">
+        @for (grant of activeGrants(); track grant.id) {
+          <div class="active-grant-card">
+            <div class="grant-card-header">
+              <div class="clinic-badge">
+                <fe-icon name="clinic" size="16"></fe-icon>
+                <span class="clinic-name">{{ grant.clinicName }}</span>
+              </div>
+              <div class="countdown-badge">
+                <fe-icon name="clock" size="14"></fe-icon>
+                <span>{{ grant.remainingMinutes }}m remaining</span>
+              </div>
+            </div>
+            <div class="grant-reason">
+              <strong>Reason:</strong> {{ grant.reason }}
+            </div>
+            <div class="grant-meta">
+              <span><strong>Operator:</strong> {{ grant.operatorDisplayName }}</span>
+              <span><strong>Granted:</strong> {{ grant.startsAt | date:'medium' }}</span>
+              <span><strong>Expires:</strong> {{ grant.expiresAt | date:'medium' }}</span>
+            </div>
+            <div class="grant-actions">
+              <button class="btn btn-secondary btn-sm" (click)="openInspection(grant)">
+                <fe-icon name="eye" size="14"></fe-icon>
+                Inspect Clinic Data
+              </button>
+              <button class="btn btn-danger-outline btn-sm" (click)="openRevokeModal(grant)">
+                <fe-icon name="trash" size="14"></fe-icon>
+                Revoke Access
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  <!-- Diagnostic Inspection Drawer (if active) -->
+  @if (activeInspectionGrant()) {
+    <section class="inspection-drawer">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <h2>Break-Glass Diagnostic Inspector: {{ activeInspectionGrant()?.clinicName }}</h2>
+          <fe-status-chip tone="warn" text="Strictly Read-Only"></fe-status-chip>
+        </div>
+        <button class="btn btn-secondary btn-sm" (click)="closeInspection()">Close Inspector</button>
+      </div>
+
+      <div class="inspection-notice">
+        <fe-icon name="info" size="16"></fe-icon>
+        <span>
+          Access is limited to diagnostic inspection for reason: <em>"{{ activeInspectionGrant()?.reason }}"</em>.
+          All clinical mutations remain blocked (HTTP 403 Forbidden).
+        </span>
+      </div>
+
+      <!-- Inspection Tabs -->
+      <div class="tab-bar">
+        <button
+          class="tab-btn"
+          [class.active]="inspectionTab() === 'patients'"
+          (click)="setInspectionTab('patients')"
+        >
+          Patients ({{ inspectionPatients().length }})
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="inspectionTab() === 'appointments'"
+          (click)="setInspectionTab('appointments')"
+        >
+          Appointments ({{ inspectionAppointments().length }})
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="inspectionTab() === 'audit'"
+          (click)="setInspectionTab('audit')"
+        >
+          Clinic Audit Trail ({{ inspectionAuditLogs().length }})
+        </button>
+      </div>
+
+      <!-- Tab Content -->
+      @if (inspectionLoading()) {
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading diagnostic records...</p>
+        </div>
+      } @else {
+        <div class="drawer-content">
+          @if (inspectionTab() === 'patients') {
+            @if (inspectionPatients().length === 0) {
+              <div class="empty-state">No patients found for this clinic.</div>
+            } @else {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Patient No</th>
+                      <th>Name</th>
+                      <th>Phone</th>
+                      <th>Email</th>
+                      <th>Gender</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (p of inspectionPatients(); track p.id) {
+                      <tr>
+                        <td class="font-mono">{{ p.patientNo }}</td>
+                        <td><strong>{{ p.displayName }}</strong></td>
+                        <td>{{ p.primaryPhone || '-' }}</td>
+                        <td>{{ p.primaryEmail || '-' }}</td>
+                        <td>{{ p.gender || '-' }}</td>
+                        <td>{{ p.createdAt | date:'short' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+
+          @if (inspectionTab() === 'appointments') {
+            @if (inspectionAppointments().length === 0) {
+              <div class="empty-state">No appointments recorded.</div>
+            } @else {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Patient</th>
+                      <th>Doctor</th>
+                      <th>Date</th>
+                      <th>Duration</th>
+                      <th>Status</th>
+                      <th>Payment</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (a of inspectionAppointments(); track a.id) {
+                      <tr>
+                        <td><strong>{{ a.patientName || '-' }}</strong></td>
+                        <td>{{ a.doctorName || '-' }}</td>
+                        <td>{{ a.appointmentDate | date:'medium' }}</td>
+                        <td>{{ a.durationMinutes }}m</td>
+                        <td>
+                          <fe-status-chip [tone]="a.status === 'CONFIRMED' ? 'ok' : 'neutral'">{{ a.status }}</fe-status-chip>
+                        </td>
+                        <td>{{ a.paymentStatus || 'UNPAID' }}</td>
+                        <td class="text-muted">{{ a.notes || '-' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+
+          @if (inspectionTab() === 'audit') {
+            @if (inspectionAuditLogs().length === 0) {
+              <div class="empty-state">No clinical audit events found.</div>
+            } @else {
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Occurred At</th>
+                      <th>Actor</th>
+                      <th>Role</th>
+                      <th>Action</th>
+                      <th>Resource</th>
+                      <th>Metadata</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (l of inspectionAuditLogs(); track l.id) {
+                      <tr>
+                        <td>{{ l.occurredAt | date:'medium' }}</td>
+                        <td><strong>{{ l.actorUserName }}</strong></td>
+                        <td>{{ l.actorRole }}</td>
+                        <td><fe-status-chip tone="warn">{{ l.action }}</fe-status-chip></td>
+                        <td>{{ l.resourceType }}</td>
+                        <td class="font-mono text-muted text-sm">{{ l.metadataJson || '-' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </div>
+      }
+    </section>
+  }
+
+  <!-- Stats Grid -->
+  <section class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon tone-success">
+        <fe-icon name="check" size="20"></fe-icon>
+      </div>
+      <div class="stat-data">
+        <span class="stat-label">Active Grants</span>
+        <span class="stat-value">{{ activeGrants().length }}</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon tone-neutral">
+        <fe-icon name="clock" size="20"></fe-icon>
+      </div>
+      <div class="stat-data">
+        <span class="stat-label">Expired Grants</span>
+        <span class="stat-value">{{ expiredGrants().length }}</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon tone-danger">
+        <fe-icon name="trash" size="20"></fe-icon>
+      </div>
+      <div class="stat-data">
+        <span class="stat-label">Revoked Grants</span>
+        <span class="stat-value">{{ revokedGrants().length }}</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon tone-primary">
+        <fe-icon name="audit" size="20"></fe-icon>
+      </div>
+      <div class="stat-data">
+        <span class="stat-label">Total Break-Glass Events</span>
+        <span class="stat-value">{{ grants().length }}</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Filter & Search Bar -->
+  <section class="filter-bar">
+    <div class="search-input-wrapper">
+      <fe-icon name="search" size="16"></fe-icon>
+      <input
+        type="text"
+        placeholder="Search by clinic, operator or reason..."
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event)"
+      />
+    </div>
+
+    <div class="filter-chips">
+      <button
+        class="chip"
+        [class.active]="statusFilter() === 'ALL'"
+        (click)="statusFilter.set('ALL')"
+      >
+        All ({{ grants().length }})
+      </button>
+      <button
+        class="chip"
+        [class.active]="statusFilter() === 'ACTIVE'"
+        (click)="statusFilter.set('ACTIVE')"
+      >
+        Active ({{ activeGrants().length }})
+      </button>
+      <button
+        class="chip"
+        [class.active]="statusFilter() === 'EXPIRED'"
+        (click)="statusFilter.set('EXPIRED')"
+      >
+        Expired ({{ expiredGrants().length }})
+      </button>
+      <button
+        class="chip"
+        [class.active]="statusFilter() === 'REVOKED'"
+        (click)="statusFilter.set('REVOKED')"
+      >
+        Revoked ({{ revokedGrants().length }})
+      </button>
+    </div>
+  </section>
+
+  <!-- Grants Table -->
+  <section class="table-card">
+    @if (loading()) {
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading support access history...</p>
+      </div>
+    } @else if (filteredGrants().length === 0) {
+      <div class="empty-state">
+        <fe-icon name="shield" size="36"></fe-icon>
+        <h3>No support access grants found</h3>
+        <p class="text-muted">No emergency access grants match your search criteria.</p>
+        <button class="btn btn-primary" (click)="openRequestModal()">Request Break-Glass Access</button>
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Clinic</th>
+              <th>Operator</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Granted At</th>
+              <th>Expires At</th>
+              <th>Revoked Info</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (grant of filteredGrants(); track grant.id) {
+              <tr>
+                <td>
+                  <strong>{{ grant.clinicName }}</strong>
+                </td>
+                <td>
+                  <span class="operator-badge">{{ grant.operatorDisplayName }}</span>
+                </td>
+                <td class="reason-cell" [title]="grant.reason">
+                  {{ grant.reason }}
+                </td>
+                <td>
+                  <fe-status-chip [tone]="statusTone(grant.status)">{{ grant.status }}</fe-status-chip>
+                  @if (grant.status === 'ACTIVE') {
+                    <span class="remaining-pill">{{ grant.remainingMinutes }}m left</span>
+                  }
+                </td>
+                <td class="text-muted text-sm">
+                  {{ grant.startsAt | date:'short' }}
+                </td>
+                <td class="text-muted text-sm">
+                  {{ grant.expiresAt | date:'short' }}
+                </td>
+                <td class="text-sm">
+                  @if (grant.status === 'REVOKED') {
+                    <div class="revoked-info">
+                      <span class="revoked-by">{{ grant.revokedByName || 'Operator' }}</span>
+                      <span class="revoked-reason" [title]="grant.revocationReason || ''">{{ grant.revocationReason || 'No reason' }}</span>
+                    </div>
+                  } @else {
+                    <span class="text-muted">-</span>
+                  }
+                </td>
+                <td>
+                  <div class="action-buttons">
+                    @if (grant.status === 'ACTIVE') {
+                      <button class="btn btn-secondary btn-xs" (click)="openInspection(grant)">
+                        Inspect
+                      </button>
+                      <button class="btn btn-danger-outline btn-xs" (click)="openRevokeModal(grant)">
+                        Revoke
+                      </button>
+                    } @else {
+                      <span class="text-muted text-xs">Ended</span>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <!-- Request Access Modal -->
+  @if (showRequestModal()) {
+    <div class="modal-backdrop">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Request Break-Glass Support Access</h3>
+          <button class="modal-close" (click)="closeRequestModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="warning-callout">
+            <fe-icon name="alert" size="18"></fe-icon>
+            <div>
+              <strong>Production Access Notice</strong>
+              <p>Break-glass grants are strictly audited and notified to the clinic admin. Access is read-only and automatically expires after the requested duration.</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="clinicSelect">Target Clinic *</label>
+            <select
+              id="clinicSelect"
+              class="form-control"
+              [ngModel]="requestForm().projectId"
+              (ngModelChange)="requestForm.set({ ...requestForm(), projectId: $event })"
+            >
+              @for (clinic of clinics(); track clinic.projectId) {
+                <option [value]="clinic.projectId">{{ clinic.clinicName }} ({{ clinic.city || 'Jordan' }})</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="durationInput">Access Duration (Minutes) *</label>
+            <div class="duration-controls">
+              <input
+                id="durationInput"
+                type="number"
+                min="15"
+                max="120"
+                step="15"
+                class="form-control"
+                [ngModel]="requestForm().durationMinutes"
+                (ngModelChange)="requestForm.set({ ...requestForm(), durationMinutes: +$event })"
+              />
+              <span class="duration-hint">Default 60 min. Max 120 min.</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="reasonInput">Written Justification (Required, min 10 chars) *</label>
+            <textarea
+              id="reasonInput"
+              rows="3"
+              class="form-control"
+              placeholder="e.g., Investigating appointment calendar synchronization mismatch reported by clinic staff"
+              [ngModel]="requestForm().reason"
+              (ngModelChange)="requestForm.set({ ...requestForm(), reason: $event })"
+            ></textarea>
+            <span class="field-hint">Must provide a clear operational reason for audit compliance.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" [checked]="true" disabled />
+              <span>Strictly read-only access (all clinical mutations are blocked)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeRequestModal()" [disabled]="requesting()">
+            Cancel
+          </button>
+          <button class="btn btn-primary" (click)="submitRequest()" [disabled]="requesting()">
+            @if (requesting()) {
+              <div class="spinner-sm"></div>
+              <span>Granting...</span>
+            } @else {
+              <span>Confirm & Grant Access</span>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Revoke Modal -->
+  @if (showRevokeModal()) {
+    <div class="modal-backdrop">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Revoke Support Access</h3>
+          <button class="modal-close" (click)="closeRevokeModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <p>
+            Are you sure you want to terminate break-glass access for <strong>{{ revokingGrant()?.clinicName }}</strong> immediately?
+          </p>
+
+          <div class="form-group">
+            <label for="revokeReasonInput">Revocation Reason *</label>
+            <input
+              id="revokeReasonInput"
+              type="text"
+              class="form-control"
+              placeholder="e.g., Issue investigation complete, issue resolved"
+              [ngModel]="revokeReason()"
+              (ngModelChange)="revokeReason.set($event)"
+            />
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeRevokeModal()" [disabled]="revoking()">
+            Cancel
+          </button>
+          <button class="btn btn-danger" (click)="submitRevoke()" [disabled]="revoking()">
+            @if (revoking()) {
+              <div class="spinner-sm"></div>
+              <span>Revoking...</span>
+            } @else {
+              <span>Revoke Immediately</span>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

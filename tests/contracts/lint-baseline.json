@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "note": "Pinned ceiling for the legacy Node/React static analysis. This is a RATCHET, not a waiver: the rules are untouched, nothing is ignored, and the counts may only go DOWN. The gate never edits this file; when a count falls, a human tightens the pin in the same commit. Raising the pin requires the same review as changing an eslint rule.",
+  "owner": "Agent L (quality)",
+  "recordedAt": "2026-10-04",
+  "source": "PROJECT_REQUIREMENTS.md section 2 (Baseline validation evidence), reproduced by the Phase-0/Phase-5a runs",
+  "errors": 118,
+  "warnings": 39,
+  "typecheck": {
+    "policy": "no baseline",
+    "rationale": "`yarn typecheck` failed on three implicit-any middleware parameters in apps/api/src/main.ts. That is a defect, not accumulated debt, and Phase 0 fixed it. The gate requires exit 0 with no allowance."
+  },
+  "knownCategories": [
+    "unused imports and unused variables",
+    "CommonJS linting in helper scripts",
+    "untyped or unused parameters"
+  ],
+  "doNot": [
+    "disable a rule to reduce a count",
+    "add // eslint-disable to make the count fall",
+    "raise the pin without a phase report entry explaining the new debt"
+  ]
+}

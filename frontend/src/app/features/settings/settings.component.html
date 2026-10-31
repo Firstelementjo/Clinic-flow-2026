@@ -1,0 +1,443 @@
+<div class="fe-page" data-testid="settings">
+  <fe-page-header [title]="'settings.title'" [description]="'settings.description'">
+    <button type="button" class="fe-btn" (click)="retry()">{{ 'settings.refresh' | t }}</button>
+  </fe-page-header>
+
+  <div class="fe-grid fe-grid-2">
+    <!-- Your account -->
+    <section class="fe-card" [attr.aria-labelledby]="'settings-account-title'">
+      <h3 id="settings-account-title">{{ 'settings.account.title' | t }}</h3>
+      <dl class="facts">
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.account.name' | t }}</dt>
+          <dd>{{ store.session()?.fullName ?? '—' }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.account.email' | t }}</dt>
+          <dd class="fe-mono" dir="ltr">{{ store.session()?.email ?? '—' }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.account.role' | t }}</dt>
+          <dd>
+            <fe-status-chip [tone]="store.role() === 'ADMIN' ? 'human' : 'neutral'">
+              {{ store.role() ? ('shell.role.' + store.role() | t) : '—' }}
+            </fe-status-chip>
+          </dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.account.locale' | t }}</dt>
+          <dd class="fe-mono" dir="ltr">{{ store.session()?.locale ?? '—' }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.account.organization' | t }}</dt>
+          <dd class="fe-mono" dir="ltr">{{ store.organizationId() ?? '—' }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.account.active' | t }}</dt>
+          <dd>
+            <fe-status-chip [tone]="store.session()?.active === false ? 'bad' : 'ok'">
+              {{
+                (store.session()?.active === false
+                  ? 'settings.account.inactive'
+                  : 'settings.account.active'
+                ) | t
+              }}
+            </fe-status-chip>
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- Your effective permissions: the server's own answer -->
+    <section class="fe-card" [attr.aria-labelledby]="'settings-permissions-title'">
+      <h3 id="settings-permissions-title">{{ 'settings.permissions.title' | t }}</h3>
+      @if (!permissions().loaded) {
+        <p class="fe-sub">{{ 'settings.permissions.pending' | t }}</p>
+      } @else {
+        <p class="fe-sub">
+          {{
+            'settings.permissions.summary'
+              | t
+                : { granted: permissions().grantedCount, total: permissions().total }
+          }}
+        </p>
+
+        <h4 class="fe-eyebrow subtitle">{{ 'settings.permissions.projects' | t }}</h4>
+        @if (permissions().projects.length === 0) {
+          <p class="fe-sub">{{ 'settings.permissions.projectsEmpty' | t }}</p>
+        } @else {
+          <ul class="chips">
+            @for (projectId of permissions().projects; track projectId) {
+              <li class="fe-badge fe-badge--neutral fe-mono" dir="ltr">{{ projectId }}</li>
+            }
+          </ul>
+        }
+
+        <h4 class="fe-eyebrow subtitle">{{ 'settings.permissions.granted' | t }}</h4>
+        <ul class="chips">
+          @for (permission of permissions().granted; track permission) {
+            <li class="fe-badge fe-mono" dir="ltr">{{ permission }}</li>
+          }
+        </ul>
+        <p class="fe-sub counts">
+          {{ 'settings.permissions.missing' | t }}: {{ permissions().missingCount }}
+        </p>
+      }
+    </section>
+  </div>
+
+  <!-- Service -->
+  <section class="fe-card" [attr.aria-labelledby]="'settings-liveness-title'">
+    <h3 id="settings-liveness-title">{{ 'settings.liveness.title' | t }}</h3>
+    <fe-async-state
+      [loading]="liveness.loading() && !liveness.value()"
+      [error]="liveness.error()"
+      [hasValue]="!!liveness.value()"
+      [loadingLabel]="'state.loading' | t"
+      [emptyTitle]="'state.empty' | t"
+      [emptyBody]="'state.empty' | t"
+      [errorTitle]="'state.error' | t"
+      [errorBody]="'state.errorHint' | t"
+      [requestId]="errorRequestId(liveness.error())"
+      [requestIdLabel]="'state.requestId' | t"
+      [retryLabel]="'state.retry' | t"
+      (retry)="retry()"
+    />
+    <dl class="facts facts--wide">
+      <div>
+        <dt class="fe-eyebrow">{{ 'settings.liveness.status' | t }}</dt>
+        <dd>
+          <fe-status-chip [tone]="livenessTone()">{{ liveness.value()?.status ?? '—' }}</fe-status-chip>
+        </dd>
+      </div>
+      <div>
+        <dt class="fe-eyebrow">{{ 'settings.liveness.version' | t }}</dt>
+        <dd class="fe-mono" dir="ltr">{{ liveness.value()?.version ?? '—' }}</dd>
+      </div>
+      <div>
+        <dt class="fe-eyebrow">{{ 'settings.liveness.route' | t }}</dt>
+        <dd class="fe-mono" dir="ltr">GET /api/v1/status</dd>
+      </div>
+    </dl>
+  </section>
+
+  <!-- Queue and jobs -->
+  @if (canQueue()) {
+    <section class="fe-card" [attr.aria-labelledby]="'settings-queue-title'">
+      <h3 id="settings-queue-title">{{ 'settings.queue.title' | t }}</h3>
+      <fe-async-state
+        [loading]="queue.loading() && !queue.value()"
+        [error]="queue.error()"
+        [hasValue]="!!queue.value()"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'state.empty' | t"
+        [emptyBody]="'state.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="errorRequestId(queue.error())"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="retry()"
+      />
+      <dl class="facts facts--wide">
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.queue.dueNow' | t }}</dt>
+          <dd class="fe-num">{{ queueFacts().dueNow }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.queue.oldestPending' | t }}</dt>
+          <dd class="fe-num">{{ queueFacts().oldestPending }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.queue.attempts' | t }}</dt>
+          <dd class="fe-num">{{ queueFacts().attempts }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.queue.failures' | t }}</dt>
+          <dd class="fe-num">{{ queueFacts().failures }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.queue.deadLetters' | t }}</dt>
+          <dd class="fe-num">{{ queueFacts().deadLetters }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.queue.failureRate' | t }}</dt>
+          <dd class="fe-num">
+            @if (queueFacts().failureRate === null) {
+              <span class="fe-sub">{{ 'settings.queue.failureRateUnknown' | t }}</span>
+            } @else {
+              {{ queueFacts().failureRate }}
+            }
+          </dd>
+        </div>
+      </dl>
+
+      @if (queueFacts().hasOutboxStates) {
+        <h4 class="fe-eyebrow subtitle">{{ 'settings.queue.stateCounts' | t }}</h4>
+        <ul class="chips">
+          @for (row of queueFacts().outboxStates; track $index) {
+            <li class="fe-badge fe-badge--neutral">
+              <span class="fe-mono" dir="ltr">{{ text(row['state']) }}</span>
+              <span class="fe-num">{{ count(row['count']) }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+
+    <!-- Realtime -->
+    <section class="fe-card" [attr.aria-labelledby]="'settings-stream-title'">
+      <h3 id="settings-stream-title">{{ 'settings.stream.title' | t }}</h3>
+      <fe-async-state
+        [loading]="realtimeHealth.loading() && !realtimeHealth.value()"
+        [error]="realtimeHealth.error()"
+        [hasValue]="!!realtimeHealth.value()"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'state.empty' | t"
+        [emptyBody]="'state.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="retry()"
+      />
+      <dl class="facts facts--wide">
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.stream.unread' | t }}</dt>
+          <dd class="fe-num">{{ streamFacts().unread }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.stream.subscribers' | t }}</dt>
+          <dd class="fe-num">{{ streamFacts().subscribers }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.stream.connections' | t }}</dt>
+          <dd class="fe-num">{{ streamFacts().connections }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.stream.resyncs' | t }}</dt>
+          <dd class="fe-num">{{ streamFacts().resyncs }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.stream.multiInstance' | t }}</dt>
+          <dd>
+            <fe-status-chip [tone]="streamFacts().multiInstance === true ? 'human' : 'neutral'">
+              {{
+                (streamFacts().multiInstance === true
+                  ? 'settings.stream.enabled'
+                  : 'settings.stream.disabled'
+                ) | t
+              }}
+            </fe-status-chip>
+          </dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'shell.realtime.status' | t }}</dt>
+          <dd class="fe-mono" dir="ltr">{{ streamFacts().serverTime }}</dd>
+        </div>
+      </dl>
+    </section>
+  }
+
+  <!-- Connectors -->
+  @if (canConnectors()) {
+    <section class="fe-card" [attr.aria-labelledby]="'settings-connectors-title'">
+      <h3 id="settings-connectors-title">{{ 'settings.connectors.title' | t }}</h3>
+      <fe-async-state
+        [loading]="connectors.loading() && !connectors.value()"
+        [empty]="connectorRows().length === 0"
+        [error]="connectors.error()"
+        [hasValue]="!!connectors.value()"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'settings.connectors.empty' | t"
+        [emptyBody]="'state.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="retry()"
+      />
+      @if (connectorRows().length > 0) {
+        <table class="fe-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ 'settings.connectors.channel' | t }}</th>
+              <th scope="col">{{ 'settings.connectors.state' | t }}</th>
+              <th scope="col">{{ 'settings.connectors.attempts' | t }}</th>
+              <th scope="col">{{ 'settings.connectors.failures' | t }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of connectorRows(); track $index) {
+              <tr>
+                <td class="fe-mono" dir="ltr">{{ text(row['channel']) }}</td>
+                <td class="fe-mono" dir="ltr">{{ text(row['status']) }}</td>
+                <td class="fe-num">{{ count(row['attempts']) }}</td>
+                <td class="fe-num">{{ count(row['failures']) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+  }
+
+  <!-- Knowledge indexing -->
+  @if (canKnowledge()) {
+    <section class="fe-card" [attr.aria-labelledby]="'settings-knowledge-title'">
+      <h3 id="settings-knowledge-title">{{ 'settings.knowledge.title' | t }}</h3>
+      <h4 class="fe-eyebrow subtitle">{{ 'settings.knowledge.freshness' | t }}</h4>
+      <fe-async-state
+        [loading]="freshness.loading() && !freshness.value()"
+        [empty]="freshnessRows().length === 0"
+        [error]="freshness.error()"
+        [hasValue]="!!freshness.value()"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'state.empty' | t"
+        [emptyBody]="'state.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="retry()"
+      />
+      @if (freshnessRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of freshnessRows(); track $index) {
+            <li class="gap">
+              <span class="fe-mono" dir="ltr">{{ text(row['knowledgeBaseId'] ?? row['documentId']) }}</span>
+              <span class="fe-sub fe-num">
+                {{ text(row['chunks'] ?? row['chunkCount']) }}
+                @if (row['lastEmbeddedAt']) {
+                  · {{ format.dateTime(text(row['lastEmbeddedAt'])) }}
+                }
+              </span>
+            </li>
+          }
+        </ul>
+      }
+
+      <h4 class="fe-eyebrow subtitle">{{ 'settings.knowledge.gaps' | t }}</h4>
+      <fe-async-state
+        [loading]="gaps.loading() && !gaps.value()"
+        [empty]="gapRows().length === 0"
+        [error]="gaps.error()"
+        [hasValue]="!!gaps.value()"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'settings.knowledge.gapsEmpty' | t"
+        [emptyBody]="'state.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="retry()"
+      />
+      @if (gapRows().length > 0) {
+        <ul class="fe-list">
+          @for (gap of gapRows(); track $index) {
+            <li class="gap">
+              <span>{{ text(gap['question']) }}</span>
+              <span class="fe-sub">
+                {{ 'settings.knowledge.gapHits' | t }}: {{ count(gap['occurrences']) }}
+              </span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  <!-- Audit -->
+  @if (canAudit()) {
+    <section class="fe-card" [attr.aria-labelledby]="'settings-audit-title'">
+      <h3 id="settings-audit-title">{{ 'settings.audit.title' | t }}</h3>
+      <fe-async-state
+        [loading]="auditEvents.loading() && !auditEvents.value()"
+        [empty]="auditFacts().events.length === 0"
+        [error]="auditEvents.error()"
+        [hasValue]="!!auditEvents.value()"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'settings.audit.empty' | t"
+        [emptyBody]="'state.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="errorRequestId(auditEvents.error())"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="retry()"
+      />
+      <dl class="facts facts--wide">
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.audit.scope' | t }}</dt>
+          <dd class="fe-mono" dir="ltr">{{ auditFacts().scope ?? '—' }}</dd>
+        </div>
+        <div>
+          <dt class="fe-eyebrow">{{ 'settings.audit.since' | t }}</dt>
+          <dd class="fe-mono" dir="ltr">{{ auditFacts().since }}</dd>
+        </div>
+      </dl>
+      @if (auditFacts().events.length > 0) {
+        <table class="fe-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ 'settings.audit.action' | t }}</th>
+              <th scope="col">{{ 'settings.audit.actor' | t }}</th>
+              <th scope="col">{{ 'settings.audit.resource' | t }}</th>
+              <th scope="col">{{ 'settings.audit.when' | t }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (event of auditFacts().events; track $index) {
+              <tr>
+                <td class="fe-mono" dir="ltr">{{ text(event['action']) }}</td>
+                <td>{{ text(event['actorName'] ?? event['actorType']) }}</td>
+                <td class="fe-mono" dir="ltr">{{ text(event['resourceType']) }}</td>
+                <td class="fe-mono" dir="ltr">{{ format.dateTime(text(event['occurredAt'])) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+  }
+
+  <!-- Security -->
+  @if (canSecurity()) {
+    <section class="fe-card" [attr.aria-labelledby]="'settings-security-title'">
+      <h3 id="settings-security-title">{{ 'settings.security.title' | t }}</h3>
+      <fe-async-state
+        [loading]="auditSecurity.loading() && !auditSecurity.value()"
+        [empty]="securityDenials().length === 0"
+        [error]="auditSecurity.error()"
+        [hasValue]="!!auditSecurity.value()"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'settings.security.empty' | t"
+        [emptyBody]="'state.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="errorRequestId(auditSecurity.error())"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="retry()"
+      />
+      @if (securityDenials().length > 0) {
+        <table class="fe-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ 'settings.security.eventType' | t }}</th>
+              <th scope="col">{{ 'settings.security.reason' | t }}</th>
+              <th scope="col">{{ 'settings.security.principal' | t }}</th>
+              <th scope="col">{{ 'settings.security.correlation' | t }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (denial of securityDenials(); track $index) {
+              <tr>
+                <td class="fe-mono" dir="ltr">{{ text(denial['eventType']) }}</td>
+                <td class="fe-mono" dir="ltr">{{ text(denial['denyReason']) }}</td>
+                <td class="fe-mono" dir="ltr">{{ text(denial['principalName']) }}</td>
+                <td class="fe-mono" dir="ltr">{{ text(denial['correlationId']) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+  }
+</div>

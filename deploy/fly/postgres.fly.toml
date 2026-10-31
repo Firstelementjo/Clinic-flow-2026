@@ -1,0 +1,16 @@
+app = "firstelement-pg"
+primary_region = "ams"
+kill_signal = "SIGINT"
+kill_timeout = 30
+
+[build]
+  dockerfile = "postgres.Dockerfile"
+
+[env]
+  POSTGRES_USER = "firstelement"
+  POSTGRES_DB = "firstelement"
+  PGDATA = "/var/lib/postgresql/data/pgdata"
+
+[mounts]
+  source = "pgdata"
+  destination = "/var/lib/postgresql/data"

@@ -1,0 +1,123 @@
+<div class="invite-page">
+  <div class="invite-card">
+    <header class="invite-card__header">
+      <div class="brand-row">
+        <fe-icon name="admin" class="brand-icon"></fe-icon>
+        <span class="brand-name">Clinic Flow</span>
+      </div>
+      <h1 class="invite-card__title">Clinic Admin Onboarding</h1>
+      <p class="invite-card__subtitle">Complete your administrative account activation.</p>
+    </header>
+
+    <div class="invite-card__body">
+      <!-- Validating State -->
+      @if (validating()) {
+        <div class="state-container">
+          <fe-icon name="admin" class="fe-spin state-icon"></fe-icon>
+          <p class="state-text">Validating invitation token...</p>
+        </div>
+      }
+
+      <!-- Error State -->
+      @else if (error() && !success()) {
+        <div class="alert-box alert-box--danger">
+          <fe-icon name="warning" class="alert-icon"></fe-icon>
+          <div class="alert-content">
+            <span class="alert-title">Invitation Error</span>
+            <p class="alert-desc">{{ error() }}</p>
+          </div>
+        </div>
+
+        <div class="action-footer">
+          <a routerLink="/login" class="btn btn--outline">Go to Sign In</a>
+        </div>
+      }
+
+      <!-- Success State -->
+      @else if (success()) {
+        <div class="state-container state-container--success">
+          <fe-icon name="admin" class="state-icon state-icon--success"></fe-icon>
+          <h2 class="state-title">Account Activated!</h2>
+          <p class="state-text">
+            Your clinic administrator credentials have been securely established. You may now sign in to your Clinic Flow workspace.
+          </p>
+        </div>
+
+        <div class="action-footer">
+          <button type="button" class="btn btn--primary btn--full" (click)="goToLogin()">
+            Sign In to Clinic Flow
+          </button>
+        </div>
+      }
+
+      <!-- Form State -->
+      @else if (inviteDetails()) {
+        <div class="tenant-summary">
+          <div class="summary-item">
+            <span class="summary-label">Clinic:</span>
+            <span class="summary-value">{{ inviteDetails()?.clinicName }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Administrator:</span>
+            <span class="summary-value">{{ inviteDetails()?.fullName }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Email:</span>
+            <span class="summary-value">{{ inviteDetails()?.email }}</span>
+          </div>
+        </div>
+
+        <div class="security-callout">
+          <fe-icon name="admin" class="callout-icon"></fe-icon>
+          <span>
+            Set your secret password. For your security, this link is single-use and will expire after activation.
+          </span>
+        </div>
+
+        <form (ngSubmit)="submitAccept()" class="password-form">
+          <div class="form-group">
+            <label class="form-label" for="newPassword">New Password</label>
+            <input
+              id="newPassword"
+              type="password"
+              class="form-input"
+              placeholder="Minimum 8 characters"
+              [(ngModel)]="password"
+              name="password"
+              required
+              minlength="8"
+              autocomplete="new-password"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="confirmPassword">Confirm Password</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              class="form-input"
+              placeholder="Re-enter your password"
+              [(ngModel)]="confirmPassword"
+              name="confirmPassword"
+              required
+              autocomplete="new-password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn--primary btn--full"
+            [disabled]="submitting() || !password || password !== confirmPassword"
+          >
+            @if (submitting()) {
+              <fe-icon name="admin" class="fe-spin"></fe-icon>
+              <span>Activating Account...</span>
+            } @else {
+              <span>Activate Administrator Account</span>
+            }
+          </button>
+        </form>
+      }
+    </div>
+  </div>
+</div>

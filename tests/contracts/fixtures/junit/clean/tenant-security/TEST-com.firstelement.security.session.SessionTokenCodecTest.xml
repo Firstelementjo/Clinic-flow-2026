@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.firstelement.security.session.SessionTokenCodecTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-04T00:00:00.000Z" hostname="fixture" time="0.090">
+  <properties/>
+  <testcase name="tokens are 32 random bytes, base64url-encoded, and never repeat" classname="com.firstelement.security.session.SessionTokenCodecTest" time="0.020"/>
+  <testcase name="the stored hash never contains the raw token" classname="com.firstelement.security.session.SessionTokenCodecTest" time="0.018"/>
+</testsuite>

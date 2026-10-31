@@ -1,0 +1,582 @@
+.tl-greeting-row {
+  margin-top: 2px;
+  margin-bottom: 10px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: var(--surf);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+.tl-greeting-row::before {
+  display: none;
+}
+
+.tl-greeting {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.tl-greeting-bold {
+  font-weight: 700;
+  color: #0f766e;
+}
+
+:host-context([data-theme='dark']) .tl-greeting-bold {
+  color: #2dd4bf;
+}
+
+/* Performance Header Bar */
+.tl-performance-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  margin-bottom: 10px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--rb-glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--rb-card-border);
+  box-shadow: var(--shadow-soft);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tl-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+
+.tl-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tl-date-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--mute);
+}
+
+.tl-date-input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surf);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.tl-date-input:focus {
+  border-color: var(--tl-teal);
+  outline: 2px solid var(--tl-teal);
+  outline-offset: 1px;
+}
+
+/* The window the figures were computed for. A number with no stated window
+   is a number the reader cannot check, so the window is on the screen. */
+.tl-window-caption {
+  margin: -8px 0 16px 0;
+  font-size: 12.5px;
+  color: var(--mute-2);
+}
+
+.tl-window-caption .is-error {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+/* The correlation id, so an operator can quote it to whoever reads the log. */
+.tl-request-id {
+  display: inline-block;
+  margin-inline-start: 8px;
+  font-family: var(--fe-font-mono);
+  font-size: 11.5px;
+  color: var(--mute-2);
+}
+
+/* Some figures are withheld because the caller may not read them. The notice
+   says that the server decided, so the screen does not read as broken. */
+.tl-withheld {
+  margin: 0 0 12px 0;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--pri);
+  border-radius: 4px;
+  background: var(--pri-soft);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+/* 2-Column Dashboard Layout */
+.tl-dashboard-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .tl-dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Left Column: 6 Metrics Grid (3x2) */
+.tl-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 820px) {
+  .tl-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .tl-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Revenue Chart Card */
+.tl-chart-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--rb-card-bg);
+  border-radius: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--rb-card-border);
+  box-shadow: var(--rb-card-shadow);
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease;
+}
+
+.tl-chart-card::before {
+  display: none;
+}
+
+.tl-chart-card:hover {
+  border-color: var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+.tl-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tl-chart-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tl-chart-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+
+.tl-chart-hover-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: var(--pri-soft);
+  border: 1px solid rgba(44, 181, 166, 0.35);
+  font-size: 12px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.tl-hover-point-label {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.tl-hover-point-val {
+  color: var(--pri-hover);
+  font-weight: 700;
+}
+
+.tl-btn-year {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 6px;
+  background: var(--surf2);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tl-btn-year:hover {
+  background: var(--line);
+}
+
+.tl-btn-year:focus-visible {
+  outline: 2px solid var(--tl-teal);
+  outline-offset: 2px;
+}
+
+.tl-period-caret {
+  width: 12px;
+  height: 12px;
+}
+
+/* The period menu. It is a real listbox of spans, not a decorative label. */
+.tl-period-picker {
+  position: relative;
+}
+
+.tl-period-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-end: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 120px;
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow-card);
+}
+
+.tl-period-option {
+  display: block;
+  width: 100%;
+  text-align: start;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tl-period-option:hover {
+  background: var(--surf2);
+}
+
+.tl-period-option.is-active {
+  background: var(--pri-soft);
+  color: var(--tl-teal);
+}
+
+.tl-period-option:focus-visible {
+  outline: 2px solid var(--tl-teal);
+  outline-offset: -2px;
+}
+
+.tl-chart-empty {
+  margin: 0;
+  padding-top: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.tl-chart-content {
+  width: 100%;
+}
+
+.tl-chart-wrapper {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.tl-chart-y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 180px;
+  min-width: 44px;
+  text-align: end;
+  padding-block: 18px 4px;
+  user-select: none;
+}
+
+.tl-chart-scale-val {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mute);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-chart-plot-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tl-chart-svg {
+  width: 100%;
+  height: 180px;
+  overflow: visible;
+  display: block;
+}
+
+.tl-chart-grid {
+  stroke: var(--line);
+  stroke-dasharray: 4 4;
+}
+
+.tl-chart-grid-base {
+  stroke: var(--line);
+}
+
+.tl-chart-line {
+  stroke: var(--pri);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 6px rgba(44, 181, 166, 0.25));
+}
+
+.tl-chart-hover-line {
+  stroke: var(--pri);
+  stroke-opacity: 0.45;
+}
+
+.tl-chart-dot {
+  fill: var(--surf);
+  stroke: var(--pri);
+  stroke-width: 2.5px;
+  cursor: pointer;
+  transition: r 0.15s ease, fill 0.15s ease, stroke-width 0.15s ease;
+}
+
+.tl-chart-dot.is-hovered {
+  fill: var(--pri);
+  stroke: var(--surf);
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 6px rgba(44, 181, 166, 0.65));
+}
+
+.tl-chart-x-axis {
+  display: grid;
+  width: 100%;
+  margin-top: 8px;
+  padding-inline: 0;
+}
+
+.tl-chart-x-tick {
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--mute);
+  cursor: pointer;
+  padding: 3px 0;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.tl-chart-x-tick:hover,
+.tl-chart-x-tick.is-active {
+  color: var(--pri-hover);
+  font-weight: 700;
+  background: var(--pri-soft);
+}
+
+/* Right Side Column */
+.tl-layout-side {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.tl-side-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--rb-card-bg);
+  border-radius: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--rb-card-border);
+  box-shadow: var(--shadow-soft);
+}
+
+.tl-side-card::before {
+  display: none;
+}
+
+.tl-side-card:hover {
+  border-color: var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+.tl-card-header-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 10px 0;
+}
+
+/* Age Demographics */
+.tl-age-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding: 10px 0 20px;
+  text-align: center;
+}
+
+.tl-age-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-age-icons-wrap {
+  height: 60px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.tl-age-art {
+  width: 44px;
+  height: 52px;
+}
+
+/* The age bands are drawn as two people each. The fills carry the same hues
+   the port used, as tokens, so the artwork follows the theme. */
+.tl-age-1 {
+  fill: var(--accent-red-400);
+}
+
+.tl-age-2 {
+  fill: var(--accent-blue-400);
+}
+
+.tl-age-3 {
+  fill: var(--accent-red-500);
+}
+
+.tl-age-4 {
+  fill: var(--accent-blue);
+}
+
+.tl-age-5 {
+  fill: var(--accent-red);
+}
+
+.tl-age-6 {
+  fill: var(--accent-blue-700);
+}
+
+.tl-age-tag {
+  font-size: 12px;
+  color: var(--mute);
+  font-weight: 600;
+}
+
+.tl-age-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Upcoming Appointments */
+.tl-no-data {
+  padding: 36px 0;
+  text-align: center;
+  color: var(--mute-2);
+  font-size: 13.5px;
+}
+
+.tl-upcoming-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tl-upcoming-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surf2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tl-upcoming-row:hover {
+  background: var(--pri-soft);
+  border-color: var(--tl-teal);
+  transform: translateX(-2px);
+}
+
+[dir="rtl"] .tl-upcoming-row:hover {
+  transform: translateX(2px);
+}
+
+.tl-upcoming-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tl-apt-patient {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.tl-apt-service {
+  font-size: 11.5px;
+  color: var(--mute);
+}
+
+.tl-upcoming-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.tl-apt-time {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tl-teal);
+}
+
+.tl-apt-doc {
+  font-size: 11px;
+  color: var(--mute-2);
+}
+

@@ -1,0 +1,33 @@
+app = "firstelement-backend"
+primary_region = "ams"
+kill_signal = "SIGINT"
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  LOG_LEVEL = "info"
+  API_PORT = "4000"
+  ENABLE_MOCK_CONNECTOR = "false"
+  QUEUE_DRIVER = "redis"
+  STORAGE_DRIVER = "local"
+  STORAGE_LOCAL_PATH = "/app/storage"
+
+[deploy]
+  release_command = "yarn workspace @firstelement/database prisma:deploy"
+
+[mounts]
+  source = "storage"
+  destination = "/app/storage"
+
+[[services]]
+  internal_port = 4000
+  protocol = "tcp"
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+  [[services.ports]]
+    handlers = ["tls"]
+    port = 443

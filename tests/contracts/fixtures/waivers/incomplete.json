@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture: a waiver with no ticket. Must FAIL. Without a tracker item there is nothing to close, so the waiver would simply be re-dated forever.",
+  "entries": [
+    {
+      "suite": "com.firstelement.security.TenantContextTest",
+      "test": "the project set is a defensive copy and cannot be mutated after construction",
+      "reason": "Missing ticket and missing expiry on purpose.",
+      "expiresOn": "2026-11-01"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+# ==============================================================================
+# Clinic Flow Backend - Production Multi-Stage Dockerfile
+# Java 21 LTS + Spring Boot 3 + Alpine Linux
+# Engineered for Portability (x86_64 & ARM64), Fast Startup & Low Footprint
+# ==============================================================================
+
+# Stage 1: Build Executable Fat Jar with Gradle
+FROM eclipse-temurin:21-jdk-alpine AS builder
+WORKDIR /workspace
+
+# Install bash and curl for Gradle wrapper if needed
+RUN apk add --no-cache bash
+
+# Copy Gradle wrapper and configuration first for dependency layer caching
+COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY gradle ./gradle
+
+# Download dependencies (cache layer)
+RUN ./gradlew dependencies --no-daemon || true
+
+# Copy all backend source modules
+COPY backend ./backend
+
+# Build the executable BootJar skipping test execution during container build
+RUN ./gradlew :backend:app-bootstrap:bootJar -x test --no-daemon
+
+# Stage 2: Minimalist, Hardened Production JRE Runtime
+FROM eclipse-temurin:21-jre-alpine AS runtime
+
+# Create an unprivileged user for security compliance (Principle of Least Privilege)
+RUN addgroup -S clinicflow && adduser -S clinicflow -G clinicflow
+
+WORKDIR /app
+
+# Copy the produced BootJar
+COPY --from=builder /workspace/backend/app-bootstrap/build/libs/app-bootstrap-*.jar /app/clinic-flow-api.jar
+
+# Adjust ownership
+RUN chown -R clinicflow:clinicflow /app
+
+USER clinicflow
+
+# Standard containerized JVM flags for optimal container memory & GC ergonomics
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -Djava.security.egd=file:/dev/./urandom"
+
+# Ports: 4000 (Tenant/Clinic API), 4101 (Management/Actuator/Health)
+EXPOSE 4000 4101
+
+# Readiness probe for zero-downtime upgrades and health checks
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:4101/actuator/health/readiness || exit 1
+
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/clinic-flow-api.jar"]

@@ -1,0 +1,5 @@
+{
+  "_fixtureNote": "An empty request matrix, so compare.mjs runs offline. PN-08's verdict comes from CHK-7, which is computed from --finance alone; nothing in the PN-08 proof reads CHK-1..CHK-6.",
+  "forbiddenStrings": [],
+  "requests": []
+}

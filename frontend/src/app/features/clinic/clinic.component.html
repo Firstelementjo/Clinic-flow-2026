@@ -1,0 +1,268 @@
+<!--
+  The clinic screen.
+
+  Two structural decisions, both visible in this template:
+
+  1. **A metric row renders its count AND the ids behind it.** The disclosure control is
+     not a debug affordance — it is the ADR-0013 requirement ("every metric must drill to
+     source rows") made operable. A number nobody can open is exactly the defect that phase
+     was raised about, and the legacy dashboard's answer to it was a floor.
+
+  2. **Direction is never set here.** The layout uses CSS logical properties and the page
+     inherits `dir` from the document, so Arabic and English are the same DOM with different
+     strings. The two `dir="ltr"` islands below are the exception and they are both code:
+     an ISO-8601 instant and a UUID are LTR in every language (docs/migration-AGENT.md).
+-->
+<div class="tl-page" data-testid="clinic">
+  <div class="tl-breadcrumbs">
+    <a routerLink="/app/dashboard">{{ 'shell.nav.dashboard' | t }}</a>
+    <span class="sep">&rsaquo;</span>
+    <span class="active">{{ 'clinic.title' | t }}</span>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- schedule                                                             -->
+  <!-- ==================================================================== -->
+  <section class="tl-card" [attr.aria-labelledby]="'clinic-schedule-title'">
+    <h3 class="fe-card__title" id="clinic-schedule-title">{{ 'clinic.schedule.title' | t }}</h3>
+
+    @if (schedule.value(); as rows) {
+      <fe-async-state
+        [loading]="schedule.loading()"
+        [empty]="rows.length === 0"
+        [error]="schedule.error()"
+        (retry)="reload()"
+        [loadingLabel]="'clinic.schedule.title' | t"
+        [emptyTitle]="'clinic.schedule.empty.title' | t"
+        [emptyBody]="'clinic.schedule.empty.body' | t"
+        [errorTitle]="'clinic.error.title' | t"
+        [errorBody]="'clinic.error.body' | t"
+        [retryLabel]="'clinic.retry' | t"
+      />
+
+      @if (rows.length > 0) {
+        <div class="tl-table-wrap">
+          <table class="tl-table" data-testid="clinic-schedule">
+            <caption class="visually-hidden">{{ 'clinic.schedule.title' | t }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ 'clinic.schedule.patient' | t }}</th>
+                <th scope="col">{{ 'clinic.schedule.clinician' | t }}</th>
+                <th scope="col">{{ 'clinic.analytics.window' | t }}</th>
+                <th scope="col">{{ 'clinic.schedule.duration' | t }}</th>
+                <th scope="col">{{ 'clinic.procedures.title' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows; track row.id) {
+                <tr>
+                  <th scope="row">
+                    {{ row.patientName }}
+                    @if (row.isAiProposed) {
+                      <fe-status-chip class="ai-flag" tone="ai">
+                        {{ 'clinic.schedule.aiProposed' | t }}
+                      </fe-status-chip>
+                    }
+                  </th>
+                  <td>{{ row.doctorName ?? '—' }}</td>
+                  <td class="fe-mono" dir="ltr">{{ row.appointmentDate }}</td>
+                  <td>{{ row.durationMinutes }}</td>
+                  <td>{{ row.service ?? '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- roster and catalogue                                                 -->
+  <!-- ==================================================================== -->
+  <div class="two-up">
+    <section class="tl-card" [attr.aria-labelledby]="'clinic-doctors-title'">
+      <h3 class="fe-card__title" id="clinic-doctors-title">{{ 'clinic.doctors.title' | t }}</h3>
+
+      <fe-async-state
+        [loading]="doctors.loading()"
+        [empty]="(doctors.value() ?? []).length === 0"
+        [error]="doctors.error()"
+        (retry)="reload()"
+        [loadingLabel]="'clinic.doctors.title' | t"
+        [emptyTitle]="'clinic.doctors.empty.title' | t"
+        [emptyBody]="'clinic.doctors.empty.body' | t"
+        [errorTitle]="'clinic.error.title' | t"
+        [errorBody]="'clinic.error.body' | t"
+        [retryLabel]="'clinic.retry' | t"
+      />
+
+      <ul class="roster" data-testid="clinic-doctors">
+        @for (doctor of doctors.value() ?? []; track doctor.id) {
+          <li class="roster__item">
+            <div class="roster__head">
+              <strong>{{ doctor.name }}</strong>
+              <span class="fe-sub">{{ doctor.specialty }}</span>
+              @if (doctor.isActive === false) {
+                <fe-status-chip tone="neutral">{{ 'clinic.doctors.inactive' | t }}</fe-status-chip>
+              }
+            </div>
+            <div class="roster__meta">
+              <span>
+                {{ 'clinic.doctors.workingDays' | t }}:
+                @for (day of doctor.workingDays ?? []; track day) {
+                  <span class="day">{{ 'clinic.day.' + day | t }}</span>
+                }
+              </span>
+              <span class="fe-mono" dir="ltr">
+                {{ doctor.startHour }}–{{ doctor.endHour }} /
+                {{ doctor.slotDuration }}
+              </span>
+            </div>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="tl-card" [attr.aria-labelledby]="'clinic-procedures-title'">
+      <h3 class="fe-card__title" id="clinic-procedures-title">
+        {{ 'clinic.procedures.title' | t }}
+      </h3>
+
+      <fe-async-state
+        [loading]="procedures.loading()"
+        [empty]="(procedures.value() ?? []).length === 0"
+        [error]="procedures.error()"
+        (retry)="reload()"
+        [loadingLabel]="'clinic.procedures.title' | t"
+        [emptyTitle]="'clinic.procedures.empty.title' | t"
+        [emptyBody]="'clinic.procedures.empty.body' | t"
+        [errorTitle]="'clinic.error.title' | t"
+        [errorBody]="'clinic.error.body' | t"
+        [retryLabel]="'clinic.retry' | t"
+      />
+
+      <ul class="roster" data-testid="clinic-procedures">
+        @for (procedure of procedures.value() ?? []; track procedure.id) {
+          <li class="roster__item">
+            <div class="roster__head">
+              <strong>{{ procedure.name }}</strong>
+              <span class="fe-sub">{{ procedure.specialty }}</span>
+            </div>
+            <div class="roster__meta">
+              <span>
+                {{ 'clinic.procedures.duration' | t }}: {{ procedure.durationMinutes }}
+              </span>
+              <span>
+                @if (procedure.price === undefined || procedure.price === null) {
+                  <span class="unset" [title]="'clinic.procedures.priceUnsetHint' | t">
+                    {{ 'clinic.procedures.price' | t }}: {{ 'clinic.procedures.priceUnset' | t }}
+                  </span>
+                } @else {
+                  <span>{{ 'clinic.procedures.price' | t }}: {{ procedure.price }}</span>
+                }
+              </span>
+            </div>
+          </li>
+        }
+      </ul>
+    </section>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- analytics                                                            -->
+  <!-- ==================================================================== -->
+  <section class="tl-card" [attr.aria-labelledby]="'clinic-analytics-title'">
+    <h3 class="fe-card__title" id="clinic-analytics-title">
+      {{ 'clinic.analytics.title' | t }}
+    </h3>
+
+    @if (!canReadAnalytics()) {
+      <p class="fe-sub" data-testid="clinic-analytics-denied">
+        {{ 'clinic.analytics.denied' | t }}
+      </p>
+    } @else {
+      <fe-async-state
+        [loading]="analytics.loading()"
+        [empty]="(analytics.value()?.funnelByStatus ?? []).length === 0"
+        [error]="analytics.error()"
+        (retry)="reload()"
+        [loadingLabel]="'clinic.analytics.title' | t"
+        [emptyTitle]="'clinic.analytics.empty.title' | t"
+        [emptyBody]="'clinic.analytics.empty.body' | t"
+        [errorTitle]="'clinic.error.title' | t"
+        [errorBody]="'clinic.error.body' | t"
+        [retryLabel]="'clinic.retry' | t"
+      />
+
+      @for (group of metricGroups; track group) {
+        @if (rows(group).length > 0) {
+          <div class="metric" [attr.data-testid]="'clinic-metric-' + group">
+            <h4 class="fe-eyebrow">
+              @switch (group) {
+                @case ('funnelByStatus') { {{ 'clinic.analytics.funnel' | t }} }
+                @case ('demandByProcedure') { {{ 'clinic.analytics.demand' | t }} }
+                @default { {{ 'clinic.analytics.workload' | t }} }
+              }
+            </h4>
+
+            <div class="tl-table-wrap">
+              <table class="tl-table">
+                <thead>
+                  <tr>
+                    <th scope="col">{{ 'clinic.procedures.title' | t }}</th>
+                    <th scope="col">{{ 'clinic.analytics.appointments' | t }}</th>
+                    <th scope="col">{{ 'clinic.analytics.minutes' | t }}</th>
+                    <th scope="col">{{ 'clinic.analytics.sourceRows' | t }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of rows(group); track row.key) {
+                    <tr>
+                      <th scope="row">
+                        @if (group === 'funnelByStatus') {
+                          <fe-status-chip tone="neutral">{{ row.label }}</fe-status-chip>
+                        } @else {
+                          {{ row.label }}
+                        }
+                      </th>
+                      <td class="count">{{ row.count }}</td>
+                      <td>{{ row.minutes === null ? '—' : row.minutes }}</td>
+                      <td>
+                        @if (row.count === 0) {
+                          <span class="unset">{{ 'clinic.analytics.zeroRow' | t }}</span>
+                        } @else {
+                          <button
+                            type="button"
+                            class="tl-btn tl-btn-outline tl-btn-sm"
+                            [attr.aria-expanded]="isExpanded(row.key)"
+                            [attr.aria-controls]="'rows-' + row.key"
+                            (click)="toggle(row.key)"
+                          >
+                            {{ row.sourceRowIds.length }}
+                            @if (isSampled(row)) {
+                              <span class="fe-sub">+</span>
+                            }
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                    @if (isExpanded(row.key)) {
+                      <tr class="source" [id]="'rows-' + row.key">
+                        <td colspan="4" dir="ltr" class="fe-mono source-ids">
+                          @for (id of row.sourceRowIds; track id) {
+                            <span class="source-id">{{ id }}</span>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      }
+    }
+  </section>
+</div>

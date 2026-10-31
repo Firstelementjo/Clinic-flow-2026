@@ -1,0 +1,218 @@
+/*
+ * People: a scannable list beside a full record.
+ *
+ * The list column is fixed and the detail column takes the rest, because a list is
+ * scanned by position and a record is read as prose. Every directional value is
+ * logical; there is no rule here that mentions a side.
+ */
+
+.people {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: var(--fe-space-4);
+  align-items: start;
+}
+
+.pane {
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius);
+  padding: var(--fe-space-4);
+  min-inline-size: 0;
+}
+
+.pane--list {
+  max-block-size: calc(100dvh - 12rem);
+  overflow-y: auto;
+}
+
+.pane__title {
+  font-size: var(--fe-text-sm);
+  color: var(--mute);
+  margin-block-end: var(--fe-space-3);
+}
+
+.people-list {
+  list-style: none;
+  margin: var(--fe-space-3) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.person {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-1);
+  inline-size: 100%;
+  text-align: start;
+  padding: var(--fe-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--fe-radius-sm);
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  min-block-size: var(--fe-control-height);
+}
+
+.person:hover {
+  background: var(--surf2);
+}
+
+/* Selected: colour, a start-edge rule, and `aria-current` in the template. */
+.person--active {
+  background: var(--pri-soft);
+  border-color: var(--pri);
+  box-shadow: inset 3px 0 0 var(--pri);
+}
+
+.person__name {
+  font-size: var(--fe-text-sm);
+  font-weight: 600;
+}
+
+.person__contact {
+  font-size: var(--fe-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.person__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fe-space-2);
+  font-size: var(--fe-text-xs);
+}
+
+.person__tags {
+  display: flex;
+  gap: var(--fe-space-1);
+  flex-wrap: wrap;
+}
+
+/* --- detail -------------------------------------------------------------- */
+
+.detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--fe-space-3);
+  flex-wrap: wrap;
+  padding-block-end: var(--fe-space-3);
+  border-block-end: 1px solid var(--line);
+  margin-block-end: var(--fe-space-4);
+}
+
+.detail__name {
+  font-size: var(--fe-text-xl);
+  font-weight: 600;
+}
+
+.detail__actions {
+  display: flex;
+  gap: var(--fe-space-2);
+  flex-wrap: wrap;
+}
+
+.block {
+  margin-block-end: var(--fe-space-5);
+}
+
+.block__title {
+  font-size: var(--fe-text-base);
+  font-weight: 600;
+  color: var(--ink);
+  margin-block-end: var(--fe-space-2);
+}
+
+.block__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-3);
+  margin-block-start: var(--fe-space-3);
+}
+
+.block__actions {
+  display: flex;
+  gap: var(--fe-space-2);
+  flex-wrap: wrap;
+}
+
+.chips {
+  list-style: none;
+  margin: var(--fe-space-2) 0;
+  padding: 0;
+  display: flex;
+  gap: var(--fe-space-1);
+  flex-wrap: wrap;
+}
+
+.fe-link {
+  color: var(--pri);
+  text-decoration: none;
+  display: inline-flex;
+  gap: var(--fe-space-2);
+  align-items: baseline;
+  min-block-size: var(--fe-control-height);
+}
+
+.fe-link:hover {
+  text-decoration: underline;
+}
+
+/* --- notes --------------------------------------------------------------- */
+
+.notes {
+  list-style: none;
+  margin: var(--fe-space-3) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-3);
+}
+
+.note {
+  padding: var(--fe-space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-sm);
+  background: var(--surf2);
+}
+
+/*
+ * An internal note gets a start-edge marker. It is a distinct kind of record from
+ * a customer-visible message, and the marker is what keeps the difference legible
+ * while scrolling — a background colour alone disappears against the inset surface.
+ */
+.note {
+  border-inline-start: 3px solid var(--warn);
+}
+
+.note__body {
+  font-size: var(--fe-text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fe-space-2);
+  margin-block-start: var(--fe-space-2);
+}
+
+/* --- responsive ---------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .people {
+    grid-template-columns: 1fr;
+  }
+
+  .pane--list {
+    max-block-size: none;
+  }
+}

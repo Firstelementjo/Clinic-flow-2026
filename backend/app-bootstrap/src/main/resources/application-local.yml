@@ -1,0 +1,4 @@
+# Local development defaults: plain (non-JSON) console logs, all profiles
+# inherit these. Keep sensitive values out; use environment variables.
+firstelement:
+  environment: LOCAL

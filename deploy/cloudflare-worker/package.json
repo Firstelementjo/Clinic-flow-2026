@@ -1,0 +1,10 @@
+{
+  "name": "firstelement-cloudflare-worker",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "wrangler": "^4.0.0",
+    "typescript": "^5.6.3",
+    "@cloudflare/workers-types": "^4.20250601.0"
+  }
+}

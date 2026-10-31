@@ -1,0 +1,6 @@
+{
+  "_fixtureNote": "Minimal capture used only so the REAL comparator (compare.mjs) will run offline. PN-08 reads CHK-7, which compare.mjs derives entirely from --finance; the HTTP captures are empty on purpose and are NOT a claim about either runtime.",
+  "kind": "shadow-read-capture",
+  "side": "legacy",
+  "results": []
+}

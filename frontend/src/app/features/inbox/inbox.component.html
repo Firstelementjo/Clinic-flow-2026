@@ -1,0 +1,892 @@
+<div class="fe-page" data-testid="inbox">
+  <fe-page-header [title]="'inbox.title'" [description]="'inbox.description'">
+    <button type="button" class="fe-btn" (click)="loadList(); loadCounts(); loadUnassigned()">
+      {{ 'inbox.refresh' | t }}
+    </button>
+  </fe-page-header>
+
+  @if (realtime.isStale()) {
+    <!--
+      Politely announced, not an alert: a dropped stream is a caveat about the data
+      on screen, not a failure the operator caused or can fix by acting.
+    -->
+    <div class="fe-alert fe-alert--info" role="status">
+      {{ 'shell.realtime.stale' | t }}
+    </div>
+  }
+
+  <!--
+    Three panes on a wide screen, one at a time on a narrow one.
+
+    The pane switcher is a real `tablist`: arrow-key navigation, `aria-selected`,
+    and the panel is a `tabpanel`. A row of buttons that only looks like tabs
+    leaves a keyboard user with no way to know which pane is showing.
+  -->
+  <div class="inbox-panes" [attr.data-narrow]="narrow()">
+    <div class="pane-switcher" role="tablist" [attr.aria-label]="'inbox.list.label' | t">
+      <button
+        type="button"
+        role="tab"
+        class="pane-switcher__tab"
+        [attr.aria-selected]="pane() === 'list'"
+        [class.pane-switcher__tab--active]="pane() === 'list'"
+        (click)="pane.set('list')"
+      >
+        {{ 'inbox.list.label' | t }}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="pane-switcher__tab"
+        [attr.aria-selected]="pane() === 'thread'"
+        [class.pane-switcher__tab--active]="pane() === 'thread'"
+        [disabled]="!selectedId()"
+        (click)="pane.set('thread')"
+      >
+        {{ 'inbox.thread.label' | t }}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="pane-switcher__tab"
+        [attr.aria-selected]="pane() === 'customer'"
+        [class.pane-switcher__tab--active]="pane() === 'customer'"
+        [disabled]="!customer.value()"
+        (click)="pane.set('customer')"
+      >
+        {{ 'inbox.customer.label' | t }}
+      </button>
+    </div>
+
+    <div class="inbox">
+      <!-- ---------------------------------------------------------- list -->
+      <section
+        class="pane pane--list"
+        role="tabpanel"
+        [attr.aria-labelledby]="'inbox-list-heading'"
+        [attr.data-pane-active]="pane() === 'list'"
+      >
+        <h3 class="pane__title" id="inbox-list-heading">{{ 'inbox.list.label' | t }}</h3>
+
+        <!--
+          The unassigned queue, first and above the saved views.
+
+          A new conversation is in neither saved view, because `assigned-to-me`
+          requires the caller to be the assignee or the last human replier. So this
+          is where new work actually appears, and the hint says why it is separate
+          rather than leaving an operator to conclude the list is broken.
+        -->
+        <!--
+          The unassigned queue, first and above the saved views.
+
+          **Rendered only when the list is not already showing `unassigned`.**
+          `GET /api/v1/inbox/unassigned` and `GET /api/v1/conversations?filter=unassigned`
+          return the same set (ADR 0015), so on that tab this would be two renderings of
+          one question that can disagree with each other — the worst outcome for a work
+          queue, because the operator cannot tell which one to trust. `queueDuplicatesList`
+          decides it from the selected view rather than from a flag that can drift.
+        -->
+        @if (!queueDuplicatesList()) {
+        <section class="queue" [attr.aria-labelledby]="'inbox-queue-heading'">
+          <h4 class="queue__title" id="inbox-queue-heading">{{ 'inbox.queue.title' | t }}</h4>
+          <p class="fe-sub">{{ 'inbox.queue.hint' | t }}</p>
+
+          <fe-async-state
+            [loading]="unassigned.loading() && !unassigned.value()"
+            [empty]="unassignedKnown() && unassignedEntries().length === 0"
+            [error]="unassigned.error()"
+            [hasValue]="unassigned.value() !== null"
+            [loadingLabel]="'state.loading' | t"
+            [emptyTitle]="'inbox.queue.empty' | t"
+            [emptyBody]="'inbox.queue.emptyBody' | t"
+            [errorTitle]="'state.error' | t"
+            [errorBody]="'state.errorHint' | t"
+            [retryLabel]="'state.retry' | t"
+            (retry)="loadUnassigned()"
+          />
+
+          <ul class="queue__list">
+            @for (entry of unassignedEntries(); track entry.conversation?.id) {
+              <li>
+                <button
+                  type="button"
+                  class="queue__row"
+                  [class.queue__row--active]="entry.conversation?.id === selectedId()"
+                  [attr.data-conversation-id]="entry.conversation?.id"
+                  (click)="select(entry.conversation!.id!)"
+                >
+                  <span class="queue__head">
+                    <span class="fe-mono" dir="ltr">{{ entry.conversation?.ticketNumber ?? '—' }}</span>
+                    <span class="fe-sub">{{ channelLabel(entry.conversation?.channel) }}</span>
+                  </span>
+                  <span class="queue__reason fe-sub">
+                    {{ queueReasonLabel(entry.reason) }}
+                  </span>
+                  <span class="fe-sub fe-num">
+                    {{ 'inbox.queue.waiting' | t }}
+                    @if (entry.waitingSeconds; as seconds) {
+                      {{ format.duration(seconds) }}
+                    } @else {
+                      {{ '—' }}
+                    }
+                  </span>
+                </button>
+              </li>
+            }
+          </ul>
+        </section>
+        }
+
+        <!--
+          The search box is a server-side search: the term goes out as `search`, and
+          the server ANDs it with the selected view. Filtering only what is loaded
+          would show an operator a shorter list and call it a result.
+        -->
+        <div class="field">
+          <label class="field__label" for="fe-inbox-search">{{ 'inbox.list.search' | t }}</label>
+          <input
+            id="fe-inbox-search"
+            class="fe-input"
+            type="search"
+            [value]="search()"
+            (input)="search.set($any($event.target).value); loadList()"
+          />
+          <p class="fe-sub">{{ 'inbox.list.searchHint' | t }}</p>
+        </div>
+
+        <!--
+          A counts response the client cannot read.
+
+          The contract declares it a **closed object**: five named integers, all
+          `required`, no `additionalProperties`. So a key that is absent, or present but
+          not an integer, is not a legitimate server state — and rendering `0` for it
+          would state "there is nothing in this queue" on the one number on this screen
+          that must never be invented. The strip is withheld and the refusal is named,
+          rather than five confident zeroes over a queue that may be full.
+
+          An `alert` rather than a `status`, because an operator looking at the list needs
+          to be interrupted: the tabs they are about to click are not there.
+        -->
+        @if (!countsUsable()) {
+          <div class="fe-alert" role="alert">
+            {{ 'inbox.list.countsMalformed' | t }}
+            <span class="fe-mono" dir="ltr">{{ countsMalformed().join(', ') }}</span>
+          </div>
+        }
+
+        <!--
+          The saved views: five tabs, in the order `GET /api/v1/inbox/counts` published
+          them (ADR 0015), each carrying its own count.
+
+          A real `tablist` with roving focus and arrow-key traversal, because five tabs is
+          the point at which a row of buttons stops being reachable by keyboard. The count
+          is inside the tab's accessible name, so a screen reader announces
+          "Assigned to me, 3" rather than "Assigned to me" and then silence.
+
+          **Nothing is summed.** The five views overlap - `all-open` contains all of
+          `unassigned`, `assigned-to-me` and `assigned-to-others`, and `assigned-to-me`
+          includes threads the caller released - so a total computed from them would
+          double-count and state a number the server never asserted. Each is read from
+          its own key, verbatim.
+        -->
+        <div
+          class="segments"
+          role="tablist"
+          [attr.aria-label]="'inbox.list.filterGroup' | t"
+          (keydown)="onSegmentKeydown($event)"
+        >
+          @for (view of savedViews(); track view.filter) {
+            <button
+              type="button"
+              role="tab"
+              class="segments__item"
+              [class.segments__item--active]="segment() === view.filter"
+              [id]="'inbox-segment-' + view.filter"
+              [attr.aria-selected]="segment() === view.filter"
+              [attr.aria-controls]="'inbox-segment-panel'"
+              [attr.tabindex]="segment() === view.filter ? 0 : -1"
+              (click)="segment.set(view.filter); loadList()"
+            >
+              {{ viewLabelKey(view.filter) | t }}
+            <!--
+              The count is inside the tab's accessible name, so a screen reader announces
+              "Assigned to me, 3" rather than "Assigned to me" and then silence. Every one
+              of the five is declared `required` by the contract, so this renders
+              unconditionally rather than behind an `@if` that would hide a genuine zero.
+            -->
+            <span class="fe-num">{{ view.count }}</span>
+          </button>
+          }
+        </div>
+
+
+        <!--
+          The list itself is the tabpanel the five tabs control, so `aria-controls` points
+          at something real rather than at a decorative id. A wrapper rather than putting
+          the role on `fe-async-state`, because that component owns its own `role="status"`
+          and `role="alert"` regions; overriding either would strip a live region a screen
+          reader needs for the loading and error states.
+
+          The error branch is where an **unknown filter value** lands. The server refuses
+          one, and per ADR 0015 with a 400 — though the running build still answers 500
+          because `ValidationFailedException` is mapped to no status in
+          `ErrorHandlingAdvice` (Hook 17). Either way it is an error state and never a
+          crash, and the retry re-sends the same view, which is the honest response to a
+          server-side refusal.
+        -->
+        <div
+          role="tabpanel"
+          id="inbox-segment-panel"
+          [attr.aria-labelledby]="'inbox-segment-' + segment()"
+          tabindex="0"
+          class="list__panel"
+        >
+          <fe-async-state
+            [loading]="list.loading() && !list.value()"
+            [empty]="list.value() !== null && rows().length === 0"
+            [error]="list.error()"
+            [hasValue]="list.value() !== null"
+            [loadingLabel]="'state.loading' | t"
+            [loadingHint]="'state.loadingHint' | t"
+            [emptyTitle]="'inbox.list.empty' | t"
+            [emptyBody]="emptyBodyFor(segment())"
+            [errorTitle]="'state.error' | t"
+            [errorBody]="'state.errorHint' | t"
+            [retryLabel]="'state.retry' | t"
+            [requestId]="listErrorRequestId()"
+            [requestIdLabel]="'state.requestId' | t"
+            (retry)="loadList()"
+          />
+        </div>
+        <ul class="conversations">
+          @for (row of rows(); track row.id) {
+            <li>
+              <button
+                type="button"
+                class="conversation"
+                [class.conversation--active]="row.id === selectedId()"
+                [attr.aria-current]="row.id === selectedId() ? 'true' : null"
+                [attr.data-conversation-id]="row.id"
+                (click)="select(row.id!)"
+              >
+                <span class="conversation__head">
+                  <span class="conversation__ticket fe-mono" dir="ltr">
+                    {{ row.ticketNumber ?? '—' }}
+                  </span>
+                  <fe-status-chip tone="neutral">
+                    {{ channelLabel(row.channel) }}
+                  </fe-status-chip>
+                </span>
+                <span class="conversation__subject">{{ row.subject ?? '—' }}</span>
+                <span class="conversation__preview fe-sub">
+                  {{ row.lastMessagePreview ?? '—' }}
+                </span>
+                <span class="conversation__foot">
+                  <fe-status-chip [tone]="row.status === 'OPEN' ? 'human' : 'neutral'">
+                    {{ statusLabel(row.status) }}
+                  </fe-status-chip>
+                  <span class="fe-sub fe-num">{{ format.listStamp(row.lastMessageAt) }}</span>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+
+        @if (hasMore()) {
+          <button type="button" class="fe-btn" (click)="loadMore()">
+            {{ 'inbox.list.loadMore' | t }}
+          </button>
+        } @else if (allLoaded()) {
+          <p class="fe-sub">{{ 'inbox.list.loadedAll' | t }}</p>
+        }
+      </section>
+
+      <!-- -------------------------------------------------------- thread -->
+      <section
+        class="pane pane--thread"
+        role="tabpanel"
+        [attr.aria-labelledby]="'inbox-thread-heading'"
+        [attr.data-pane-active]="pane() === 'thread'"
+      >
+        <h3 class="pane__title" id="inbox-thread-heading">{{ 'inbox.thread.label' | t }}</h3>
+
+        @if (!selectedId()) {
+          <fe-async-state
+            [loading]="false"
+            [loadingLabel]="'state.loading' | t"
+            [emptyTitle]="'inbox.thread.empty' | t"
+            [emptyBody]="'inbox.thread.emptyBody' | t"
+          />
+        } @else {
+          <fe-async-state
+            [loading]="thread.loading() && !thread.value()"
+            [error]="thread.error()"
+            [hasValue]="thread.value() !== null"
+            [loadingLabel]="'state.loading' | t"
+            [errorTitle]="'state.error' | t"
+            [errorBody]="'state.errorHint' | t"
+            [requestId]="threadErrorRequestId()"
+            [requestIdLabel]="'state.requestId' | t"
+            [retryLabel]="'state.retry' | t"
+            (retry)="refreshThread()"
+          />
+
+          @if (selected(); as conversation) {
+            <header class="thread__head">
+              <div>
+                <p class="thread__ticket fe-mono" dir="ltr">
+                  {{ conversation.ticketNumber ?? '—' }}
+                </p>
+                <h4 class="thread__subject">{{ conversation.subject ?? '—' }}</h4>
+              </div>
+              <div class="thread__chips">
+                <fe-status-chip [tone]="conversation.status === 'OPEN' ? 'human' : 'neutral'">
+                  {{ statusLabel(conversation.status) }}
+                </fe-status-chip>
+                <fe-status-chip tone="warn">
+                  {{ priorityLabel(conversation.priority) }}
+                </fe-status-chip>
+                <fe-status-chip tone="neutral">
+                  {{ channelLabel(conversation.channel) }}
+                </fe-status-chip>
+                <fe-status-chip [tone]="conversation.mode === 'HUMAN' ? 'human' : 'neutral'">
+                  {{
+                    (conversation.mode === 'HUMAN'
+                      ? 'inbox.mode.human'
+                      : 'inbox.mode.ai') | t
+                  }}
+                </fe-status-chip>
+              </div>
+            </header>
+
+            @if (threadBehind()) {
+              <!--
+                Said *before* the operator composes, not after they send. A collision
+                discovered post-send has already cost them the reply.
+              -->
+              <div class="fe-alert fe-alert--info" role="status">
+                {{ 'inbox.thread.staleWhileReplying' | t }}
+                <button type="button" class="fe-btn" (click)="refreshThread()">
+                  {{ 'state.retry' | t }}
+                </button>
+              </div>
+            }
+
+            @if (collision(); as message) {
+              <div class="fe-alert" role="alert">{{ message }}</div>
+            }
+            @if (notice(); as message) {
+              <div class="fe-alert fe-alert--info" role="status">{{ message }}</div>
+            }
+
+            <!--
+              Case actions. Each button is gated on the permission the server checks
+              for that exact transition: taking the conversation over is
+              `conversation:take-over`, handing it back to the AI is
+              `conversation:return-to-ai`, and closing or reopening it is
+              `conversation:resolve`. The buttons used to be offered to everybody,
+              so a user without the grant clicked one and got a 403.
+            -->
+            <div class="thread__actions" role="group" [attr.aria-label]="'inbox.case.label' | t">
+              @if (conversation.mode !== 'HUMAN') {
+                @if (canTakeOverMode()) {
+                  <button type="button" class="fe-btn" (click)="setMode('HUMAN')">
+                    {{ 'inbox.mode.takeOver' | t }}
+                  </button>
+                }
+              } @else {
+                @if (canReturnToAi()) {
+                  <button type="button" class="fe-btn fe-btn--ghost" (click)="setMode('AI')">
+                    {{ 'inbox.mode.handBack' | t }}
+                  </button>
+                }
+              }
+              @if (conversation.status !== 'CLOSED') {
+                @if (canResolve()) {
+                  <button type="button" class="fe-btn" (click)="closeCase()">
+                    {{ 'inbox.case.close' | t }}
+                  </button>
+                }
+              } @else {
+                @if (canResolve()) {
+                  <button type="button" class="fe-btn" (click)="reopenCase()">
+                    {{ 'inbox.case.reopen' | t }}
+                  </button>
+                }
+              }
+              @if (canTakeOwnership() && !conversation.assignedEmployee) {
+                <button type="button" class="fe-btn fe-btn--ghost" (click)="takeOwnership()">
+                  {{ 'inbox.case.assignToMe' | t }}
+                </button>
+              }
+            </div>
+
+            <!--
+              The message list.
+
+              An ordered list rather than a div stack, because the sequence *is* the
+              conversation. `aria-live="polite"` on the container so a message that
+              arrives while the operator is reading is announced without stealing
+              focus.
+            -->
+            <ol class="messages" aria-live="polite" [attr.aria-label]="'inbox.thread.label' | t">
+              @for (message of conversation.messages ?? []; track message.id) {
+                <li
+                  class="message"
+                  [class.message--outbound]="isOutbound(message)"
+                >
+                  <div class="message__head">
+                    <span class="message__author">
+                      {{ message.authorName ?? authorLabel(message) }}
+                    </span>
+                    <span class="fe-sub fe-num">{{ format.listStamp(message.sentAt) }}</span>
+                    @if (deliveryLabel(message); as delivery) {
+                      <fe-status-chip [tone]="deliveryFailed(message) ? 'bad' : 'neutral'">
+                        {{ delivery }}
+                      </fe-status-chip>
+                    }
+                  </div>
+                  <p class="message__body">{{ message.body ?? '' }}</p>
+                  @if (message.failureReason) {
+                    <p class="fe-sub message__failure">
+                      {{ 'inbox.message.failureReason' | t }}: {{ message.failureReason }}
+                    </p>
+                  }
+                </li>
+              }
+            </ol>
+
+            @if ((conversation.messages ?? []).length === 0) {
+              <p class="fe-sub">{{ 'state.empty' | t }}</p>
+            }
+
+            <!--
+              The pending AI draft.
+
+              Placed **after** the message list and **outside** it, which is the whole
+              point: a draft is a proposal about what to say next, not a thing that has
+              been said. Inside the `<ol>` it would be announced with an ordinal in the
+              same sequence as the history, and the structure would claim it had been
+              received.
+
+              Three inputs, and none of them is a tenant or a project: the conversation
+              is already open and already scoped, the mode is read from the thread
+              above, and the message count is the count this operator is replying
+              against. The panel sends nothing on its own — `conversation:reply` is
+              pressed by a person, or not at all.
+            -->
+            <fe-ai-draft-panel
+              [conversationId]="selectedId()"
+              [conversationMode]="conversation.mode"
+              [messageCount]="conversation.messageCount ?? null"
+            />
+
+            <!-- Composer -->
+            @if (canReply()) {
+              <form
+                class="composer"
+                novalidate
+                (submit)="send($event)"
+              >
+                <label class="field__label" for="fe-inbox-reply">
+                  {{ 'inbox.composer.label' | t }}
+                </label>
+                <textarea
+                  id="fe-inbox-reply"
+                  class="fe-input composer__input"
+                  rows="3"
+                  [formControl]="replyForm.controls.body"
+                  [attr.placeholder]="'inbox.composer.placeholder' | t"
+                  [attr.aria-invalid]="replyForm.controls.body.touched && replyForm.controls.body.invalid ? 'true' : null"
+                  (input)="onDraftChanged($any($event.target).value)"
+                ></textarea>
+                @if (replyForm.controls.body.touched && replyForm.controls.body.hasError('maxlength')) {
+                  <p class="field__error">{{ 'inbox.composer.tooLong' | t }}</p>
+                } @else if (replyForm.controls.body.touched && (replyForm.controls.body.hasError('required') || replyForm.controls.body.hasError('blank'))) {
+                  <p class="field__error">{{ 'inbox.composer.empty' | t }}</p>
+                }
+                @if (conversation.channel; as channel) {
+                  <p class="fe-sub">
+                    {{ 'inbox.composer.channelWarning' | t: { channel: channelLabel(channel) } }}
+                  </p>
+                }
+                <button
+                  type="submit"
+                  class="fe-btn fe-btn--primary"
+                  [disabled]="sending()"
+                >
+                  @if (sending()) {
+                    <span class="fe-spinner" aria-hidden="true"></span>
+                    <span>{{ 'inbox.composer.sending' | t }}</span>
+                  } @else {
+                    <span>{{ 'inbox.composer.send' | t }}</span>
+                  }
+                </button>
+              </form>
+            } @else {
+              <fe-not-available
+                [title]="'state.noPermission'"
+                [body]="'state.notAvailable.noPermission'"
+              />
+            }
+
+            <!--
+              The resolution, opened by the operator or by a refused close — see
+              `closeCase()`, which opens it rather than reporting a dead end.
+            -->
+            <details class="resolution" [open]="openResolution()">
+              <summary
+                (click)="openResolution.set(!openResolution()); $event.preventDefault()"
+              >{{ 'inbox.resolution.label' | t }}</summary>
+
+              @if (resolution.value(); as saved) {
+                <p class="fe-sub">
+                  {{ saved.recordedByName ?? '—' }} ·
+                  {{ 'inbox.resolution.at' | t }}
+                  {{ format.dateTime(saved.createdAt) }}
+                </p>
+                <dl class="facts">
+                  <div>
+                    <dt class="fe-eyebrow">{{ 'inbox.resolution.outcome' | t }}</dt>
+                    <dd>{{ saved.outcome ?? '—' }}</dd>
+                  </div>
+                  @if (saved.customerIssue) {
+                    <div>
+                      <dt class="fe-eyebrow">{{ 'inbox.resolution.customerIssue' | t }}</dt>
+                      <dd>{{ saved.customerIssue }}</dd>
+                    </div>
+                  }
+                  @if (saved.agentAction) {
+                    <div>
+                      <dt class="fe-eyebrow">{{ 'inbox.resolution.agentAction' | t }}</dt>
+                      <dd>{{ saved.agentAction }}</dd>
+                    </div>
+                  }
+                  @if (saved.escalationRequested) {
+                    <div>
+                      <dt class="fe-eyebrow">{{ 'inbox.resolution.escalationRequested' | t }}</dt>
+                      <dd>{{ saved.escalatedToSupervisor ? saved.escalatedToSupervisor : '—' }}</dd>
+                    </div>
+                  }
+                </dl>
+                <button type="button" class="fe-btn" (click)="loadResolutionFromServer()">
+                  {{ 'inbox.classification.answer' | t }}
+                </button>
+              } @else {
+                <p class="fe-sub">{{ 'inbox.resolution.none' | t }}</p>
+              }
+
+              @if (canResolve()) {
+                <form class="resolution__form" novalidate (submit)="saveResolution($event)">
+                <!--
+                  A `<select>`, not a text input.
+
+                  `CaseService.validateOutcome` runs the submitted value through
+                  `CaseOutcome.valueOf`, which throws on anything outside
+                  RESOLVED / ESCALATED / UNRESOLVED. As free text, any sentence an
+                  operator wrote was refused with a 400 — and `SaveResolutionRequest`
+                  declares `outcome` as a bare `type: string`, so the rule is invisible in
+                  the contract. The control is now the set of values the wire can carry.
+                -->
+                <div class="field">
+                  <label class="field__label" for="fe-resolution-outcome">
+                    {{ 'inbox.resolution.outcome' | t }}
+                  </label>
+                  <select
+                    id="fe-resolution-outcome"
+                    class="fe-input"
+                    [formControl]="resolutionForm.controls.outcome"
+                    [attr.aria-invalid]="resolutionFieldErrors().outcome ? 'true' : null"
+                    [attr.aria-describedby]="
+                      resolutionFieldErrors().outcome ? 'fe-resolution-outcome-error' : null
+                    "
+                  >
+                    @for (option of outcomeOptions(); track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                  @if (resolutionFieldErrors().outcome; as message) {
+                    <p class="field__error" id="fe-resolution-outcome-error">{{ message }}</p>
+                  }
+                </div>
+
+                <!--
+                  `customerIssue` and `agentAction` are both **required**, 2..2000
+                  characters, server-side. They were optional here, so an operator could
+                  submit them blank and get a 400 whose only useful content —
+                  `details.fields` — the client discarded. Each is now marked required in
+                  the accessibility tree, and its error is wired through
+                  `aria-describedby` so a screen reader reads the rule with the field
+                  rather than leaving it to be found.
+                -->
+                <div class="field">
+                  <label class="field__label" for="fe-resolution-issue">
+                    {{ 'inbox.resolution.customerIssue' | t }}
+                    <span class="field__required" aria-hidden="true">*</span>
+                  </label>
+                  <textarea
+                    id="fe-resolution-issue"
+                    class="fe-input"
+                    rows="2"
+                    required
+                    [formControl]="resolutionForm.controls.customerIssue"
+                    [attr.aria-invalid]="resolutionFieldErrors().customerIssue ? 'true' : null"
+                    [attr.aria-describedby]="
+                      resolutionFieldErrors().customerIssue ? 'fe-resolution-issue-error' : null
+                    "
+                  ></textarea>
+                  @if (resolutionFieldErrors().customerIssue; as message) {
+                    <p class="field__error" id="fe-resolution-issue-error">{{ message }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="field__label" for="fe-resolution-action">
+                    {{ 'inbox.resolution.agentAction' | t }}
+                    <span class="field__required" aria-hidden="true">*</span>
+                  </label>
+                  <textarea
+                    id="fe-resolution-action"
+                    class="fe-input"
+                    rows="2"
+                    required
+                    [formControl]="resolutionForm.controls.agentAction"
+                    [attr.aria-invalid]="resolutionFieldErrors().agentAction ? 'true' : null"
+                    [attr.aria-describedby]="
+                      resolutionFieldErrors().agentAction ? 'fe-resolution-action-error' : null
+                    "
+                  ></textarea>
+                  @if (resolutionFieldErrors().agentAction; as message) {
+                    <p class="field__error" id="fe-resolution-action-error">{{ message }}</p>
+                  }
+                </div>
+
+                <div class="field field--check">
+                  <input
+                    id="fe-resolution-knowledge"
+                    type="checkbox"
+                    [formControl]="resolutionForm.controls.usedKnowledgeBase"
+                  />
+                  <label class="field__label" for="fe-resolution-knowledge">
+                    {{ 'inbox.resolution.usedKnowledge' | t }}
+                  </label>
+                </div>
+
+                @if (resolutionForm.controls.usedKnowledgeBase.value) {
+                  <div class="field">
+                    <label class="field__label" for="fe-resolution-document">
+                      {{ 'inbox.resolution.documentId' | t }}
+                    </label>
+                    <input
+                      id="fe-resolution-document"
+                      class="fe-input fe-mono"
+                      dir="ltr"
+                      type="text"
+                      [formControl]="resolutionForm.controls.documentId"
+                    />
+                  </div>
+                }
+
+                <div class="field field--check">
+                  <input
+                    id="fe-resolution-accepted"
+                    type="checkbox"
+                    [formControl]="resolutionForm.controls.customerAccepted"
+                  />
+                  <label class="field__label" for="fe-resolution-accepted">
+                    {{ 'inbox.resolution.customerAccepted' | t }}
+                  </label>
+                </div>
+
+                <div class="field field--check">
+                  <input
+                    id="fe-resolution-satisfied"
+                    type="checkbox"
+                    [formControl]="resolutionForm.controls.customerSatisfied"
+                  />
+                  <label class="field__label" for="fe-resolution-satisfied">
+                    {{ 'inbox.resolution.customerSatisfied' | t }}
+                  </label>
+                </div>
+
+                <div class="field field--check">
+                  <input
+                    id="fe-resolution-escalated"
+                    type="checkbox"
+                    [formControl]="resolutionForm.controls.escalationRequested"
+                  />
+                  <label class="field__label" for="fe-resolution-escalated">
+                    {{ 'inbox.resolution.escalationRequested' | t }}
+                  </label>
+                </div>
+
+                @if (resolutionForm.controls.escalationRequested.value) {
+                  <div class="field field--check">
+                    <input
+                      id="fe-resolution-supervisor"
+                      type="checkbox"
+                      [formControl]="resolutionForm.controls.escalatedToSupervisor"
+                    />
+                    <label class="field__label" for="fe-resolution-supervisor">
+                      {{ 'inbox.resolution.escalatedToSupervisor' | t }}
+                    </label>
+                  </div>
+                }
+
+                <div class="field">
+                  <label class="field__label" for="fe-resolution-notes">
+                    {{ 'inbox.resolution.notes' | t }}
+                  </label>
+                  <textarea
+                    id="fe-resolution-notes"
+                    class="fe-input"
+                    rows="2"
+                    [formControl]="resolutionForm.controls.notes"
+                  ></textarea>
+                </div>
+
+                <p class="fe-sub">{{ 'inbox.resolution.escalationNote' | t }}</p>
+
+                <button type="submit" class="fe-btn fe-btn--primary" [disabled]="savingResolution()">
+                  @if (savingResolution()) {
+                    <span class="fe-spinner" aria-hidden="true"></span>
+                    <span>{{ 'inbox.resolution.saving' | t }}</span>
+                  } @else {
+                    <span>{{ 'inbox.resolution.save' | t }}</span>
+                  }
+                </button>
+                </form>
+              } @else {
+                <fe-not-available
+                  [title]="'state.noPermission'"
+                  [body]="'state.notAvailable.noPermission'"
+                />
+              }
+            </details>
+
+            <!-- Classification -->
+            <details class="resolution">
+              <summary>{{ 'inbox.classification.label' | t }}</summary>
+              @if (classification.value(); as view) {
+                @if (view.suggestion; as suggestion) {
+                  <div class="facts">
+                    <div>
+                      <dt class="fe-eyebrow">{{ 'inbox.classification.suggestion' | t }}</dt>
+                      <dd>{{ suggestion.documentTitle ?? '—' }}</dd>
+                    </div>
+                    <div>
+                      <dt class="fe-eyebrow">{{ 'inbox.classification.score' | t }}</dt>
+                      <dd class="fe-num">{{ format.percent(view.suggestion.score ?? null) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="fe-eyebrow">{{ 'inbox.classification.source' | t }}</dt>
+                      <dd>{{ suggestion.source ?? '—' }}</dd>
+                    </div>
+                  </div>
+                  @if (suggestion.excerpt) {
+                    <p class="fe-sub">{{ suggestion.excerpt }}</p>
+                  }
+                } @else {
+                  <p class="fe-sub">{{ 'inbox.classification.noQuestions' | t }}</p>
+                }
+                @if (view.answers?.length) {
+                  <ul class="fe-list">
+                    @for (answer of view.answers; track answer.questionId) {
+                      <li class="fe-row">
+                        <span class="fe-mono" dir="ltr">{{ answer.questionId ?? '—' }}</span>
+                        <span>{{ answer.value ?? '—' }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
+                @if (view.isComplete === false) {
+                  <p class="fe-sub">{{ 'inbox.classification.incomplete' | t }}</p>
+                }
+              } @else {
+                <p class="fe-sub">{{ 'inbox.classification.noQuestions' | t }}</p>
+              }
+            </details>
+
+            <!-- Activity -->
+            <details class="resolution">
+              <summary>{{ 'inbox.events.label' | t }}</summary>
+              @if ((conversation.events ?? []).length > 0) {
+                <ul class="fe-list">
+                  @for (event of conversation.events; track event.id) {
+                    <li class="fe-row">
+                      <span class="fe-mono">{{ event.type ?? '—' }}</span>
+                      <span>{{ event.actorName ?? event.actorType ?? '—' }}</span>
+                      <span class="fe-sub fe-num">{{ format.listStamp(event.occurredAt) }}</span>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p class="fe-sub">{{ 'inbox.events.empty' | t }}</p>
+              }
+            </details>
+          }
+        }
+      </section>
+
+      <!-- ------------------------------------------------------- customer -->
+      <section
+        class="pane pane--customer"
+        role="tabpanel"
+        [attr.aria-labelledby]="'inbox-customer-heading'"
+        [attr.data-pane-active]="pane() === 'customer'"
+      >
+        <h3 class="pane__title" id="inbox-customer-heading">{{ 'inbox.customer.label' | t }}</h3>
+
+        <fe-async-state
+          [loading]="customer.loading() && !customer.value()"
+          [empty]="!customer.value() && !customer.loading()"
+          [error]="customer.error()"
+          [hasValue]="customer.value() !== null"
+          [loadingLabel]="'state.loading' | t"
+          [emptyTitle]="'inbox.customer.empty' | t"
+          [emptyBody]="'inbox.customer.none' | t"
+          [errorTitle]="'state.error' | t"
+          [errorBody]="'state.errorHint' | t"
+          [retryLabel]="'state.retry' | t"
+        />
+
+        @if (customer.value(); as person) {
+          <dl class="facts">
+            <div>
+              <dt class="fe-eyebrow">{{ 'inbox.customer.ticket' | t }}</dt>
+              <dd class="fe-mono" dir="ltr">{{ person.cxId ?? '—' }}</dd>
+            </div>
+            <div>
+              <dt class="fe-eyebrow">{{ 'inbox.customer.email' | t }}</dt>
+              <dd class="fe-mono" dir="ltr">{{ person.primaryEmail ?? '—' }}</dd>
+            </div>
+            <div>
+              <dt class="fe-eyebrow">{{ 'inbox.customer.phone' | t }}</dt>
+              <dd class="fe-mono" dir="ltr">{{ person.primaryPhone ?? '—' }}</dd>
+            </div>
+            <div>
+              <dt class="fe-eyebrow">{{ 'inbox.customer.firstSeen' | t }}</dt>
+              <dd>{{ format.date(person.firstSeenAt) }}</dd>
+            </div>
+            <div>
+              <dt class="fe-eyebrow">{{ 'inbox.customer.lastSeen' | t }}</dt>
+              <dd>{{ format.date(person.lastSeenAt) }}</dd>
+            </div>
+          </dl>
+
+          @if (person.tags?.length) {
+            <ul class="chips">
+              @for (tag of person.tags; track tag) {
+                <li class="fe-badge fe-badge--neutral">{{ tag }}</li>
+              }
+            </ul>
+          }
+
+          <a class="fe-btn" [routerLink]="['/app/people']" [queryParams]="{ c: person.id }">
+            {{ 'inbox.customer.open' | t }}
+          </a>
+        }
+      </section>
+    </div>
+  </div>
+</div>

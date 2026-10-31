@@ -1,0 +1,99 @@
+{
+  "name": "a thread with one customer message, one employee reply and an assignment",
+  "source": "apps/api/src/conversations/conversations.service.ts -> getById + toSummary (legacy reference)",
+  "seed": "InboxFixture.reset(); a fixed thread, two fixed messages and four fixed timeline entries on PROJECT_A1, at 09:30, 09:31 and 09:32. The events are listed in occurredAt order because the thread view's `events` array is ordered that way and that ordering is part of what a client renders. Only the generated row ids are volatile.",
+  "volatile": ["id", "messageId", "lastMessageAt", "occurredAt", "sentAt"],
+  "response": {
+    "id": "<volatile>",
+    "projectId": "aaaaaaaa-0000-0000-0000-0000000000a1",
+    "projectName": "Alpha One",
+    "ticketNumber": "#0814000000001",
+    "channel": "MOCK",
+    "status": "PENDING",
+    "mode": "HUMAN",
+    "modeVersion": 0,
+    "priority": "NORMAL",
+    "subject": null,
+    "customer": {
+      "id": "aaaaaaaa-0000-0000-0000-0000000cc001",
+      "cxId": "#33000001",
+      "displayName": "Alpha One Clinic"
+    },
+    "assignedEmployee": {
+      "id": "aaaaaaaa-0000-0000-0000-0000000ee001",
+      "fullName": "Alpha Staff"
+    },
+    "lastMessagePreview": "We have booked you in for Sunday.",
+    "messageCount": 2,
+    "lastMessageAt": "<volatile>",
+    "messages": [
+      {
+        "id": "<volatile>",
+        "direction": "INBOUND",
+        "authorType": "CUSTOMER",
+        "authorName": null,
+        "body": "I cannot book an appointment",
+        "deliveryStatus": "DELIVERED",
+        "failureReason": null,
+        "sentAt": "<volatile>"
+      },
+      {
+        "id": "<volatile>",
+        "direction": "OUTBOUND",
+        "authorType": "EMPLOYEE",
+        "authorName": "Alpha Staff",
+        "body": "We have booked you in for Sunday.",
+        "deliveryStatus": "PENDING",
+        "failureReason": null,
+        "sentAt": "<volatile>"
+      }
+    ],
+    "events": [
+      {
+        "id": "<volatile>",
+        "type": "CONVERSATION_CREATED",
+        "actorType": "SYSTEM",
+        "actorName": null,
+        "payload": {
+          "channel": "MOCK",
+          "mode": "HUMAN"
+        },
+        "occurredAt": "<volatile>"
+      },
+      {
+        "id": "<volatile>",
+        "type": "MESSAGE_RECEIVED",
+        "actorType": "CUSTOMER",
+        "actorName": null,
+        "payload": {
+          "bodyLength": 25,
+          "messageId": "<volatile>"
+        },
+        "occurredAt": "<volatile>"
+      },
+      {
+        "id": "<volatile>",
+        "type": "ASSIGNED",
+        "actorType": "EMPLOYEE",
+        "actorName": null,
+        "payload": {
+          "employeeId": "aaaaaaaa-0000-0000-0000-0000000ee001",
+          "previousEmployeeId": null,
+          "reason": "MANUAL"
+        },
+        "occurredAt": "<volatile>"
+      },
+      {
+        "id": "<volatile>",
+        "type": "MESSAGE_SENT",
+        "actorType": "EMPLOYEE",
+        "actorName": null,
+        "payload": {
+          "bodyLength": 33,
+          "messageId": "<volatile>"
+        },
+        "occurredAt": "<volatile>"
+      }
+    ]
+  }
+}

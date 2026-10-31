@@ -1,0 +1,14 @@
+app = "firstelement-redis"
+primary_region = "ams"
+kill_signal = "SIGINT"
+kill_timeout = 30
+
+[build]
+  dockerfile = "redis.Dockerfile"
+
+[env]
+  REDIS_ARGS = "--appendonly yes"
+
+[mounts]
+  source = "redisdata"
+  destination = "/data"

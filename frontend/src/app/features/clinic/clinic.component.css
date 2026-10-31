@@ -1,0 +1,305 @@
+/*
+ * Group 12 — clinic views, now backed by the read model.
+ *
+ * ## Direction is not a stylesheet
+ *
+ * There is no `[dir=rtl]` block here and there will not be one. Every length is
+ * logical — `margin-inline-start`, `padding-block`, `inset-inline-end`, `text-align:
+ * start` — so the Arabic layout is the same CSS reading right-to-left. `design-system.spec.ts`
+ * asserts this across the project, and a directional property here would fail it.
+ *
+ * The one place direction is set is in the template, on two elements: an ISO-8601 instant
+ * and a UUID. Both are LTR in every language, and forcing them is correct in Arabic rather
+ * than a Western default leaking through.
+ *
+ * ## Why the metric rows are a disclosure rather than a tooltip
+ *
+ * The source-row list is the requirement (ADR 0013: every metric must drill to source
+ * rows), and a requirement that only works on hover does not work on a phone, does not
+ * work for a keyboard, and does not work for a screen reader. It is a `<button>` with
+ * `aria-expanded` and `aria-controls`, which is all three.
+ *
+ * ## Grid
+ *
+ * `auto-fit` with a `minmax` floor, so two cards across on a wide screen and one on a
+ * phone, and a long clinician name wraps rather than forcing the row wider than its
+ * container.
+ */
+
+/* Sub-navigation tabs */
+.clinic-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fe-space-2);
+  margin-block: var(--fe-space-3);
+  padding-block: var(--fe-space-2);
+  padding-inline: var(--fe-space-2);
+  background: var(--surf);
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--line);
+}
+
+.clinic-subnav__item {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--fe-space-4);
+  padding-block: 8px;
+  font-size: var(--fe-text-sm);
+  font-weight: 600;
+  color: var(--mute);
+  text-decoration: none;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all 180ms ease;
+}
+
+.clinic-subnav__item:hover {
+  color: var(--ink);
+  background: var(--surf2);
+  border-color: var(--line);
+}
+
+.clinic-subnav__item.active {
+  color: var(--pri-ink);
+  background: var(--pri);
+  border-color: var(--pri);
+  box-shadow: 0 2px 6px var(--pri-soft);
+}
+
+/* Feature Hub Cards */
+.clinic-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-block-end: 12px;
+}
+
+.clinic-hub-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--fe-space-4);
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-lg);
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.clinic-hub-card:hover {
+  border-color: var(--pri);
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-pop);
+}
+
+.clinic-hub-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: var(--fe-space-2);
+}
+
+.clinic-hub-card__title {
+  margin: 0;
+  font-size: var(--fe-text-base);
+  font-weight: 700;
+  color: var(--ink);
+  transition: color 150ms ease;
+}
+
+.clinic-hub-card:hover .clinic-hub-card__title {
+  color: var(--pri);
+}
+
+.clinic-hub-card__badge {
+  font-size: var(--fe-text-xs);
+  font-weight: 700;
+  padding-inline: var(--fe-space-2);
+  padding-block: 2px;
+  border-radius: 999px;
+  background: var(--pri-soft);
+  color: var(--pri);
+  border: 1px solid var(--pri-soft);
+}
+
+.clinic-hub-card__desc {
+  margin: 0;
+  font-size: var(--fe-text-xs);
+  color: var(--mute);
+  line-height: 1.5;
+}
+
+.two-up {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin-block: 10px;
+}
+
+.metric {
+  margin-block-start: var(--fe-space-5);
+  min-inline-size: 0;
+}
+
+.metric h4.fe-eyebrow {
+  margin-block: 0 var(--fe-space-2);
+}
+
+/*
+ * Provenance is body text, not chrome. It is the sentence that says which table and which
+ * window produced the number, and an operator judging a figure needs it at the same size as
+ * everything else around it.
+ */
+.provenance {
+  margin-block: 0 var(--fe-space-2);
+  color: var(--mute);
+}
+
+/* The count is the reason the reader is here, so it is allowed to be heavier. */
+.count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.roster {
+  list-style: none;
+  padding: 0;
+  margin-block: var(--fe-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+}
+
+.roster__item {
+  padding: var(--fe-space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-sm);
+  background: var(--surf2);
+  /* Without this a long clinician name forces the row wider than its container. */
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.roster__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--fe-space-2);
+}
+
+.roster__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fe-space-4);
+  margin-block-start: var(--fe-space-1);
+  color: var(--mute);
+  font-size: var(--fe-text-sm);
+}
+
+.day {
+  margin-inline-end: var(--fe-space-2);
+  white-space: nowrap;
+}
+
+/*
+ * "Not priced" and "zero" must not look alike (FR-7.6). The unset style is deliberately
+ * quieter than a value, because it is an absence rather than a small number.
+ */
+.unset {
+  color: var(--mute);
+  font-style: italic;
+}
+
+/* The expanded source rows: an evidence list under the figure they justify. */
+.source td {
+  background: var(--surf2);
+  padding-block: var(--fe-space-2);
+}
+
+.source-ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fe-space-2);
+  font-size: var(--fe-text-xs);
+  /* UUIDs are long and have no spaces to break on. */
+  overflow-wrap: anywhere;
+}
+
+.source-id {
+  padding: 0 var(--fe-space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--fe-radius-sm);
+}
+
+/* The three statements about what this screen refuses to invent. */
+.disclosures {
+  margin-block-start: var(--fe-space-5);
+  padding-inline-start: var(--fe-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fe-space-2);
+  max-inline-size: 70ch;
+}
+
+.ai-flag {
+  margin-inline-start: var(--fe-space-2);
+}
+
+.fe-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  margin-block-start: var(--fe-space-2);
+}
+
+.fe-table th,
+.fe-table td {
+  text-align: start;
+  padding: var(--fe-space-2);
+  border-block-end: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.fe-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* ---------------------------------------------------------------------------
+   A four-column schedule does not fit a 360px screen, and the wrong fixes are
+   the tempting ones.
+
+   Measured at 390px (en-mobile): the card's content box is 294px and the table
+   is 396px, so the page scrolled 431px inside a 326px container. The browser
+   journey `clinic does not overflow its width at any viewport` caught it, and it
+   caught it only AFTER the fixtures existed -- with an empty screen there was
+   nothing to overflow, so the journey had been passing for the wrong reason.
+
+   Not fixed by shrinking columns: the procedure names are Arabic, and an
+   ellipsised Arabic clinical name is a name a receptionist cannot read.
+   Not fixed by letting the table squish: four columns of ISO timestamps and
+   counts in a 294px box produce unreadable 4-character columns.
+
+   So the CARD scrolls, not the page. Scoped to this component rather than added
+   to the global `.fe-table`, because `inline-size: 100%` is correct for every
+   other screen and changing it would be a product-wide regression bought to fix
+   one screen.
+--------------------------------------------------------------------------- */
+.fe-card {
+  overflow-x: auto;
+}
+
+.fe-table {
+  /* Below this the columns stop being legible; above it, the card has room to spare. */
+  min-inline-size: 22rem;
+}

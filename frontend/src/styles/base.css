@@ -1,0 +1,119 @@
+/*
+ * Global base styles.
+ *
+ * Direction is a document-level attribute, not a per-component condition: the
+ * locale service writes `dir` and `lang` on <html>, and every directional rule
+ * below is expressed with logical properties so one stylesheet is correct in
+ * both RTL and LTR. A `margin-left` in this codebase is a bug.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--fe-font-body);
+  font-size: var(--fe-text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Visible focus on every interactive element, never removed. */
+:focus-visible {
+  outline: 2px solid var(--fe-focus);
+  outline-offset: 2px;
+}
+
+/* Operational figures compare by position, so they are always tabular. */
+.fe-num,
+.fe-mono {
+  font-family: var(--fe-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.fe-display {
+  font-family: var(--fe-font-display);
+  letter-spacing: -0.01em;
+}
+
+.fe-eyebrow {
+  font-family: var(--fe-font-mono);
+  font-size: var(--fe-text-2xs);
+  letter-spacing: 0.08em;
+  color: var(--mute);
+}
+
+/* A Latin identifier inside Arabic prose keeps its own direction. */
+[dir='ltr'] {
+  unicode-bidi: isolate;
+}
+
+/* Visually hidden but available to assistive technology. */
+.fe-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip link: the first tab stop on every authenticated page. */
+.fe-skip {
+  position: absolute;
+  inset-block-start: -3rem;
+  inset-inline-start: var(--fe-space-4);
+  z-index: 60;
+  padding: var(--fe-space-2) var(--fe-space-4);
+  background: var(--pri);
+  color: var(--pri-ink);
+  border-radius: var(--fe-radius-sm);
+  text-decoration: none;
+}
+
+.fe-skip:focus-visible {
+  inset-block-start: var(--fe-space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

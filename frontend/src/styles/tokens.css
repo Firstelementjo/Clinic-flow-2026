@@ -1,0 +1,359 @@
+/*
+ * FirstElement design tokens.
+ *
+ * Ported value-for-value from `packages/ui/src/styles/tokens.css`, which the
+ * frozen React client reads and which `docs/design-system.md` explains. The
+ * names are unchanged so a token change propagates identically on both
+ * runtimes during the strangler window, and so a design review can diff the
+ * two files rather than re-derive the palette.
+ *
+ * The clinical block below is the second, *binding* set of tokens from
+ * `docs/migration-AGENT.md` §4.2 (the approved clinical redesign): deep teal
+ * primary, blue for secondary information only, green/amber/red reserved for
+ * status, flat light surfaces with 1px borders and one soft shadow. The
+ * `--fe-ink`…`--fe-pri-*` names are the clinical ones; the `--fe-signal*` /
+ * `--fe-agent*` / `--fe-escalation*` names are the legacy meaning-carrying
+ * aliases mapped onto the same values, because the product's colour legend
+ * (teal = human, indigo = AI, burnt orange = escalation) is a domain
+ * invariant, not a styling preference.
+ *
+ * Rule that holds everywhere: a component never writes a hex value. It reads a
+ * token.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* --- clinical ground & ToothLogic palette -------------------------- */
+  --bg: #f8fafc;
+  --surf: #ffffff;
+  --surf2: #f1f5f9;
+  --ink: #1e293b;
+  --mute: #64748b;
+  --line: #e2e8f0;
+  --pri: #2cb5a6;
+  --pri-ink: #ffffff;
+  --pri-soft: #eaf8f6;
+  --pri-hover: #23a395;
+
+  /* ToothLogic design tokens */
+  --tl-teal: #2cb5a6;
+  --tl-teal-hover: #23a395;
+  --tl-teal-soft: #eaf8f6;
+  --tl-dark: #2d3748;
+  --tl-dark-hover: #1a202c;
+  --tl-gray: #718096;
+  --tl-border: #edf2f7;
+  --tl-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+
+  /* --- the ground the ToothLogic port used, named ---------------------- */
+  /*
+   * The shell, the dashboard and the clinic screens were ported from the
+   * frozen client with its hex values inline. Those values are now tokens, so
+   * the port is theme-aware: the dark theme flips the whole app in one place
+   * instead of leaving a white sidebar in a night shift.
+   *
+   * The naming follows the ground they occupy, not the hex they came from:
+   * `--ink-strong` is the darkest ink in light mode and the lightest in dark.
+   */
+  --ink-strong: #1a202c; /* brand and account names: the darkest ink */
+  --ink-soft: #4a5568; /* secondary text */
+  --mute-2: #a0aec0; /* the faintest text that is still a label */
+  --line-strong: #cbd5e1; /* a divider that has to be seen */
+  --on-accent: #ffffff; /* text and rings sitting on a coloured fill */
+
+  /* --- accents the port used ------------------------------------------ */
+  /*
+   * Brand and category colours. They are the same in both themes on purpose:
+   * a teal that turns grey at night is a different colour, and a status that
+   * changes hue is a status that lies.
+   */
+  --accent-teal-strong: #0a7c8c;
+  --accent-violet: #7c3aed;
+  --accent-violet-soft: #ede9fe;
+  --accent-violet-ink: #6d28d9;
+  --accent-amber: #f59e0b;
+  --accent-amber-soft: #fef3c7;
+  --accent-amber-line: #fde68a;
+  --accent-amber-ink: #b45309;
+  --accent-amber-deep: #92400e;
+  --accent-amber-wash: #fffbeb;
+  --accent-yellow-soft: #fefcbf;
+  --accent-yellow-line: #f6e05e;
+  --accent-yellow-ink: #b7791f;
+  --accent-green: #16a34a;
+  --accent-green-soft: #dcfce7;
+  --accent-green-ink: #15803d;
+  --accent-red: #dc2626;
+  --accent-red-soft: #fee2e2;
+  --accent-red-ink: #b91c1c;
+  --accent-red-400: #f87171;
+  --accent-red-500: #ef4444;
+  --accent-blue: #3b82f6;
+  --accent-blue-400: #60a5fa;
+  --accent-blue-700: #1d4ed8;
+  --accent-sky-soft: #e0f2fe;
+  --accent-sky-ink: #0369a1;
+
+  /* --- shadows and scrims --------------------------------------------- */
+  --scrim: rgba(15, 23, 42, 0.6);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-ring: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.12);
+  --shadow-panel: 0 12px 32px rgba(26, 32, 44, 0.14);
+  --shadow-pop: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 10px 25px rgba(0, 0, 0, 0.15);
+  --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --glow-teal: 0 2px 6px rgba(44, 181, 166, 0.35);
+  --glow-teal-soft: 0 4px 10px rgba(44, 181, 166, 0.25);
+
+  /* --- React Bits & Motion tokens (Spotlight, Aurora, Shiny sweep) ----- */
+  --rb-spotlight: transparent;
+  --rb-spotlight-border: var(--line);
+  --rb-aurora-1: transparent;
+  --rb-aurora-2: transparent;
+  --rb-aurora-3: transparent;
+  --rb-shine: rgba(255, 255, 255, 0.42);
+  --rb-canvas-bg: #f8fafc;
+  --rb-dot-matrix: transparent;
+  --rb-glass-bg: #ffffff;
+  --rb-glass-border: var(--line);
+  --rb-card-bg: #ffffff;
+  --rb-card-border: var(--line);
+  --rb-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --rb-card-shadow-hover: 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+  --rb-hero-bg: #ffffff;
+  --rb-gradient-text: #0f766e;
+  --rb-active-pill: #2cb5a6;
+  --rb-table-head-bg: #2cb5a6;
+  --rb-top-accent-line: transparent;
+  --rb-login-panel-bg: #f8fafc;
+
+  /* --- the names older components reached for --------------------------- */
+  /*
+   * A `var()` that names a token nobody defined is not an error: the browser
+   * drops the declaration and the property silently falls back. So a screen
+   * can lose its error colour, its card fill or its focus ring and still
+   * render, and nothing says why. These are the names that were in use and
+   * were not defined; they are defined here, pointing at the token that
+   * already carries the meaning.
+   */
+  --accent: var(--pri); /* the underline on the active tab */
+  --surf1: var(--surf); /* a card fill */
+  --surf-soft: var(--surf2); /* a recessed fill */
+  --surf-tint: var(--pri-soft); /* a tinted fill */
+  --paper: var(--surf); /* the odontogram's paper */
+  --line-soft: #edf2f7; /* the faintest hairline */
+  --err: var(--bad); /* an error message */
+  --focus: var(--fe-focus); /* a focus ring */
+  --shadow-sm: var(--shadow-xs); /* the smallest shadow */
+  --fe-radius-xs: 6px;
+  --fe-radius-xl: 14px;
+  --fe-space-8: 4rem;
+
+  /* Secondary information only — never an action colour. */
+  --blue: #2a62a8;
+  --blue-soft: #e8f0fa;
+
+  /* Status carriers. Reserved: never decoration. */
+  --ok: #0f8a5f;
+  --ok-soft: #e2f4ec;
+  --warn: #b7690a;
+  --warn-soft: #fdf1de;
+  --bad: #c0392b;
+  --bad-soft: #fbe8e6;
+
+  --shadow: 0 1px 2px rgba(15, 42, 58, 0.06), 0 4px 14px rgba(15, 42, 58, 0.04);
+
+  /* --- legacy meaning-carrying carriers ------------------------------- */
+  --fe-ink: var(--ink);
+  --fe-ink-soft: #254457;
+  --fe-slate: var(--mute);
+  --fe-slate-soft: #849dae;
+  --fe-mist: var(--bg);
+  --fe-mist-deep: var(--surf2);
+  --fe-surface: var(--surf);
+  --fe-hairline: var(--line);
+
+  /* Human-handled / brand / primary action (teal) */
+  --fe-signal: var(--pri);
+  --fe-signal-strong: #086b79;
+  --fe-signal-wash: var(--pri-soft);
+
+  /* AI-handled: every AI turn, run trace and agent surface */
+  --fe-agent: var(--blue);
+  --fe-agent-wash: var(--blue-soft);
+
+  /* Escalation severity — reserved, never anything else */
+  --fe-escalation: var(--warn);
+  --fe-escalation-wash: var(--warn-soft);
+
+  /* Destructive actions and system failure */
+  --fe-danger: var(--bad);
+  --fe-danger-wash: var(--bad-soft);
+
+  /* Attention without alarm */
+  --fe-warning: var(--warn);
+  --fe-warning-wash: var(--warn-soft);
+
+  --fe-nav-dim: var(--bg);
+  --fe-nav-surface: var(--surf);
+  --fe-nav-raised: var(--pri-soft);
+  --fe-nav-text: var(--ink);
+  --fe-nav-muted: var(--mute);
+  --fe-nav-active: var(--pri);
+  --fe-content-bg: var(--bg);
+
+  --fe-focus: var(--pri);
+
+  /* --- type ----------------------------------------------------------- */
+  --fe-font-body: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --fe-font-display: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --fe-font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --fe-text-2xs: 0.65rem; /* ~10.4px */
+  --fe-text-xs: 0.72rem; /* ~11.5px */
+  --fe-text-sm: 0.8rem; /* ~12.8px */
+  --fe-text-base: 0.85rem; /* ~13.6px */
+  --fe-text-lg: 1.05rem; /* ~16.8px */
+  --fe-text-xl: 1.2rem; /* ~19.2px */
+  --fe-text-2xl: 1.35rem; /* ~21.6px */
+
+  /* --- space: compact 4px scale ---------------------------------------- */
+  --fe-space-1: 0.2rem; /* ~3px */
+  --fe-space-2: 0.375rem; /* 6px */
+  --fe-space-3: 0.5rem; /* 8px */
+  --fe-space-4: 0.75rem; /* 12px */
+  --fe-space-5: 1rem; /* 16px */
+  --fe-space-6: 1.25rem; /* 20px */
+  --fe-space-7: 1.75rem; /* 28px */
+  --fe-space-8: 2.5rem; /* 40px */
+
+  --fe-radius-sm: 6px;
+  --fe-radius-md: 8px;
+  --fe-radius: 8px;
+  --fe-radius-lg: 10px;
+  --fe-radius-full: 999px;
+
+  --fe-shadow-panel: var(--shadow);
+  --fe-shadow-pop: 0 4px 14px rgba(15, 42, 58, 0.08);
+
+  --fe-rail-width: 3px;
+
+  /* The shell measures in these; kept as tokens so the responsive rules in
+     migration-AGENT.md §4.5 (860px rail collapse, 44px mobile touch targets)
+     are one number each rather than a magic value per component. */
+  --fe-sidebar-width: 232px;
+  --fe-sidebar-rail: 64px;
+  --fe-header-height: 52px;
+  --fe-control-height: 36px;
+  --fe-touch-target: 40px;
+}
+
+/*
+ * Dark theme — the same meaning, an indigo night. Every value overrides a
+ * light token so `data-theme="dark"` on <html> flips the whole app in one
+ * place. Never an inversion, never pure black or pure white.
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0a1620;
+  --surf: #102130;
+  --surf2: #0d1b28;
+  --ink: #e6f0f5;
+  --mute: #8fa7b7;
+  --line: #1f3445;
+  --pri: #38bdcb;
+  --pri-ink: #04222a;
+  --pri-soft: #10353f;
+
+  --blue: #7db1f0;
+  --blue-soft: #13304f;
+
+  --ok: #4cd6a0;
+  --ok-soft: #0f3328;
+  --warn: #f0b35a;
+  --warn-soft: #3a2a10;
+  --bad: #f27d70;
+  --bad-soft: #3f1a17;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+
+  --fe-ink-soft: #c5d8e3;
+  --fe-slate-soft: #637f94;
+  --fe-signal-strong: #40d4e4;
+  --fe-focus: var(--pri);
+
+  --fe-shadow-pop: 0 4px 14px rgba(0, 0, 0, 0.5);
+
+  /* The ground the ToothLogic port used, flipped for the night shift. The
+     accents above keep their hue: a status that changes colour is a status
+     that lies. */
+  --tl-teal: #38bdcb;
+  --tl-teal-hover: #2cb5a6;
+  --tl-teal-soft: rgba(56, 189, 203, 0.14);
+  --tl-dark: #1e293b;
+  --tl-dark-hover: #334155;
+  --tl-gray: #8fa7b7;
+  --tl-border: #1f3445;
+  --tl-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+
+  --accent-violet-soft: rgba(124, 58, 237, 0.18);
+  --accent-violet-ink: #c4b5fd;
+  --accent-amber-soft: rgba(245, 158, 11, 0.18);
+  --accent-amber-line: rgba(245, 158, 11, 0.35);
+  --accent-amber-ink: #fcd34d;
+  --accent-amber-deep: #fde68a;
+  --accent-amber-wash: rgba(245, 158, 11, 0.1);
+  --accent-yellow-soft: rgba(234, 179, 8, 0.18);
+  --accent-yellow-line: rgba(234, 179, 8, 0.35);
+  --accent-yellow-ink: #fef08a;
+  --accent-green-soft: rgba(22, 163, 74, 0.18);
+  --accent-green-ink: #86efac;
+  --accent-red-soft: rgba(220, 38, 38, 0.18);
+  --accent-red-ink: #fca5a5;
+  --accent-sky-soft: rgba(14, 165, 233, 0.18);
+  --accent-sky-ink: #7dd3fc;
+
+  --ink-strong: #f1f5f9;
+  --ink-soft: #b6c8d4;
+  --mute-2: #7d95a6;
+  --line-strong: #33475a;
+  --line-soft: #16293a;
+  --surf-tint: var(--pri-soft);
+  --paper: var(--surf);
+  --scrim: rgba(2, 8, 14, 0.7);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-ring: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --shadow-pop: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 10px 25px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --glow-teal: 0 2px 6px rgba(56, 189, 203, 0.35);
+  --glow-teal-soft: 0 4px 10px rgba(56, 189, 203, 0.25);
+
+  --rb-spotlight: transparent;
+  --rb-spotlight-border: rgba(51, 71, 90, 0.85);
+  --rb-aurora-1: transparent;
+  --rb-aurora-2: transparent;
+  --rb-aurora-3: transparent;
+  --rb-shine: rgba(255, 255, 255, 0.1);
+  --rb-canvas-bg: #07121b;
+  --rb-dot-matrix: transparent;
+  --rb-glass-bg: #0d1d2a;
+  --rb-glass-border: #1e3a52;
+  --rb-card-bg: #0f2537;
+  --rb-card-border: #1e3a52;
+  --rb-card-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4);
+  --rb-card-shadow-hover: 0 8px 24px -4px rgba(0, 0, 0, 0.6);
+  --rb-hero-bg: #0d1d2a;
+  --rb-gradient-text: #2dd4bf;
+  --rb-active-pill: #14b8a6;
+  --rb-table-head-bg: #0e7490;
+  --rb-top-accent-line: transparent;
+  --rb-login-panel-bg: #091926;
+}

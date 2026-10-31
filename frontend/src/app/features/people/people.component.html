@@ -1,0 +1,435 @@
+<div class="fe-page" data-testid="people">
+  <fe-page-header [title]="'people.title'" [description]="'people.description'">
+    <button type="button" class="fe-btn" (click)="loadList()">
+      {{ 'people.refresh' | t }}
+    </button>
+  </fe-page-header>
+
+  <div class="people">
+    <!-- ------------------------------------------------------------- list -->
+    <section class="pane pane--list" [attr.aria-labelledby]="'people-list-heading'">
+      <h3 class="pane__title" id="people-list-heading">{{ 'people.title' | t }}</h3>
+
+      <div class="field">
+        <label class="field__label" for="fe-people-search">{{ 'people.list.search' | t }}</label>
+        <input
+          id="fe-people-search"
+          class="fe-input"
+          type="search"
+          [value]="search()"
+          (input)="search.set($any($event.target).value); loadList()"
+        />
+        <p class="fe-sub">{{ 'people.list.searchHint' | t }}</p>
+      </div>
+
+      <fe-async-state
+        [loading]="list.loading() && !list.value()"
+        [empty]="list.value() !== null && rows().length === 0"
+        [error]="list.error()"
+        [hasValue]="list.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [loadingHint]="'state.loadingHint' | t"
+        [emptyTitle]="(search().trim() === '' ? 'people.list.empty' : 'people.list.noResults') | t"
+        [emptyBody]="'people.list.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="loadList()"
+      />
+
+      <ul class="people-list">
+        @for (row of rows(); track row.id) {
+          <li>
+            <button
+              type="button"
+              class="person"
+              [class.person--active]="row.id === selectedId()"
+              [attr.aria-current]="row.id === selectedId() ? 'true' : null"
+              (click)="select(row.id!)"
+            >
+              <span class="person__name">{{ row.displayName ?? '—' }}</span>
+              <span class="fe-sub person__contact">
+                {{ row.primaryEmail ?? row.primaryPhone ?? '—' }}
+              </span>
+              <span class="person__foot">
+                <span class="fe-sub fe-num">
+                  {{ 'people.list.conversations' | t }}: {{ format.integer(row.conversationCount ?? null) }}
+                </span>
+                <span class="fe-sub fe-num">{{ format.listStamp(row.lastSeenAt) }}</span>
+              </span>
+              @if (row.tags?.length) {
+                <span class="person__tags">
+                  @for (tag of row.tags; track tag) {
+                    <span class="fe-badge fe-badge--neutral">{{ tag }}</span>
+                  }
+                </span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+
+      @if (hasMore()) {
+        <button type="button" class="fe-btn" (click)="loadMore()">
+          {{ 'people.list.loadMore' | t }}
+        </button>
+      }
+    </section>
+
+    <!-- ----------------------------------------------------------- detail -->
+    <section class="pane pane--detail" [attr.aria-labelledby]="'people-detail-heading'">
+      @if (!selectedId()) {
+        <h3 class="pane__title" id="people-detail-heading">{{ 'people.detail.title' | t }}</h3>
+        <fe-async-state
+          [loading]="false"
+          [loadingLabel]="'state.loading' | t"
+          [emptyTitle]="'people.detail.selectPrompt' | t"
+          [emptyBody]="'people.detail.selectPromptBody' | t"
+        />
+      } @else {
+        <fe-async-state
+          [loading]="record.loading() && !record.value()"
+          [error]="record.error()"
+          [hasValue]="record.value() !== null"
+          [loadingLabel]="'state.loading' | t"
+          [loadingHint]="'state.loadingHint' | t"
+          [errorTitle]="'state.error' | t"
+          [errorBody]="'state.errorHint' | t"
+          [requestId]="recordErrorRequestId()"
+          [requestIdLabel]="'state.requestId' | t"
+          [retryLabel]="'state.retry' | t"
+          (retry)="selectedId() && loadRecord(selectedId()!)"
+        />
+
+        @if (record.value(); as person) {
+          <header class="detail__head">
+            <div>
+              <h3 class="detail__name" id="people-detail-heading">
+                {{ person.displayName ?? '—' }}
+              </h3>
+              <p class="fe-sub">
+                {{ 'people.detail.cxId' | t }}:
+                <!--
+                  `data-testid` because the journey needs to compare this value with the
+                  one the server holds. Selecting it by class and attribute couples the
+                  test to the stylesheet, and a rename of the class would turn the
+                  assertion into a silently-passing empty locator.
+                -->
+                <span class="fe-mono" dir="ltr" data-testid="customer-cx-id">
+                  {{ person.cxId ?? '—' }}
+                </span>
+              </p>
+            </div>
+            <div class="detail__actions">
+              <button type="button" class="fe-btn fe-btn--ghost" (click)="clearSelection()">
+                {{ 'people.detail.back' | t }}
+              </button>
+              @if (canEdit() && !editing()) {
+                <button type="button" class="fe-btn" (click)="startEditing()">
+                  {{ 'people.detail.edit' | t }}
+                </button>
+              }
+            </div>
+          </header>
+
+          @if (conflict(); as message) {
+            <div class="fe-alert" role="alert">{{ message }}</div>
+          }
+          @if (notice(); as message) {
+            <div class="fe-alert fe-alert--info" role="status">{{ message }}</div>
+          }
+
+          <!-- Identity -->
+          <section class="block" [attr.aria-labelledby]="'people-identity-heading'">
+            <h4 class="block__title" id="people-identity-heading">
+              {{ 'people.detail.identity' | t }}
+            </h4>
+
+            @if (editing()) {
+              <form class="block__form" novalidate (submit)="save($event)">
+                <div class="field">
+                  <label class="field__label" for="fe-person-name">
+                    {{ 'people.detail.displayName' | t }}
+                  </label>
+                  <input
+                    id="fe-person-name"
+                    class="fe-input"
+                    type="text"
+                    [formControl]="editForm.controls.displayName"
+                  />
+                </div>
+                <div class="field">
+                  <label class="field__label" for="fe-person-email">
+                    {{ 'people.detail.primaryEmail' | t }}
+                  </label>
+                  <input
+                    id="fe-person-email"
+                    class="fe-input"
+                    dir="ltr"
+                    type="email"
+                    [formControl]="editForm.controls.primaryEmail"
+                  />
+                </div>
+                <div class="field">
+                  <label class="field__label" for="fe-person-phone">
+                    {{ 'people.detail.primaryPhone' | t }}
+                  </label>
+                  <input
+                    id="fe-person-phone"
+                    class="fe-input fe-mono"
+                    dir="ltr"
+                    type="tel"
+                    [formControl]="editForm.controls.primaryPhone"
+                  />
+                </div>
+                <div class="field">
+                  <label class="field__label" for="fe-person-tags">
+                    {{ 'people.detail.tags' | t }}
+                  </label>
+                  <input
+                    id="fe-person-tags"
+                    class="fe-input"
+                    type="text"
+                    [formControl]="editForm.controls.tags"
+                  />
+                  <p class="fe-sub">{{ 'people.detail.tagsHint' | t }}</p>
+                </div>
+                <div class="block__actions">
+                  <button type="submit" class="fe-btn fe-btn--primary" [disabled]="saving()">
+                    @if (saving()) {
+                      <span class="fe-spinner" aria-hidden="true"></span>
+                      <span>{{ 'people.detail.saving' | t }}</span>
+                    } @else {
+                      <span>{{ 'people.detail.save' | t }}</span>
+                    }
+                  </button>
+                  <button type="button" class="fe-btn fe-btn--ghost" (click)="cancelEditing()">
+                    {{ 'people.detail.cancel' | t }}
+                  </button>
+                </div>
+              </form>
+            } @else {
+              <dl class="facts">
+                <div>
+                  <dt class="fe-eyebrow">{{ 'people.detail.primaryEmail' | t }}</dt>
+                  <dd class="fe-mono" dir="ltr">{{ person.primaryEmail ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt class="fe-eyebrow">{{ 'people.detail.primaryPhone' | t }}</dt>
+                  <dd class="fe-mono" dir="ltr">{{ person.primaryPhone ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt class="fe-eyebrow">{{ 'people.detail.locale' | t }}</dt>
+                  <dd class="fe-mono" dir="ltr">{{ person.locale ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt class="fe-eyebrow">{{ 'people.detail.project' | t }}</dt>
+                  <dd>{{ person.projectName ?? person.project?.name ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt class="fe-eyebrow">{{ 'people.detail.firstSeen' | t }}</dt>
+                  <dd>{{ format.date(person.firstSeenAt) }}</dd>
+                </div>
+                <div>
+                  <dt class="fe-eyebrow">{{ 'people.detail.lastSeen' | t }}</dt>
+                  <dd>{{ format.date(person.lastSeenAt) }}</dd>
+                </div>
+              </dl>
+
+              @if (person.tags?.length) {
+                <ul class="chips">
+                  @for (tag of person.tags; track tag) {
+                    <li class="fe-badge fe-badge--neutral">{{ tag }}</li>
+                  }
+                </ul>
+              }
+            }
+          </section>
+
+          <!-- Linked identities -->
+          @if (identities().length > 0) {
+            <section class="block" [attr.aria-labelledby]="'people-identities-heading'">
+              <h4 class="block__title" id="people-identities-heading">
+                {{ 'people.detail.identities' | t }}
+              </h4>
+              <table class="fe-table">
+                <thead>
+                  <tr>
+                    <th scope="col">{{ 'people.detail.platform' | t }}</th>
+                    <th scope="col">{{ 'people.detail.externalId' | t }}</th>
+                    <th scope="col">{{ 'people.detail.displayName' | t }}</th>
+                    <th scope="col">{{ 'people.detail.verified' | t }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (identity of identities(); track identity.id) {
+                    <tr>
+                      <td class="fe-mono">{{ identity.platform ?? '—' }}</td>
+                      <td class="fe-mono" dir="ltr">{{ identity.externalId ?? '—' }}</td>
+                      <td>{{ identity.displayName ?? '—' }}</td>
+                      <td>
+                        <fe-status-chip [tone]="identity.isVerified ? 'ok' : 'neutral'">
+                          {{ (identity.isVerified
+                            ? 'people.detail.verified'
+                            : 'people.detail.unverified') | t }}
+                        </fe-status-chip>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </section>
+          }
+
+          <!-- Conversations: the customer's history -->
+          <section class="block" [attr.aria-labelledby]="'people-conversations-heading'">
+            <h4 class="block__title" id="people-conversations-heading">
+              {{ 'people.detail.conversations' | t }}
+            </h4>
+            @if (conversations().length === 0) {
+              <p class="fe-sub">{{ 'people.detail.conversationsEmpty' | t }}</p>
+            } @else {
+              <ul class="fe-list">
+                @for (conversation of conversations(); track conversation.id) {
+                  <li class="fe-row">
+                    <a
+                      class="fe-link"
+                      [routerLink]="['/app/inbox']" [queryParams]="{ c: conversation.id }"
+                    >
+                      <span class="fe-mono" dir="ltr">{{ conversation.ticketNumber ?? '—' }}</span>
+                      <span>{{ conversation.subject ?? '—' }}</span>
+                    </a>
+                    <fe-status-chip [tone]="conversation.status === 'OPEN' ? 'human' : 'neutral'">
+                      {{ conversation.status ?? '—' }}
+                    </fe-status-chip>
+                    <span class="fe-sub fe-num">
+                      {{ format.integer(conversation.messageCount ?? null) }}
+                    </span>
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+
+          <!-- Follow-ups and appointments: as the customer's record reports them -->
+          @if (followUps().length > 0) {
+            <section class="block" [attr.aria-labelledby]="'people-leads-heading'">
+              <h4 class="block__title" id="people-leads-heading">
+                {{ 'people.detail.leads' | t }}
+              </h4>
+              <ul class="fe-list">
+                @for (followUp of followUps(); track followUp.id) {
+                  <li class="fe-row">
+                    <span>{{ followUp.name ?? '—' }}</span>
+                    <fe-status-chip tone="neutral">
+                      {{ followUpLabel(followUp.status) }}
+                    </fe-status-chip>
+                    <span class="fe-sub">{{ format.date(followUp.followUpDate) }}</span>
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          @if (appointments().length > 0) {
+            <section class="block" [attr.aria-labelledby]="'people-appointments-heading'">
+              <h4 class="block__title" id="people-appointments-heading">
+                {{ 'people.detail.appointments' | t }}
+              </h4>
+              <ul class="fe-list">
+                @for (appointment of appointments(); track appointment.id) {
+                  <li class="fe-row">
+                    <span>{{ appointment.title ?? '—' }}</span>
+                    <fe-status-chip [tone]="appointmentTone(appointment.status)">
+                      {{ appointmentLabel(appointment.status) }}
+                    </fe-status-chip>
+                    <span class="fe-sub fe-num">{{ format.dateTime(appointment.appointmentDate) }}</span>
+                    @if (appointment.doctorName) {
+                      <span class="fe-sub">{{ appointment.doctorName }}</span>
+                    }
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          <!--
+            Internal notes. A separate region from the conversations above, with the
+            relationship stated in words — FR-3.4 requires the two histories stay
+            separate, and a single merged timeline would put an internal note in the
+            customer's history.
+          -->
+          <section class="block" [attr.aria-labelledby]="'people-notes-heading'">
+            <h4 class="block__title" id="people-notes-heading">
+              {{ 'people.detail.notes' | t }}
+            </h4>
+            <p class="fe-sub">{{ 'people.separation.note' | t }}</p>
+
+            <fe-async-state
+              [loading]="internalNotes.loading() && !internalNotes.value()"
+              [empty]="(internalNotes.value() ?? []).length === 0 && !internalNotes.loading()"
+              [error]="internalNotes.error()"
+              [hasValue]="internalNotes.value() !== null"
+              [loadingLabel]="'state.loading' | t"
+              [emptyTitle]="'people.detail.notesEmpty' | t"
+              [emptyBody]="'people.separation.note' | t"
+              [errorTitle]="'state.error' | t"
+              [errorBody]="'state.errorHint' | t"
+              [retryLabel]="'state.retry' | t"
+              (retry)="internalNotes.refresh()"
+            />
+
+            @if ((internalNotes.value() ?? []).length > 0) {
+              <ul class="notes">
+                @for (note of internalNotes.value(); track note.id) {
+                  <li class="note">
+                    <p class="note__body">{{ note.body ?? '' }}</p>
+                    <div class="note__foot">
+                      <span class="fe-sub">
+                        {{ noteAuthor(note) }} ·
+                        {{ 'people.detail.noteAt' | t }}
+                        {{ format.dateTime(note.createdAt) }}
+                      </span>
+                      @if (canDeleteNotes()) {
+                        <button
+                          type="button"
+                          class="fe-btn fe-btn--ghost"
+                          (click)="deleteNote(note.id)"
+                        >
+                          {{ 'people.detail.noteDelete' | t }}
+                        </button>
+                      }
+                    </div>
+                  </li>
+                }
+              </ul>
+            }
+
+            @if (canWriteNotes()) {
+              <form class="block__form" novalidate (submit)="addNote($event)">
+                <div class="field">
+                  <label class="field__label" for="fe-person-note">
+                    {{ 'people.detail.addNote' | t }}
+                  </label>
+                  <textarea
+                    id="fe-person-note"
+                    class="fe-input"
+                    rows="3"
+                    [formControl]="noteForm.controls.body"
+                    [attr.aria-invalid]="noteFieldError() ? 'true' : null"
+                  ></textarea>
+                  @if (noteFieldError(); as message) {
+                    <p class="field__error">{{ message }}</p>
+                  }
+                </div>
+                <button type="submit" class="fe-btn fe-btn--primary">
+                  {{ 'people.detail.noteSave' | t }}
+                </button>
+              </form>
+            }
+          </section>
+        }
+      }
+    </section>
+  </div>
+</div>

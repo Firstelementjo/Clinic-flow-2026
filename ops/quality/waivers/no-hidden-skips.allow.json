@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "policy": "A skipped integration, security, browser, migration or restore test is a FAILED GATE (AGENTS.md Quality rules; plan.md rule 10; plan.md section 10). An entry in this file is the ONLY way to keep a single skipped test case from failing a build, and it is deliberately expensive to add one.",
+  "rules": [
+    "One entry names exactly one fully-qualified test class and exactly one test case display name. There is no wildcard form; check-no-hidden-skips.ps1 rejects '*' in either field outright.",
+    "Every entry carries a reason (>= 10 characters, an actual justification), a ticket, an expiresOn date no more than 30 days out, and an approvedBy human or system.",
+    "An entry that matches nothing FAILS as stale. A waiver nobody exercises is how a temporary exception becomes permanent.",
+    "An expired entry FAILS even when it would otherwise match.",
+    "The waiver suppresses the failure, never the fact. The skipped test still appears in the evidence bundle as a waived skip.",
+    "Adding a row here is a reviewable decision. Reviewers should ask why the test is skipped rather than why it is not written."
+  ],
+  "entries": []
+}

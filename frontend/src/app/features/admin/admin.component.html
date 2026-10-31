@@ -1,0 +1,501 @@
+<div class="fe-page" data-testid="admin">
+  <fe-page-header [title]="'admin.title'" [description]="'admin.description'">
+    <button type="button" class="fe-btn" (click)="load()">{{ 'admin.refresh' | t }}</button>
+  </fe-page-header>
+
+  <!--
+    Tabs rather than one long scroll. Eight subjects on a phone is a wall, and a wall
+    an operator has to read past to find the one they were sent for.
+
+    The tablist is a real `tablist` with roving focus: arrow keys move between tabs,
+    because a control the keyboard cannot traverse is not reachable (WCAG 2.2 AA,
+    and the same reason the shell's nav rail is a list of links).
+  -->
+  <div
+    class="tabs"
+    role="tablist"
+    [attr.aria-label]="'admin.title' | t"
+    (keydown)="onTabKeydown($event)"
+  >
+    @for (entry of tabs(); track entry.id) {
+      <button
+        type="button"
+        role="tab"
+        class="tabs__tab"
+        [id]="'admin-tab-' + entry.id"
+        [attr.aria-selected]="tab() === entry.id"
+        [attr.aria-controls]="'admin-panel-' + entry.id"
+        [attr.tabindex]="tab() === entry.id ? 0 : -1"
+        (click)="tab.set(entry.id)"
+      >
+        {{ entry.key | t }}
+      </button>
+    }
+  </div>
+
+  <!-- ========================================================== overview -->
+  @if (tab() === 'overview') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-overview"
+      aria-labelledby="admin-tab-overview"
+      tabindex="0"
+      [attr.aria-label]="'admin.overview.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.overview.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.overview.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="overview.loading() && !overview.value()"
+        [empty]="overview.value() !== null && overviewRows().length === 0"
+        [error]="overview.error()"
+        [hasValue]="overview.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [loadingHint]="'state.loadingHint' | t"
+        [emptyTitle]="'admin.overview.empty' | t"
+        [emptyBody]="'admin.overview.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(overview)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (overviewRows().length > 0) {
+        <dl class="facts">
+          @for (row of overviewRows(); track row.key) {
+            <div>
+              <dt class="fe-eyebrow">
+                @if (row.labelKey) {
+                  {{ row.labelKey | t }}
+                } @else {
+                  <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+                }
+              </dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          }
+        </dl>
+      }
+    </section>
+  }
+
+  <!-- =========================================================== backups -->
+  @if (tab() === 'backups') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-backups"
+      aria-labelledby="admin-tab-backups"
+      tabindex="0"
+      [attr.aria-label]="'admin.backups.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.backups.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.backups.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="backups.loading() && !backups.value()"
+        [empty]="backups.value() !== null && backupRows().length === 0"
+        [error]="backups.error()"
+        [hasValue]="backups.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.backups.empty' | t"
+        [emptyBody]="'admin.backups.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(backups)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (backupRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of backupRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  <!-- ======================================================== migrations -->
+  @if (tab() === 'migrations') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-migrations"
+      aria-labelledby="admin-tab-migrations"
+      tabindex="0"
+      [attr.aria-label]="'admin.migrations.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.migrations.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.migrations.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="migrations.loading() && !migrations.value()"
+        [empty]="migrations.value() !== null && migrationRows().length === 0"
+        [error]="migrations.error()"
+        [hasValue]="migrations.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.migrations.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(migrations)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (migrationRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of migrationRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <!--
+        A free-form document has no guaranteed columns. Saying so is the difference
+        between "the migration list is empty" and "the list has whatever fields the
+        server happened to send".
+      -->
+      <fe-not-available
+        [title]="'admin.unavailable.migrations'"
+        [body]="'admin.unavailable.migrationsBody'"
+        [missing]="'GET /api/v1/admin/migrations'"
+      />
+    </section>
+  }
+
+  <!-- ========================================================== commands -->
+  @if (tab() === 'commands') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-commands"
+      aria-labelledby="admin-tab-commands"
+      tabindex="0"
+      [attr.aria-label]="'admin.commands.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.commands.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.commands.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="commands.loading() && !commands.value()"
+        [empty]="commands.value() !== null && commandRows().length === 0"
+        [error]="commands.error()"
+        [hasValue]="commands.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.commands.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(commands)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (commandRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of commandRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (disabledCommandRows().length > 0) {
+        <h4 class="fe-eyebrow">{{ 'admin.commands.disabled' | t }}</h4>
+        <ul class="fe-list">
+          @for (row of disabledCommandRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <fe-status-chip tone="neutral">{{ row.value }}</fe-status-chip>
+            </li>
+          }
+        </ul>
+      }
+
+      <!--
+        The commands are listed, and none of them is a button. Stating that in the
+        product, not only in a commit message, is what makes the omission reviewable.
+      -->
+      <section class="fe-card fe-card--inset" [attr.aria-labelledby]="'admin-writes-title'">
+        <h4 class="fe-card__title" id="admin-writes-title">{{ 'admin.writes.title' | t }}</h4>
+        <p>{{ 'admin.writes.body' | t }}</p>
+      </section>
+    </section>
+  }
+
+  <!-- ============================================================= audit -->
+  @if (tab() === 'audit') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-audit"
+      aria-labelledby="admin-tab-audit"
+      tabindex="0"
+      [attr.aria-label]="'admin.audit.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.audit.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.audit.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="auditEvents.loading() && !auditEvents.value()"
+        [empty]="auditEvents.value() !== null && auditRows().length === 0"
+        [error]="auditEvents.error()"
+        [hasValue]="auditEvents.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.audit.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(auditEvents)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (auditRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of auditRows(); track row.key) {
+            <li class="fe-row">
+              <span>{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (maySee('audit')) {
+        <h4 class="fe-eyebrow">{{ 'admin.audit.security' | t }}</h4>
+        <fe-async-state
+          [loading]="securityEvents.loading() && !securityEvents.value()"
+          [empty]="securityEvents.value() !== null && securityRows().length === 0"
+          [error]="securityEvents.error()"
+          [hasValue]="securityEvents.value() !== null"
+          [loadingLabel]="'state.loading' | t"
+          [emptyTitle]="'admin.audit.empty' | t"
+          [errorTitle]="'state.error' | t"
+          [errorBody]="'state.errorHint' | t"
+          [requestId]="requestIdOf(securityEvents)"
+          [requestIdLabel]="'state.requestId' | t"
+          [retryLabel]="'state.retry' | t"
+          (retry)="load()"
+        />
+        @if (securityRows().length > 0) {
+          <ul class="fe-list">
+            @for (row of securityRows(); track row.key) {
+              <li class="fe-row">
+                <span>{{ row.rawLabel }}</span>
+                <span>{{ row.value }}</span>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </section>
+  }
+
+  <!-- ======================================================== governance -->
+  @if (tab() === 'governance') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-governance"
+      aria-labelledby="admin-tab-governance"
+      tabindex="0"
+      [attr.aria-label]="'admin.governance.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.governance.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.governance.hint' | t }}</p>
+
+      <h4 class="fe-eyebrow">{{ 'admin.governance.purgeGate' | t }}</h4>
+      <fe-async-state
+        [loading]="purgeGate.loading() && !purgeGate.value()"
+        [empty]="purgeGate.value() !== null && purgeGateRows().length === 0"
+        [error]="purgeGate.error()"
+        [hasValue]="purgeGate.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(purgeGate)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+      @if (purgeGateRows().length > 0) {
+        <dl class="facts">
+          @for (row of purgeGateRows(); track row.key) {
+            <div>
+              <dt class="fe-eyebrow">
+                @if (row.labelKey) {
+                  {{ row.labelKey | t }}
+                } @else {
+                  <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+                }
+              </dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          }
+        </dl>
+      }
+
+      <h4 class="fe-eyebrow">{{ 'admin.governance.title' | t }}</h4>
+      <fe-async-state
+        [loading]="legalHolds.loading() && !legalHolds.value()"
+        [empty]="legalHolds.value() !== null && holdRows().length === 0"
+        [error]="legalHolds.error()"
+        [hasValue]="legalHolds.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.governance.empty' | t"
+        [emptyBody]="'admin.governance.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(legalHolds)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+      @if (holdRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of holdRows(); track row.key) {
+            <li class="fe-row">
+              <span>{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <h4 class="fe-eyebrow">{{ 'admin.governance.title' | t }}</h4>
+      <fe-async-state
+        [loading]="deletions.loading() && !deletions.value()"
+        [empty]="deletions.value() !== null && deletionRows().length === 0"
+        [error]="deletions.error()"
+        [hasValue]="deletions.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.governance.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(deletions)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+      @if (deletionRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of deletionRows(); track row.key) {
+            <li class="fe-row">
+              <span>{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      <fe-not-available
+        [title]="'admin.unavailable.purge'"
+        [body]="'admin.unavailable.purgeBody'"
+        [missing]="'POST /api/v1/admin/governance/maintenance/purge'"
+      />
+      <fe-not-available
+        [title]="'admin.unavailable.identityWrites'"
+        [body]="'admin.unavailable.identityWritesBody'"
+        [missing]="'PATCH /api/v1/admin/identity/users/{userId}/role, DELETE /api/v1/admin/identity/sessions/{sessionId}'"
+      />
+    </section>
+  }
+
+  <!-- ========================================================== sessions -->
+  @if (tab() === 'sessions') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-sessions"
+      aria-labelledby="admin-tab-sessions"
+      tabindex="0"
+      [attr.aria-label]="'admin.sessions.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.sessions.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.sessions.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="sessionsList.loading() && !sessionsList.value()"
+        [empty]="sessionsList.value() !== null && sessionRows().length === 0"
+        [error]="sessionsList.error()"
+        [hasValue]="sessionsList.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.sessions.empty' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(sessionsList)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (sessionRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of sessionRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  <!-- =============================================================== jobs -->
+  @if (tab() === 'jobs') {
+    <section
+      class="fe-card"
+      role="tabpanel"
+      id="admin-panel-jobs"
+      aria-labelledby="admin-tab-jobs"
+      tabindex="0"
+      [attr.aria-label]="'admin.jobs.title' | t"
+    >
+      <h3 class="fe-card__title">{{ 'admin.jobs.title' | t }}</h3>
+      <p class="fe-sub">{{ 'admin.jobs.hint' | t }}</p>
+
+      <fe-async-state
+        [loading]="exportJobs.loading() && !exportJobs.value()"
+        [empty]="exportJobs.value() !== null && jobRows().length === 0"
+        [error]="exportJobs.error()"
+        [hasValue]="exportJobs.value() !== null"
+        [loadingLabel]="'state.loading' | t"
+        [emptyTitle]="'admin.jobs.empty' | t"
+        [emptyBody]="'admin.jobs.emptyBody' | t"
+        [errorTitle]="'state.error' | t"
+        [errorBody]="'state.errorHint' | t"
+        [requestId]="requestIdOf(exportJobs)"
+        [requestIdLabel]="'state.requestId' | t"
+        [retryLabel]="'state.retry' | t"
+        (retry)="load()"
+      />
+
+      @if (jobRows().length > 0) {
+        <ul class="fe-list">
+          @for (row of jobRows(); track row.key) {
+            <li class="fe-row">
+              <span class="fe-mono" dir="ltr">{{ row.rawLabel }}</span>
+              <span>{{ row.value }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</div>

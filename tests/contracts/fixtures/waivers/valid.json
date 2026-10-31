@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture: a well-formed, narrow, in-date waiver for exactly one skipped test case. This is the ONLY shape of waiver the gate will ever accept. It covers tests/contracts/fixtures/junit/skipped.",
+  "entries": [
+    {
+      "suite": "com.firstelement.security.TenantContextTest",
+      "test": "the project set is a defensive copy and cannot be mutated after construction",
+      "reason": "Self-test fixture proving the narrow-waiver mechanism works end to end; no real suite is affected.",
+      "ticket": "FE-QA-SELFTEST",
+      "expiresOn": "2026-11-01",
+      "approvedBy": "ops/quality/checks/selftest.ps1"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+*.log
+.DS_Store
+.turbo/
+.vite/
+apps/web/dist/
+packages/*/dist/
+apps/*/dist/
+*.tsbuildinfo
+storage/
+.gradle/
+backend/*/build/
+!backend/*/src/**/build/
+
+.claude/
+api-log.txt
+
+
+# verify-clean-bootstrap.ps1 writes its evidence here by default; it is regenerated per run, not a source artifact
+evidence/
+
+# Angular cache
+.angular/
+frontend/.angular/
+
+# Playwright streaming output; regenerated per run, not a source artifact
+frontend/.matrix-stream/

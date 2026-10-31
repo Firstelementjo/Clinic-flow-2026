@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "note": "plan.md section 7.2 -- the sixteen critical negative tests -- expressed as an executable specification. Each entry either POINTS AT the suite that already proves it (nothing is duplicated and nothing is weakened; referencing an existing suite is the correct disposition) or is explicitly STAGED with the module and phase that will own it. A staged entry is a visible debt with a name, not a silent gap: the security gate fails if an entry has neither an owner nor a phase, and fails if a referenced suite does not exist in tests/contracts/expected-suites.json.",
+  "owner": "Agent L (quality)",
+  "planRef": "plan.md 7.2",
+  "specs": [
+    {
+      "id": "NEG-01",
+      "requirement": "no membership returns no rows",
+      "requirementRef": "FR-1.4",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "a user with no project membership cannot be scoped to any project" },
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "a membership-less user's tenant-wide read still excludes other tenants" },
+        { "suite": "com.firstelement.crm.CrmCoreIntegrationTest", "test": null },
+        { "suite": "com.firstelement.security.query.TenantQueryGuardTest", "test": "a row read outside the scope is denied, and no-membership means no row" }
+      ],
+      "note": "Phase 4 found the real bug here: `in ()` for an empty project list is a PostgreSQL parse error, so the most-protected request 500s. CrmQueryScopeTest pins the `and 1 = 0` SQL."
+    },
+    {
+      "id": "NEG-02",
+      "requirement": "project ID from another tenant cannot be used for read or write",
+      "requirementRef": "FR-1.3, FR-2.7",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "a tenant B project id in an A request is denied before any query runs" },
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "a cross-project read is denied for an EMPLOYEE and permitted for an ADMIN" },
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "a cross-project write is denied and the target row is unchanged" },
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "tenant A never sees tenant B's rows, and the SQL carries the predicate" },
+        { "suite": "com.firstelement.crm.CrmCoreIntegrationTest", "test": null }
+      ]
+    },
+    {
+      "id": "NEG-03",
+      "requirement": "unauthorized aggregates do not reveal counts or sums",
+      "requirementRef": "FR-2.7",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "counts and distinct counts are scoped, so an aggregate never includes an unauthorized row" },
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "an aggregate restricted to one project cannot be widened by a client filter" }
+      ]
+    },
+    {
+      "id": "NEG-04",
+      "requirement": "unauthorized rows/fields do not appear in CSV or DOCX",
+      "requirementRef": "FR-8.2, FR-8.9",
+      "status": "staged",
+      "ownerModule": "backend/exports",
+      "opensAtPhase": "Phase 9 (reporting and DOCX/CSV export)",
+      "stagedBecause": "no export module exists. plan.md section 6 requires authorization BEFORE aggregation, which is a different assertion from 'the response was filtered'.",
+      "gateStage": "export-finance"
+    },
+    {
+      "id": "NEG-05",
+      "requirement": "export download reauthorizes and expires",
+      "requirementRef": "FR-8.7, FR-8.8",
+      "status": "staged",
+      "ownerModule": "backend/exports",
+      "opensAtPhase": "Phase 9 (reporting and DOCX/CSV export)",
+      "stagedBecause": "no export module exists; a signed URL without a reauthorization at download is the defect this test exists to catch",
+      "gateStage": "export-finance"
+    },
+    {
+      "id": "NEG-06",
+      "requirement": "AI retrieval excludes another project even with a zero similarity threshold",
+      "requirementRef": "FR-5.7, PROJECT_REQUIREMENTS section 8 AI governance",
+      "status": "staged",
+      "ownerModule": "backend/knowledge-ai",
+      "opensAtPhase": "Phase 10 (Spring AI and governed RAG)",
+      "stagedBecause": "CaseSolutionRetriever is a seam; the pgvector prefilter does not exist yet. ADR-0006 section 4 requires this to appear as CLOSED in the Phase-10 gate, not as unchanged.",
+      "gateStage": "security-tenant-negative"
+    },
+    {
+      "id": "NEG-07",
+      "requirement": "AI tool arguments cannot override tenant scope",
+      "requirementRef": "FR-5.6, AGENTS.md",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "AI tool execution is application-owned and deny-by-default", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$AiTools", "test": "arguments can never override tenant scope" },
+        { "suite": "AI tool execution is application-owned and deny-by-default", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$AiTools", "test": "an argument the descriptor does not declare is refused" },
+        { "suite": "com.firstelement.identity.TenantIsolationQueryIntegrationTest", "test": "an organization id claimed by an integration is checked, never honoured" }
+      ]
+    },
+    {
+      "id": "NEG-08",
+      "requirement": "disabled tools are denied and recorded",
+      "requirementRef": "FR-5.5, FR-5.9",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "AI tool execution is application-owned and deny-by-default", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$AiTools", "test": "a disabled tool is denied, and unknown and disabled are indistinguishable" },
+        { "suite": "AI tool execution is application-owned and deny-by-default", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$AiTools", "test": "a missing capability is denied even when the tool is enabled" },
+        { "suite": "AI tool execution is application-owned and deny-by-default", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$AiTools", "test": "a high-risk tool requires explicit human approval" },
+        { "suite": "AI tool execution is application-owned and deny-by-default", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$AiTools", "test": "the denial record carries argument names but never argument values" }
+      ]
+    },
+    {
+      "id": "NEG-09",
+      "requirement": "human takeover aborts an in-flight AI send",
+      "requirementRef": "FR-5.9, PROJECT_REQUIREMENTS section 8",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.inbox.InboxJourneyIntegrationTest", "test": null },
+        { "suite": "com.firstelement.channels.OutboundCrashRecoveryIntegrationTest", "test": "a worker that dies after the provider send does not send the reply twice" }
+      ],
+      "note": "The mode/modeVersion transition and the conditional outbound send are the same assertion; Phase 4's journey walks it, Phase 5b's crash test pins the send half. A dedicated concurrency test (a takeover racing an in-flight send in the same transaction window) is still owed in Phase 6 -- recorded in docs/migration/phases/phase-06.md ownership, not here."
+    },
+    {
+      "id": "NEG-10",
+      "requirement": "duplicated webhooks create one message and one usage event",
+      "requirementRef": "FR-4.4",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.channels.ProviderEventDeduplicationIntegrationTest", "test": "one webhook admits one event; the redelivery is refused and nothing is republished" },
+        { "suite": "com.firstelement.channels.ProviderEventDeduplicationIntegrationTest", "test": "five redeliveries still produce exactly one message and one intent" },
+        { "suite": "com.firstelement.channels.ProviderEventDeduplicationIntegrationTest", "test": "the database itself refuses a second row for the same provider message id" },
+        { "suite": "com.firstelement.channels.ProviderEventDeduplicationIntegrationTest", "test": "the same provider id in another tenant is a different event" }
+      ],
+      "note": "The USAGE EVENT half is not implemented: the usage ledger is Phase 8. The uniqueness half is enforced today, and a duplicate that produced two usage events would be a Phase-8 regression to add."
+    },
+    {
+      "id": "NEG-11",
+      "requirement": "worker crash after external send does not duplicate on retry",
+      "requirementRef": "FR-10.7, plan.md section 7",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.channels.OutboundCrashRecoveryIntegrationTest", "test": "a worker that dies after the provider send does not send the reply twice" },
+        { "suite": "com.firstelement.channels.OutboundCrashRecoveryIntegrationTest", "test": "an expired lease is reclaimed and the re-run still does not duplicate the send" },
+        { "suite": "com.firstelement.channels.OutboundDeliveryIntegrationTest", "test": "a retried job does not send the same reply twice" },
+        { "suite": "com.firstelement.worker.OutboxLifecycleIntegrationTest", "test": "a worker that does not hold the lease cannot complete, retry or dead-letter" }
+      ]
+    },
+    {
+      "id": "NEG-12",
+      "requirement": "outbox dispatch after commit does not publish rolled-back changes",
+      "requirementRef": "FR-4.6, plan.md section 5",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.channels.OutboxSameTransactionIntegrationTest", "test": "a rolled-back reply publishes nothing: the intent shares the transaction's fate" },
+        { "suite": "com.firstelement.channels.OutboxSameTransactionIntegrationTest", "test": "a committed reply inside an outer transaction is durable" },
+        { "suite": "com.firstelement.worker.OutboxEnqueuerTransactionTest", "test": "a rolled-back domain transaction publishes nothing" },
+        { "suite": "com.firstelement.worker.OutboxEnqueuerTransactionTest", "test": "publishing outside a transaction is refused, and nothing is written" }
+      ]
+    },
+    {
+      "id": "NEG-13",
+      "requirement": "replay is safe and audited",
+      "requirementRef": "FR-4.6, FR-10.7",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.worker.OutboxDeadLetterReplayIntegrationTest", "test": "a replay records who, when, and what it replays, and mutates no history" },
+        { "suite": "com.firstelement.worker.OutboxDeadLetterReplayIntegrationTest", "test": "a second replay of the same event writes nothing and is still audited" },
+        { "suite": "com.firstelement.worker.OutboxDeadLetterReplayIntegrationTest", "test": "a machine principal cannot replay: an unattributable replay is refused" },
+        { "suite": "com.firstelement.worker.OutboxLifecycleIntegrationTest", "test": "replay is audited, idempotent, and never creates a second row" }
+      ]
+    },
+    {
+      "id": "NEG-14",
+      "requirement": "rate-card or period changes do not mutate closed snapshots",
+      "requirementRef": "FR-7.4",
+      "status": "staged",
+      "ownerModule": "backend/reporting-finance",
+      "opensAtPhase": "Phase 8 (finance ledger and analytics read models)",
+      "stagedBecause": "the rate-card and period-lock tables are ops/flyway/pending/V202610040004__finance_rate_cards_periods.sql.todo, not promoted",
+      "gateStage": "export-finance"
+    },
+    {
+      "id": "NEG-15",
+      "requirement": "realtime reconnect resyncs state instead of trusting missed events",
+      "requirementRef": "FR-9.6, ADR-0003",
+      "status": "enforced",
+      "enforcedBy": [
+        { "suite": "com.firstelement.notifications.NotificationDeliveryIntegrationTest", "test": null },
+        { "suite": "realtime subscriptions are tenant-scoped", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$Realtime", "test": "a requested topic list is filtered, and every rejection is recorded" },
+        { "suite": "realtime subscriptions are tenant-scoped", "class": "com.firstelement.security.boundaries.NonHttpBoundaryTest$Realtime", "test": "another tenant's project topic is refused and recorded" }
+      ],
+      "note": "The SSE resync-from-API half is proven over HTTP by RealtimeStreamHttpIntegrationTest once Phase 5b commits it; the manifest entry is added in the same commit."
+    },
+    {
+      "id": "NEG-16",
+      "requirement": "deleted knowledge is not retrievable after propagation completes",
+      "requirementRef": "FR-5.11, PROJECT_REQUIREMENTS section 7 data lifecycle",
+      "status": "staged",
+      "ownerModule": "backend/knowledge-ai",
+      "opensAtPhase": "Phase 10 (Spring AI and governed RAG)",
+      "stagedBecause": "there is no ingestion pipeline and no deletion-propagation flow yet",
+      "gateStage": "security-tenant-negative"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "a customer with no conversation, no lead, no appointment and no identity",
+  "source": "apps/api/src/customers/customers.service.ts -> getById (legacy reference). Note the key is `leads`, not `followUps`: the 360 view kept the Prisma selection name, while the customer LIST maps the same rows to `followUps`.",
+  "seed": "InboxFixture.reset(); the fixture customer A1, which has no children.",
+  "volatile": [],
+  "response": {
+    "id": "aaaaaaaa-0000-0000-0000-0000000cc001",
+    "projectId": "aaaaaaaa-0000-0000-0000-0000000000a1",
+    "cxId": "#33000001",
+    "displayName": "Alpha One Clinic",
+    "primaryEmail": null,
+    "primaryPhone": "+966500000001",
+    "locale": "ar",
+    "tags": [],
+    "notes": null,
+    "metadata": {},
+    "firstSeenAt": "2026-08-14T09:30:00.000Z",
+    "lastSeenAt": "2026-08-14T09:30:00.000Z",
+    "project": {
+      "name": "Alpha One"
+    },
+    "identities": [],
+    "conversations": [],
+    "leads": [],
+    "appointments": [],
+    "projectName": "Alpha One"
+  }
+}

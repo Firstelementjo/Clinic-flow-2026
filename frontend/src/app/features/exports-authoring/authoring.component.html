@@ -1,0 +1,838 @@
+<!--
+  Report authoring.
+
+  ## The two states this screen is careful about
+
+  1. **A refusal is not "not found".** The backend answers 404 both for "you may not author
+     this" and for "this is not yours", on purpose. So the refusal below never claims to
+     know which — it states that the server did not return the item and that it will not say
+     why. There is no second probe anywhere on this screen, because probing with a second id
+     would turn the non-disclosure back into an oracle.
+  2. **A draft is not exportable, and the screen says so.** The server refuses to pin a
+     draft by an export, so the version list says what each state means in words rather than
+     relying on a colour, and exportability itself is never asserted here — it is read from
+     the catalogue on the exports tab, because the server computes it against the caller's
+     own permissions.
+-->
+<section class="authoring" data-testid="authoring" [attr.aria-labelledby]="'authoring-heading'">
+  <h3 class="fe-card__title" id="authoring-heading">{{ 'authoring.title' | t }}</h3>
+  <p class="fe-sub">{{ 'authoring.description' | t }}</p>
+
+  @if (!mayAuthor()) {
+    <!--
+      The permission this screen gates its controls on.
+
+      Drawn as a refusal in words, not as an empty screen: an operator with `analytics:read-project`
+      and no `report:manage` needs to be told that authoring exists and is not theirs, or
+      they will look for a missing button. The server enforces this regardless — this is a
+      statement of what will be drawn, not of what is permitted.
+    -->
+    <div class="fe-alert" role="status" data-testid="authoring-refused">
+      {{ 'authoring.refusal.permission' | t }}
+      <span class="fe-mono" dir="ltr">{{ serverPermission() ?? 'report:manage' }}</span>
+    </div>
+  }
+
+  @if (projects.selectedProjectId() === undefined) {
+    <p class="fe-sub" data-testid="authoring-needs-project">{{ 'authoring.needsProject' | t }}</p>
+  } @else {
+    <fe-async-state
+      [loading]="summary.loading() && !summary.value()"
+      [empty]="summary.value() !== null && subjects().length === 0"
+      [error]="summary.error()"
+      [hasValue]="summary.value() !== null"
+      [loadingLabel]="'state.loading' | t"
+      [loadingHint]="'state.loadingHint' | t"
+      [emptyTitle]="'authoring.summary.empty' | t"
+      [errorTitle]="'state.error' | t"
+      [errorBody]="'state.errorHint' | t"
+      [requestId]="requestIdOf(summary)"
+      [requestIdLabel]="'state.requestId' | t"
+      [retryLabel]="'state.retry' | t"
+      (retry)="load()"
+    />
+
+    @if (summary.value(); as server) {
+      <!--
+        The server's own statement, verbatim.
+
+        It says that `mayAuthor` is a hint for the UI and not an authorization decision, and
+        that every route answers a caller without the permission with a non-disclosing 404.
+        Substituting a client paraphrase would replace an authoritative statement with a
+        guess, so the text is rendered as sent, with `dir="auto"` because it is English
+        inside an Arabic screen.
+      -->
+      <div class="authoring__server" data-testid="authoring-server-note">
+        <h4 class="fe-eyebrow">{{ 'authoring.serverNote' | t }}</h4>
+        @if (serverNote(); as note) {
+          <p class="fe-sub" dir="auto">{{ note }}</p>
+        }
+        <dl class="facts">
+          <div>
+            <dt class="fe-eyebrow">{{ 'authoring.mayAuthor.title' | t }}</dt>
+            <dd>
+              <span class="fe-mono" dir="ltr">{{ serverPermission() ?? '—' }}</span>
+              @if (serverMayAuthor() !== null) {
+                <span class="fe-chip" [class.fe-chip--on]="serverMayAuthor()">
+                  {{
+                    (serverMayAuthor() ? 'authoring.mayAuthor.granted' : 'authoring.mayAuthor.absent')
+                      | t
+                  }}
+                </span>
+              }
+            </dd>
+          </div>
+          <div>
+            <dt class="fe-eyebrow">{{ 'authoring.field.locale' | t }}</dt>
+            <dd class="fe-mono" dir="ltr">{{ locales().join(', ') || '—' }}</dd>
+          </div>
+          <div>
+            <dt class="fe-eyebrow">{{ 'authoring.field.redactionPolicy' | t }}</dt>
+            <dd class="fe-mono" dir="ltr">{{ redactionPolicies().join(', ') || '—' }}</dd>
+          </div>
+        </dl>
+        <p class="fe-sub">{{ 'authoring.mayAuthor.hint' | t }}</p>
+      </div>
+
+      @if (refusal(); as message) {
+        <!--
+          The non-disclosing refusal. An `alert`, because it is the answer to a write the
+          operator just asked for, and silence would read as "it worked".
+        -->
+        <div class="fe-alert" role="alert" data-testid="authoring-refusal">
+          {{ message }}
+          @if (refusalCorrelationId(); as requestId) {
+            <span class="fe-sub fe-mono" dir="ltr">{{ requestId }}</span>
+          }
+        </div>
+      }
+      @if (uploadRefusal(); as message) {
+        <div class="fe-alert" role="alert" data-testid="authoring-upload-refusal">{{ message }}</div>
+      }
+      @if (notice(); as message) {
+        <div class="fe-alert fe-alert--info" role="status" data-testid="authoring-notice">
+          {{ message }}
+        </div>
+      }
+
+      @if (mayAuthor()) {
+        <!-- ============================================ author a definition -->
+        <section class="fe-card fe-card--inset" aria-labelledby="authoring-definition-heading">
+          <h4 class="fe-card__title" id="authoring-definition-heading">
+            {{ 'authoring.definition.title' | t }}
+          </h4>
+          <form class="authoring__form" novalidate (submit)="createDefinition($event)">
+            <div class="field">
+              <label class="field__label" for="fe-authoring-key">{{ 'authoring.field.key' | t }}</label>
+              <input
+                id="fe-authoring-key"
+                class="fe-input"
+                type="text"
+                dir="ltr"
+                autocomplete="off"
+                [formControl]="definitionForm.controls.key"
+              />
+              <p class="fe-sub">{{ 'authoring.field.keyHint' | t }}</p>
+              @if (definitionForm.controls.key.touched && definitionForm.controls.key.invalid) {
+                <p class="field__error">{{ 'authoring.field.required' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-name-ar">
+                {{ 'authoring.field.nameAr' | t }}
+              </label>
+              <input
+                id="fe-authoring-name-ar"
+                class="fe-input"
+                type="text"
+                lang="ar"
+                dir="rtl"
+                [formControl]="definitionForm.controls.nameAr"
+              />
+              <p class="fe-sub">{{ 'authoring.field.nameHint' | t }}</p>
+              @if (
+                definitionForm.controls.nameAr.touched && definitionForm.controls.nameAr.invalid
+              ) {
+                <p class="field__error">{{ 'authoring.field.required' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-name-en">
+                {{ 'authoring.field.nameEn' | t }}
+              </label>
+              <input
+                id="fe-authoring-name-en"
+                class="fe-input"
+                type="text"
+                dir="ltr"
+                lang="en"
+                [formControl]="definitionForm.controls.nameEn"
+              />
+              @if (
+                definitionForm.controls.nameEn.touched && definitionForm.controls.nameEn.invalid
+              ) {
+                <p class="field__error">{{ 'authoring.field.required' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-desc-ar">
+                {{ 'authoring.field.descriptionAr' | t }}
+              </label>
+              <textarea
+                id="fe-authoring-desc-ar"
+                class="fe-input"
+                rows="2"
+                lang="ar"
+                dir="rtl"
+                [formControl]="definitionForm.controls.descriptionAr"
+              ></textarea>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-desc-en">
+                {{ 'authoring.field.descriptionEn' | t }}
+              </label>
+              <textarea
+                id="fe-authoring-desc-en"
+                class="fe-input"
+                rows="2"
+                dir="ltr"
+                lang="en"
+                [formControl]="definitionForm.controls.descriptionEn"
+              ></textarea>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-timezone">
+                {{ 'authoring.field.timezone' | t }}
+              </label>
+              <input
+                id="fe-authoring-timezone"
+                class="fe-input"
+                type="text"
+                dir="ltr"
+                placeholder="Asia/Amman"
+                [formControl]="definitionForm.controls.timezone"
+              />
+            </div>
+
+            <!--
+              Locale and redaction policy are offered from the server's own arrays rather
+              than from local lists, so a value the catalogue has stopped supporting cannot
+              be sent. The placeholder carries the value rather than a label, because the
+              values are wire values.
+            -->
+            <div class="field">
+              <label class="field__label" for="fe-authoring-locale">
+                {{ 'authoring.field.locale' | t }}
+              </label>
+              <select
+                id="fe-authoring-locale"
+                class="fe-input"
+                [formControl]="definitionForm.controls.localeDefault"
+              >
+                <option value="">—</option>
+                @for (locale of locales(); track locale) {
+                  <option [value]="locale" dir="ltr">{{ locale }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-redaction">
+                {{ 'authoring.field.redactionPolicy' | t }}
+              </label>
+              <select
+                id="fe-authoring-redaction"
+                class="fe-input"
+                [formControl]="definitionForm.controls.redactionPolicy"
+              >
+                <option value="">—</option>
+                @for (policy of redactionPolicies(); track policy) {
+                  <option [value]="policy" dir="ltr">{{ policy }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-retention">
+                {{ 'authoring.field.retentionClass' | t }}
+              </label>
+              <input
+                id="fe-authoring-retention"
+                class="fe-input"
+                type="text"
+                dir="ltr"
+                placeholder="transient"
+                [formControl]="definitionForm.controls.retentionClass"
+              />
+              <p class="fe-sub">{{ 'authoring.field.retentionHint' | t }}</p>
+              @if (
+                definitionForm.controls.retentionClass.touched &&
+                definitionForm.controls.retentionClass.invalid
+              ) {
+                <p class="field__error">{{ 'authoring.field.required' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-authoring-permissions">
+                {{ 'authoring.field.requiredPermissions' | t }}
+              </label>
+              <textarea
+                id="fe-authoring-permissions"
+                class="fe-input"
+                rows="3"
+                dir="ltr"
+                spellcheck="false"
+                [formControl]="definitionForm.controls.requiredPermissions"
+              ></textarea>
+              <p class="fe-sub">{{ 'authoring.field.requiredPermissionsHint' | t }}</p>
+            </div>
+
+            <button
+              type="submit"
+              class="fe-btn"
+              [disabled]="busy() === 'definition' || definitionForm.invalid"
+            >
+              {{
+                (busy() === 'definition'
+                  ? 'authoring.definition.submitting'
+                  : 'authoring.definition.submit') | t
+              }}
+            </button>
+          </form>
+        </section>
+
+        <!-- ============================================ authored definitions -->
+        <section class="fe-card fe-card--inset" aria-labelledby="authoring-definitions-heading">
+          <h4 class="fe-card__title" id="authoring-definitions-heading">
+            {{ 'authoring.definition.list' | t }}
+          </h4>
+          @if (authoredDefinitions().length === 0) {
+            <p class="fe-sub" data-testid="authoring-no-definitions">
+              {{ 'authoring.definition.listEmpty' | t }}
+            </p>
+          }
+          <ul class="authoring__list" data-testid="authoring-definitions">
+            @for (definition of authoredDefinitions(); track definition.id) {
+              <li class="authoring__item">
+                <div class="authoring__row">
+                  <span class="fe-mono" dir="ltr">{{ definition.key }}</span>
+                  <!--
+                    The id is shown, because it is the server's and an operator may need to
+                    quote it in a support conversation. It is never an input: nothing on this
+                    screen accepts a pasted id.
+                  -->
+                  <span class="fe-sub fe-mono" dir="ltr">{{ definition.id }}</span>
+                </div>
+
+                <div class="authoring__actions">
+                  <button
+                    type="button"
+                    class="fe-btn fe-btn--ghost"
+                    (click)="openVersionForm(definition.id)"
+                  >
+                    {{ 'authoring.version.author' | t }}
+                  </button>
+                  <button
+                    type="button"
+                    class="fe-btn fe-btn--ghost"
+                    [attr.aria-expanded]="openVersions().includes(definition.id)"
+                    (click)="toggleVersions(definition.id)"
+                  >
+                    {{ 'authoring.version.title' | t }}
+                  </button>
+                  <button
+                    type="button"
+                    class="fe-btn fe-btn--ghost"
+                    [attr.aria-expanded]="renamingFor() === definition.id"
+                    [attr.aria-controls]="'fe-rename-' + definition.id"
+                    (click)="openRenameForm(definition)"
+                  >
+                    {{ 'authoring.rename.title' | t }}
+                  </button>
+                </div>
+
+                @if (renamingFor() === definition.id) {
+                  <!--
+                    The form is labelled by the definition's own key, not by a generic
+                    "Rename", because several of these can be open at different times and a
+                    screen reader user tabbing between them needs to know which report they
+                    are about to change.
+                  -->
+                  <form
+                    class="authoring__subform"
+                    novalidate
+                    [id]="'fe-rename-' + definition.id"
+                    (submit)="renameDefinition(definition.id, $event)"
+                  >
+                    <label class="field__label" [for]="'fe-rename-name-ar-' + definition.id">
+                      {{ 'authoring.field.nameAr' | t }}
+                    </label>
+                    <input
+                      class="fe-input"
+                      type="text"
+                      dir="auto"
+                      [id]="'fe-rename-name-ar-' + definition.id"
+                      [formControl]="renameForm.controls.nameAr"
+                    />
+                    <label class="field__label" [for]="'fe-rename-name-en-' + definition.id">
+                      {{ 'authoring.field.nameEn' | t }}
+                    </label>
+                    <input
+                      class="fe-input"
+                      type="text"
+                      dir="auto"
+                      [id]="'fe-rename-name-en-' + definition.id"
+                      [formControl]="renameForm.controls.nameEn"
+                    />
+                    <label
+                      class="field__label"
+                      [for]="'fe-rename-desc-ar-' + definition.id"
+                    >
+                      {{ 'authoring.field.descriptionAr' | t }}
+                    </label>
+                    <input
+                      class="fe-input"
+                      type="text"
+                      dir="auto"
+                      [id]="'fe-rename-desc-ar-' + definition.id"
+                      [formControl]="renameForm.controls.descriptionAr"
+                    />
+                    <label
+                      class="field__label"
+                      [for]="'fe-rename-desc-en-' + definition.id"
+                    >
+                      {{ 'authoring.field.descriptionEn' | t }}
+                    </label>
+                    <input
+                      class="fe-input"
+                      type="text"
+                      dir="auto"
+                      [id]="'fe-rename-desc-en-' + definition.id"
+                      [formControl]="renameForm.controls.descriptionEn"
+                    />
+
+                    <p class="fe-sub">
+                      {{ 'authoring.rename.versionNote' | t }}
+                    </p>
+
+                    <button
+                      type="submit"
+                      class="fe-btn"
+                      [disabled]="busy() === 'rename:' + definition.id || renameForm.invalid"
+                    >
+                      {{ 'authoring.rename.submit' | t }}
+                    </button>
+                  </form>
+                }
+
+                @if (authoringVersionFor() === definition.id) {
+                  <form class="authoring__subform" novalidate (submit)="createVersion(definition.id, $event)">
+                    <div class="field">
+                      <label class="field__label" for="fe-version-subject">
+                        {{ 'authoring.field.subject' | t }}
+                      </label>
+                      <select
+                        id="fe-version-subject"
+                        class="fe-input"
+                        [value]="versionSubject() ?? ''"
+                        (change)="versionSubject.set($any($event.target).value)"
+                      >
+                        @for (subject of subjects(); track subject.key) {
+                          <option [value]="subject.key" dir="ltr">{{ subject.key }}</option>
+                        }
+                      </select>
+                    </div>
+
+                    <!--
+                      The column checkboxes are the server's own fields, labelled from its
+                      `labelAr`/`labelEn`. A sensitive field is marked in **words**, not by
+                      colour, and the permission it requires is named — because a column
+                      whose permission the author does not hold will produce a report they
+                      cannot see, and the only place to learn that is here.
+                    -->
+                    <fieldset class="authoring__columns">
+                      <legend class="field__label">{{ 'authoring.version.measures' | t }}</legend>
+                      <p class="fe-sub">{{ 'authoring.version.measuresHint' | t }}</p>
+                      @for (field of subjectMeasures(); track field.key) {
+                        <div class="authoring__column">
+                          <input
+                            type="checkbox"
+                            [id]="'fe-version-measure-' + field.key"
+                            [checked]="measureChosen(field.key)"
+                            (change)="toggleMeasure(field.key, $any($event.target).checked)"
+                          />
+                          <label [for]="'fe-version-measure-' + field.key">{{ field.label }}</label>
+                          <span class="fe-sub fe-mono" dir="ltr">{{ field.key }}</span>
+                          @if (field.sensitive) {
+                            <span class="fe-chip fe-chip--warn">sensitive</span>
+                          }
+                        </div>
+                      }
+                    </fieldset>
+
+                    <fieldset class="authoring__columns">
+                      <legend class="field__label">{{ 'authoring.version.columns' | t }}</legend>
+                      <p class="fe-sub">{{ 'authoring.version.columnsHint' | t }}</p>
+                      @for (field of subjectFields(); track field.key) {
+                        <div class="authoring__column">
+                          <input
+                            type="checkbox"
+                            [id]="'fe-version-column-' + field.key"
+                            [checked]="columnChosen(field.key)"
+                            (change)="toggleColumn(field.key, $any($event.target).checked)"
+                          />
+                          <label [for]="'fe-version-column-' + field.key">{{ field.label }}</label>
+                          <span class="fe-sub fe-mono" dir="ltr">{{ field.key }}</span>
+                          @if (field.sensitive) {
+                            <span class="fe-chip fe-chip--warn">sensitive</span>
+                          }
+                          @if (field.requiredPermission; as permission) {
+                            <span class="fe-sub fe-mono" dir="ltr">{{ permission }}</span>
+                          }
+                        </div>
+                      }
+                    </fieldset>
+
+                    @if (subjectFilters().length > 0) {
+                      <div class="field">
+                        <span class="field__label">{{ 'authoring.version.columns' | t }}</span>
+                        <p class="fe-sub fe-mono" dir="ltr">
+                          {{ subjectFilters().join(', ') }}
+                        </p>
+                      </div>
+                    }
+
+                    <div class="field">
+                      <label class="field__label" for="fe-version-change-note">
+                        {{ 'authoring.version.changeNote' | t }}
+                      </label>
+                      <textarea
+                        id="fe-version-change-note"
+                        class="fe-input"
+                        rows="2"
+                        [formControl]="versionForm.controls.changeNote"
+                      ></textarea>
+                      <p class="fe-sub">{{ 'authoring.version.changeNoteHint' | t }}</p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      class="fe-btn"
+                      [disabled]="busy() === 'version:' + definition.id"
+                    >
+                      {{ 'authoring.version.submit' | t }}
+                    </button>
+                  </form>
+                }
+
+                @if (openVersions().includes(definition.id)) {
+                  @if (definition.versions.length === 0) {
+                    <p class="fe-sub">{{ 'authoring.version.empty' | t }}</p>
+                  }
+                  <ul class="authoring__versions" data-testid="authoring-versions">
+                    @for (version of definition.versions; track version.number) {
+                      <li class="authoring__version">
+                        <div class="authoring__row">
+                          <span class="fe-mono">{{ 'authoring.version.number' | t }}</span>
+                          <span class="fe-num">{{ version.number }}</span>
+                          <!--
+                            The state is the server's word, always shown, with a gloss
+                            underneath. Never a colour alone: a draft that looks like a
+                            published version is exactly the mistake an author makes here.
+                          -->
+                          <span
+                            class="fe-chip"
+                            [class.fe-chip--on]="isPublished(version.state)"
+                            [class.fe-chip--warn]="isDraft(version.state)"
+                            [class.fe-chip--off]="isRetired(version.state)"
+                            [attr.data-state]="version.state"
+                          >
+                            <span class="fe-mono" dir="ltr">{{ version.state || '—' }}</span>
+                          </span>
+                        </div>
+                        @if (stateGloss(version.state); as gloss) {
+                          <p class="fe-sub">{{ gloss }}</p>
+                        }
+                        @if (version.columns.length > 0) {
+                          <p class="fe-sub fe-mono" dir="ltr">{{ version.columns.join(', ') }}</p>
+                        }
+                        @if (version.changeNote; as note) {
+                          <p class="fe-sub">{{ note }}</p>
+                        }
+                        @if (version.publishedAt; as published) {
+                          <p class="fe-sub">
+                            {{ 'authoring.version.publishedAt' | t }}: {{ when(published) }}
+                          </p>
+                        }
+                        @if (version.retiredAt; as retired) {
+                          <p class="fe-sub">
+                            {{ 'authoring.version.retiredAt' | t }}: {{ when(retired) }}
+                          </p>
+                        }
+
+                        <div class="authoring__actions">
+                          @if (isDraft(version.state)) {
+                            <button
+                              type="button"
+                              class="fe-btn"
+                              [disabled]="busy() === 'publish:' + definition.id + ':' + version.number"
+                              (click)="publishVersion(definition.id, version.number, $event)"
+                            >
+                              {{ 'authoring.version.publish' | t }}
+                            </button>
+                          }
+                          @if (!isRetired(version.state)) {
+                            <button
+                              type="button"
+                              class="fe-btn fe-btn--ghost"
+                              [disabled]="busy() === 'retire:' + definition.id + ':' + version.number"
+                              (click)="retireVersion(definition.id, version.number, $event)"
+                            >
+                              {{ 'authoring.version.retire' | t }}
+                            </button>
+                          }
+                        </div>
+                      </li>
+                    }
+                  </ul>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+
+        <!-- ============================================ author a template -->
+        <section class="fe-card fe-card--inset" aria-labelledby="authoring-template-heading">
+          <h4 class="fe-card__title" id="authoring-template-heading">
+            {{ 'authoring.template.title' | t }}
+          </h4>
+          <form class="authoring__form" novalidate (submit)="createTemplate($event)">
+            <div class="field">
+              <label class="field__label" for="fe-template-key">{{ 'authoring.field.key' | t }}</label>
+              <input
+                id="fe-template-key"
+                class="fe-input"
+                type="text"
+                dir="ltr"
+                autocomplete="off"
+                [formControl]="templateForm.controls.key"
+              />
+              @if (templateForm.controls.key.touched && templateForm.controls.key.invalid) {
+                <p class="field__error">{{ 'authoring.field.required' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-template-name-ar">{{ 'authoring.field.nameAr' | t }}</label>
+              <input
+                id="fe-template-name-ar"
+                class="fe-input"
+                type="text"
+                lang="ar"
+                dir="rtl"
+                [formControl]="templateForm.controls.nameAr"
+              />
+              @if (templateForm.controls.nameAr.touched && templateForm.controls.nameAr.invalid) {
+                <p class="field__error">{{ 'authoring.field.required' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-template-name-en">{{ 'authoring.field.nameEn' | t }}</label>
+              <input
+                id="fe-template-name-en"
+                class="fe-input"
+                type="text"
+                dir="ltr"
+                lang="en"
+                [formControl]="templateForm.controls.nameEn"
+              />
+              @if (templateForm.controls.nameEn.touched && templateForm.controls.nameEn.invalid) {
+                <p class="field__error">{{ 'authoring.field.required' | t }}</p>
+              }
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-template-locale">{{ 'authoring.field.locale' | t }}</label>
+              <select
+                id="fe-template-locale"
+                class="fe-input"
+                [formControl]="templateForm.controls.locale"
+              >
+                <option value="">—</option>
+                @for (locale of locales(); track locale) {
+                  <option [value]="locale" dir="ltr">{{ locale }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="fe-template-timezone">
+                {{ 'authoring.field.timezone' | t }}
+              </label>
+              <input
+                id="fe-template-timezone"
+                class="fe-input"
+                type="text"
+                dir="ltr"
+                placeholder="Asia/Amman"
+                [formControl]="templateForm.controls.timezone"
+              />
+            </div>
+
+            <button type="submit" class="fe-btn" [disabled]="busy() === 'template' || templateForm.invalid">
+              {{ (busy() === 'template' ? 'authoring.template.submitting' : 'authoring.template.submit') | t }}
+            </button>
+          </form>
+        </section>
+
+        <!-- ============================================ authored templates -->
+        <section class="fe-card fe-card--inset" aria-labelledby="authoring-templates-heading">
+          <h4 class="fe-card__title" id="authoring-templates-heading">
+            {{ 'authoring.template.list' | t }}
+          </h4>
+          @if (authoredTemplates().length === 0) {
+            <p class="fe-sub" data-testid="authoring-no-templates">
+              {{ 'authoring.template.listEmpty' | t }}
+            </p>
+          }
+          <ul class="authoring__list" data-testid="authoring-templates">
+            @for (template of authoredTemplates(); track template.id) {
+              <li class="authoring__item">
+                <div class="authoring__row">
+                  <span class="fe-mono" dir="ltr">{{ template.key }}</span>
+                  <span class="fe-sub fe-mono" dir="ltr">{{ template.id }}</span>
+                </div>
+
+                <div class="authoring__actions">
+                  <button
+                    type="button"
+                    class="fe-btn fe-btn--ghost"
+                    (click)="uploadingFor.set(template.id)"
+                  >
+                    {{ 'authoring.template.upload' | t }}
+                  </button>
+                  <button
+                    type="button"
+                    class="fe-btn fe-btn--ghost"
+                    [attr.aria-expanded]="openVersions().includes(template.id)"
+                    (click)="toggleTemplateVersions(template.id)"
+                  >
+                    {{ 'authoring.version.title' | t }}
+                  </button>
+                </div>
+
+                @if (uploadingFor() === template.id) {
+                  <form class="authoring__subform" novalidate (submit)="uploadVersion(template.id, $event)">
+                    <!--
+                      The DOCX. Stated as base64-in-JSON because that is what the contract
+                      declares, so an operator reading the network tab is not surprised. The
+                      size is refused before the read rather than after the upload.
+                    -->
+                    <div class="field">
+                      <label class="field__label" for="fe-template-docx">
+                        {{ 'authoring.template.docx' | t }}
+                      </label>
+                      <input
+                        id="fe-template-docx"
+                        class="fe-input"
+                        type="file"
+                        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        (change)="onDocxChosen($event)"
+                      />
+                      <p class="fe-sub">{{ 'authoring.template.docxHint' | t }}</p>
+                      @if (chosenDocx(); as docx) {
+                        <p class="fe-sub" data-testid="authoring-docx-chosen">
+                          <span dir="ltr">{{ docx.name }}</span>
+                          — {{ byteCount(docx.bytes) }}
+                        </p>
+                      }
+                    </div>
+
+                    <button
+                      type="submit"
+                      class="fe-btn"
+                      [disabled]="busy() === 'upload:' + template.id || chosenDocx() === null"
+                    >
+                      {{
+                        (busy() === 'upload:' + template.id
+                          ? 'authoring.template.uploading'
+                          : 'authoring.template.upload') | t
+                      }}
+                    </button>
+                  </form>
+                }
+
+                @if (openVersions().includes(template.id)) {
+                  @if (template.versions.length === 0) {
+                    <p class="fe-sub">{{ 'authoring.version.empty' | t }}</p>
+                  }
+                  <ul class="authoring__versions" data-testid="authoring-template-versions">
+                    @for (version of template.versions; track version.number) {
+                      <li class="authoring__version">
+                        <div class="authoring__row">
+                          <span class="fe-num">{{ version.number }}</span>
+                          <span
+                            class="fe-chip"
+                            [class.fe-chip--on]="isPublished(version.state)"
+                            [class.fe-chip--warn]="isDraft(version.state)"
+                            [class.fe-chip--off]="isRetired(version.state)"
+                            [attr.data-state]="version.state"
+                          >
+                            <span class="fe-mono" dir="ltr">{{ version.state || '—' }}</span>
+                          </span>
+                        </div>
+                        @if (stateGloss(version.state); as gloss) {
+                          <p class="fe-sub">{{ gloss }}</p>
+                        }
+                        @if (version.publishedAt; as published) {
+                          <p class="fe-sub">
+                            {{ 'authoring.version.publishedAt' | t }}: {{ when(published) }}
+                          </p>
+                        }
+                        @if (version.retiredAt; as retired) {
+                          <p class="fe-sub">
+                            {{ 'authoring.version.retiredAt' | t }}: {{ when(retired) }}
+                          </p>
+                        }
+
+                        <div class="authoring__actions">
+                          @if (isDraft(version.state)) {
+                            <button
+                              type="button"
+                              class="fe-btn"
+                              [disabled]="busy() === 'publishTemplate:' + template.id + ':' + version.number"
+                              (click)="publishTemplateVersion(template.id, version.number, $event)"
+                            >
+                              {{ 'authoring.version.publish' | t }}
+                            </button>
+                          }
+                          @if (!isRetired(version.state)) {
+                            <button
+                              type="button"
+                              class="fe-btn fe-btn--ghost"
+                              [disabled]="busy() === 'retireTemplate:' + template.id + ':' + version.number"
+                              (click)="retireTemplateVersion(template.id, version.number, $event)"
+                            >
+                              {{ 'authoring.version.retire' | t }}
+                            </button>
+                          }
+                        </div>
+                      </li>
+                    }
+                  </ul>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
+    }
+  }
+</section>

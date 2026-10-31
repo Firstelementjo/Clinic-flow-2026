@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "policy": "A quality-gate stage whose subject module does not exist yet is a FAILED GATE, not a pass. The export/finance, Angular and Playwright stages are the three places where that rule has teeth: they name modules the migration has not built yet, so until they exist the pipeline is red on purpose.",
+  "mechanism": "To make such a stage pass, add an entry naming the stage, then run run-gates.ps1 with -AllowPendingStages. Without a matching, unexpired entry the flag does nothing: -AllowPendingStages alone cannot turn a missing module green.",
+  "rules": [
+    "One entry names exactly one stage from ops/quality/gate-stages.json.",
+    "expiresOn must be within 30 days.",
+    "The reason must say which phase will create the module.",
+    "The entry is removed in the same commit that creates the module."
+  ],
+  "entries": []
+}

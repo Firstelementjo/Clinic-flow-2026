@@ -1,0 +1,175 @@
+<!--
+  The pending AI draft, beside the thread.
+
+  Everything here is conditional on the panel having something to say, and "no
+  draft waiting" is rendered as a quiet line rather than a card: it is the
+  ordinary state of most conversations, and a card for it would make the card
+  that matters invisible.
+-->
+@if (relevant()) {
+  <section
+    class="draft-region"
+    data-testid="ai-draft-panel"
+    [attr.aria-label]="'aiDraft.label' | t"
+  >
+    <!--
+      Loading.
+
+      `role="status"` rather than `alert`: the draft arriving is not a failure, and
+      the region already announces politely so a screen reader hears it without
+      being interrupted.
+    -->
+    @if (loading()) {
+      <div class="draft-loading" role="status" aria-live="polite">
+        <span class="fe-spinner" aria-hidden="true"></span>
+        <span class="fe-sub">{{ 'state.loading' | t }}</span>
+      </div>
+    }
+
+    @if (fault(); as error) {
+      <!--
+        The only alert on this panel, and deliberately so.
+
+        A 5xx or a dropped connection is a fault the operator can act on, and the
+        remedy is the retry below. The `404` and the `403` are answers, and
+        neither reaches this branch — so this panel never shows a red error for a
+        conversation that simply has no draft, or for a role that may not read
+        one.
+      -->
+      <div class="fe-alert" role="alert">
+        <p>{{ 'aiDraft.error' | t }}</p>
+        @if (error.requestId; as requestId) {
+          <!-- The correlation id, in monospace and LTR: an identifier, not prose. -->
+          <p class="fe-mono" dir="ltr">{{ 'state.requestId' | t }}: {{ requestId }}</p>
+        }
+        <button
+          type="button"
+          class="fe-btn"
+          data-testid="ai-draft-retry"
+          (click)="retry()"
+        >
+          {{ 'aiDraft.retry' | t }}
+        </button>
+      </div>
+    }
+
+    @if (draft(); as view) {
+      @if (body()) {
+        <!--
+          The draft itself.
+
+          Visually distinct from every sent message, and not only by colour: the
+          card carries the word "Draft" in both scripts, an explicit sentence
+          saying the customer has not received it, and a dashed border rather than
+          the solid `--pri` fill an outbound bubble uses. Three independent
+          signals, because an operator who misreads this as a sent message will
+          act on the belief that the customer has been answered.
+
+          It sits outside the message list rather than inside it. The list is
+          ordered history; a draft is a proposal, and putting a proposal in the
+          history is the structural form of the same mistake the words avoid.
+        -->
+        <article class="ai-draft" data-testid="ai-draft-card" aria-labelledby="ai-draft-heading">
+          <header class="ai-draft__head">
+            <span class="ai-draft__badge">{{ 'aiDraft.badge' | t }}</span>
+            <h4 class="ai-draft__title" id="ai-draft-heading">{{ 'aiDraft.label' | t }}</h4>
+          </header>
+
+          <p class="ai-draft__body">{{ body() }}</p>
+
+          <p class="ai-draft__status">{{ 'aiDraft.notSent' | t }}</p>
+
+          <dl class="ai-draft__facts">
+            <div>
+              <dt class="fe-eyebrow">{{ 'aiDraft.run' | t }}</dt>
+              <!-- The run is a uuid: monospace and LTR, so it is not reordered. -->
+              <dd class="fe-mono" dir="ltr">{{ runId() }}</dd>
+            </div>
+            <div>
+              <dt class="fe-eyebrow">{{ 'aiDraft.created' | t }}</dt>
+              <dd class="fe-num">{{ format.dateTime(view.createdAt) }}</dd>
+            </div>
+          </dl>
+
+          @if (failure(); as message) {
+            <!--
+              A refused send. The draft and its text are still on screen: losing
+              what someone was about to send to a concurrency error is the outcome
+              this design is aimed at avoiding.
+            -->
+            <div class="fe-alert" role="alert">{{ message }}</div>
+          }
+
+          @if (canSend()) {
+            <div class="ai-draft__actions">
+              <button
+                type="button"
+                class="fe-btn fe-btn--primary"
+                data-testid="ai-draft-send"
+                [disabled]="sending()"
+                (click)="send()"
+              >
+                @if (sending()) {
+                  <span class="fe-spinner" aria-hidden="true"></span>
+                  <span>{{ 'aiDraft.sending' | t }}</span>
+                } @else {
+                  <span>{{ 'aiDraft.send' | t }}</span>
+                }
+              </button>
+              <p class="fe-sub">{{ 'aiDraft.sendHint' | t }}</p>
+            </div>
+          }
+        </article>
+      }
+    }
+
+    @if (declinedAs(); as state) {
+      @switch (state) {
+        @case ('withheld') {
+          <!--
+            A human took the conversation over.
+
+            The route answers this with the same 404 as an empty queue, so the
+            panel could not have learned it from the response. It says it because
+            the thread above is visibly in human mode — a fact the operator
+            already has in front of them — and because the server will not offer a
+            draft for a conversation a human owns.
+
+            Deliberately phrased as what the system does, not as what was
+            withheld: "an AI draft was withheld" would tell the operator an AI run
+            existed, which is the one thing the route refuses to disclose.
+          -->
+          <p class="draft-note" data-testid="ai-draft-withheld">
+            <strong>{{ 'aiDraft.withheldTitle' | t }}.</strong>
+            {{ 'aiDraft.withheld' | t }}
+          </p>
+        }
+        @case ('absent') {
+          <!--
+            No draft is waiting. A quiet line, not a card and not an alert: this
+            is the ordinary state of most conversations, and dressing it as a
+            problem would train an operator to ignore this region.
+          -->
+          <p class="draft-note" data-testid="ai-draft-none">{{ 'aiDraft.none' | t }}</p>
+        }
+        @case ('forbidden') {
+          <!--
+            The server refused. Says the account may not read drafts and stops
+            there — no run id, no conversation id, nothing the refusal did not
+            itself disclose. The wording is the same one the client-side gate
+            uses, so the two are indistinguishable from outside.
+          -->
+          <p class="draft-note" data-testid="ai-draft-forbidden">{{ 'aiDraft.forbidden' | t }}</p>
+        }
+        @case ('unavailable') {
+          <!--
+            A 401. The interceptor has already ended the session in one place and
+            a guard is taking the operator to sign-in, so this says nothing that
+            would describe a state they are leaving.
+          -->
+          <p class="draft-note" data-testid="ai-draft-gone">{{ 'state.empty' | t }}</p>
+        }
+      }
+    }
+  </section>
+}

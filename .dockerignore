@@ -1,0 +1,14 @@
+.git
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+deploy
+docs
+.claude
+.env
+plan.md
+storage
+*.log

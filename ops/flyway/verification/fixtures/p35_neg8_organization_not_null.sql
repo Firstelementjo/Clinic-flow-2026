@@ -1,0 +1,12 @@
+-- NEG-8. appointments."organizationId" loses its NOT NULL -- the tripwire.
+--
+-- All four composite FKs are MATCH SIMPLE, and MATCH SIMPLE does not enforce
+-- the constraint when ANY of its columns is NULL. That is precisely what makes
+-- a NULL doctorId/customerId/createdById/procedureId legal, and it is also why
+-- a NULL organizationId would switch the tenant check OFF for exactly the rows
+-- that have no reference at all.
+--
+-- Nothing about this looks wrong in a schema diff and no single-constraint check
+-- catches it. The migration asserts the NOT NULL explicitly so that losing it
+-- is loud rather than silent.
+ALTER TABLE public.appointments ALTER COLUMN "organizationId" DROP NOT NULL;

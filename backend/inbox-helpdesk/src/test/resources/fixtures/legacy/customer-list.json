@@ -1,0 +1,35 @@
+{
+  "name": "the customer list: latestTicket present, followUps and appointments empty",
+  "source": "apps/api/src/customers/customers.service.ts -> list (legacy reference). The LIST maps the lead rows to `followUps`, unlike the 360 view.",
+  "seed": "InboxFixture.reset(); one conversation on the fixture customer A1, with the fixture's fixed timestamps.",
+  "volatile": ["id", "lastSeenAt", "createdAt"],
+  "response": {
+    "items": [
+      {
+        "id": "aaaaaaaa-0000-0000-0000-0000000cc001",
+        "projectId": "aaaaaaaa-0000-0000-0000-0000000000a1",
+        "projectName": "Alpha One",
+        "cxId": "#33000001",
+        "displayName": "Alpha One Clinic",
+        "primaryEmail": null,
+        "primaryPhone": "+966500000001",
+        "locale": "ar",
+        "tags": [],
+        "metadata": {},
+        "conversationCount": 1,
+        "lastSeenAt": "<volatile>",
+        "createdAt": "<volatile>",
+        "latestTicket": {
+          "id": "<volatile>",
+          "ticketNumber": "#0814000000001",
+          "createdAt": "2026-08-14T09:30:00.000Z",
+          "status": "OPEN",
+          "subject": "Booking problem"
+        },
+        "followUps": [],
+        "appointments": []
+      }
+    ],
+    "nextCursor": null
+  }
+}

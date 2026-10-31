@@ -1,0 +1,16 @@
+{
+  "typescript.tsdk": "frontend/node_modules/typescript/lib",
+  "typescript.validate.enable": true,
+  "eslint.workingDirectories": ["frontend"],
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    ".gradle": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.gradle": true,
+    "**/build": true
+  }
+}

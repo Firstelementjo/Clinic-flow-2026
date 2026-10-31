@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "note": "PROJECT_REQUIREMENTS section 7 performance targets as machine-readable assertions. The prose source of truth is that section; this file must not be more lenient than it. plan.md section 7.3 requires p50/p95/p99, error rate, queue lag, memory, database connections and recovery time to be recorded for a claim to be accepted -- the harness records all of them and FAILS when one is unavailable.",
+  "owner": "Agent L (quality)",
+  "recordedAt": "2026-10-11",
+  "warmupNote": "PHASE 48. warmup raised 20 -> 100, and the budget at 500 ms is UNCHANGED. This is a change to how the measurement is taken, not to what it must satisfy, and it is recorded here rather than made silently because it turned a failing gate green. Evidence, three independent measurements of the same request: customer-list p50 883 ms at warmup 20; p50 261 ms when the same scenario runs third, after ~210 prior requests; p50 260 ms at warmup 100. Twenty iterations against a freshly loaded 400,000-row dataset measures JIT warm-up and cold shared buffers, not the latency a user experiences. With 100 it does. The cold-start cost is real and is recorded as a known risk in the Phase 48 report rather than deleted.",
+  "iterations": 200,
+  "warmup": 100,
+
+  "latencyBudgetsMs": {
+    "authenticatedReadP95": 500,
+    "mutationWithoutProviderP95": 800,
+    "firstInboxPageEndToEndMs": 1500
+  },
+
+  "scenarios": [
+    { "name": "customer-list",        "method": "GET",   "pathTemplate": "/api/v1/customers?limit=50",             "p95BudgetMs": 500 },
+    { "name": "customer-detail",      "method": "GET",   "pathTemplate": "/api/v1/customers/{customerId}",            "p95BudgetMs": 500 },
+    { "name": "conversation-transcript", "method": "GET", "pathTemplate": "/api/v1/conversations/{conversationId}/transcript", "p95BudgetMs": 500 },
+    { "name": "inbox-page",           "method": "GET",   "pathTemplate": "/api/v1/conversations?limit=50",          "p95BudgetMs": 500 },
+    { "name": "unassigned-queue",     "method": "GET",   "pathTemplate": "/api/v1/inbox/unassigned",                 "p95BudgetMs": 500 },
+    { "name": "note-list",            "method": "GET",   "pathTemplate": "/api/v1/notes/project?projectId={projectId}", "p95BudgetMs": 500 },
+    { "name": "customer-update",      "method": "PATCH", "pathTemplate": "/api/v1/customers/{customerId}",            "p95BudgetMs": 800, "body": { "displayName": "Perf Smoke" } }
+  ],
+
+  "globalAssertions": {
+    "errorRateMax": 0.0,
+    "errorRateRationale": "A smoke run tolerates ZERO failed requests. Any non-2xx means the target is not in a state where a latency number means anything, and a latency measurement taken against a failing service is a way of reporting green without measuring.",
+    "skippedIsFailure": true,
+    "telemetryMandatory": true,
+    "telemetryRationale": "memory, database connections and queue lag are part of the claim (plan.md 7.3). A run that cannot read them fails; it does not report them as unknown and pass."
+  },
+
+  "telemetry": {
+    "processMemory": "API process working set and managed heap, sampled before and after",
+    "databaseConnections": "pg_stat_activity connections in use versus max_connections, sampled at peak and at the end",
+    "queueLag": "pending outbox_events count and the age of the oldest pending row, plus the worker's reported lag from the management port when it exposes one"
+  }
+}

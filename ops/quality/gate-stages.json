@@ -1,0 +1,867 @@
+{
+  "schemaVersion": 1,
+  "note": "The ordered quality-gate catalogue. ops/quality/run-gates.ps1 executes exactly this, in this order, and writes one evidence record per stage. A developer and CI call the same runner; nothing here is a CI-only concern.",
+  "owner": "Agent L (quality)",
+  "placeholders": {
+    "{repoRoot}": "absolute repository root",
+    "{evidenceRoot}": "the evidence directory for this run",
+    "{stageDir}": "per-stage evidence directory for this run",
+    "{gradlew}": "gradlew.bat on Windows, ./gradlew elsewhere",
+    "{powershell}": "pwsh when present, otherwise powershell.exe",
+    "{yarn}": "resolved yarn launcher",
+    "{docker}": "resolved docker launcher"
+  },
+  "orderRationale": "plan.md section 7.1. Cheap and static first so a typo is reported in seconds rather than after a four-minute build; the database-bound stages next; the cross-cutting validators after the artifacts they read; the destructive rehearsal last, so nothing runs after it that could need restoring. Every stage reports separately: a red stage is never masked by a green neighbour.",
+  "stages": [
+    {
+      "name": "format-static",
+      "title": "Formatting, script syntax and secret hygiene",
+      "owner": "Agent L (quality)",
+      "requirement": "plan.md 7.1 stage 1 (format/checkstyle)",
+      "requiresPaths": [
+        "ops/quality/run-gates.ps1",
+        ".github/workflows/quality-gates.yml"
+      ],
+      "timeoutMinutes": 10,
+      "commands": [
+        {
+          "label": "PowerShell AST parse of every script, workflow structure lint, owned-tree whitespace and secret-hygiene rules",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-scripts.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-JsonOut",
+            "{stageDir}/scripts.json"
+          ]
+        },
+        {
+          "label": "gate self-test: every check is proven to FAIL when it should (no Gradle, no Docker, no database)",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/selftest.ps1",
+            "-JsonOut",
+            "{stageDir}/checks-selftest.json"
+          ]
+        },
+        {
+          "label": "advice-order gate self-test: it is proven to FAIL on an unordered advice, a duplicate order, a non-floor advice at LOWEST_PRECEDENCE, two catch-alls, and no advices at all",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/selftest-advice-order.ps1",
+            "-JsonOut",
+            "{stageDir}/advice-order-selftest.json"
+          ]
+        },
+        {
+          "label": "git whitespace check on the owned trees",
+          "exe": "git",
+          "args": [
+            "-C",
+            "{repoRoot}",
+            "diff",
+            "--check",
+            "HEAD",
+            "--",
+            "tests",
+            "e2e",
+            "ops/quality",
+            ".github",
+            "docs/migration"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "legacy-node-static",
+      "title": "Legacy Node/React typecheck and ratcheted lint",
+      "owner": "Agent L (quality)",
+      "requirement": "PROJECT_REQUIREMENTS section 2 blockers; plan.md 10 (every phase leaves the repository buildable)",
+      "rationale": "The legacy runtime still serves production during the strangler window, so its static analysis is a release gate. The lint ceiling is RATCHETED against tests/contracts/lint-baseline.json and never raised by the tool; typecheck has no baseline at all.",
+      "timeoutMinutes": 45,
+      "commands": [
+        {
+          "label": "yarn typecheck (must pass) + yarn lint (must not exceed the pinned ceiling)",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-legacy-lint.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-Baseline",
+            "{repoRoot}/tests/contracts/lint-baseline.json",
+            "-JsonOut",
+            "{stageDir}/legacy-node-static.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "backend-compile",
+      "title": "Spring backend compilation",
+      "owner": "backend module owners",
+      "requirement": "plan.md 7.1 stage 2 (compile/type analysis)",
+      "timeoutMinutes": 45,
+      "commands": [
+        {
+          "label": "compile every production and test source",
+          "exe": "{gradlew}",
+          "args": [
+            "compileJava",
+            "compileTestJava",
+            "--rerun-tasks",
+            "--no-build-cache",
+            "--no-daemon",
+            "--console=plain",
+            "--stacktrace"
+          ]
+        }
+      ],
+      "whyRerunTasks": "--rerun-tasks --no-build-cache is mandatory for every Gradle stage in this pipeline. A plain `build` restores the build cache and reports UP-TO-DATE without executing a single test; ADR-0006 section 7 and Phase-2 risk 11 both record that a migration or isolation test which did not execute is not a pass. It is carried here so a cached result can never be read as evidence."
+    },
+    {
+      "name": "backend-unit",
+      "title": "Backend unit tests (no container, no database)",
+      "owner": "backend module owners",
+      "requirement": "plan.md 7.1 stage 3 (unit tests)",
+      "junit": {
+        "resultsDirs": [
+          "backend/shared-kernel/build/test-results/test",
+          "backend/tenant-security/build/test-results/test",
+          "backend/app-bootstrap/build/test-results/test"
+        ],
+        "scope": [
+          "shared-kernel",
+          "tenant-security",
+          "app-bootstrap"
+        ]
+      },
+      "timeoutMinutes": 45,
+      "commands": [
+        {
+          "label": "pure-JVM suites only",
+          "exe": "{gradlew}",
+          "args": [
+            ":backend:shared-kernel:test",
+            ":backend:tenant-security:test",
+            ":backend:app-bootstrap:test",
+            "--rerun-tasks",
+            "--no-build-cache",
+            "--no-daemon",
+            "--console=plain",
+            "--stacktrace"
+          ]
+        }
+      ],
+      "whyRerunTasks": "See backend-compile. --rerun-tasks --no-build-cache is what makes the JUnit XML in this stage's evidence a measurement rather than a cache hit."
+    },
+    {
+      "name": "architecture",
+      "title": "Architecture rules over the module graph and the HTTP boundary",
+      "owner": "Agent L (quality)",
+      "requirement": "Phase-3 known risk 9 ('No ArchUnit rule yet forbids a @RestController from being the only enforcement point; that is a quality-agent gate')",
+      "rationale": "Implemented as a source-level rule set because adding an ArchUnit module needs settings.gradle.kts and a build.gradle.kts, which other agents own during Phase 5b. The rules are written so they can be lifted into ArchUnit verbatim; see docs/migration/phases/quality-gates.md for the mapping.",
+      "timeoutMinutes": 10,
+      "commands": [
+        {
+          "label": "module layering, web boundary, logging, persistence-time and tenant-SQL ratchet",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-architecture.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-Baseline",
+            "{repoRoot}/tests/contracts/architecture-baseline.json",
+            "-JsonOut",
+            "{stageDir}/architecture.json"
+          ]
+        },
+        {
+          "label": "the exception-handling advice ladder is declared, unique, and the catch-all floor is last: an unordered or duplicate @Order silently decides which advice answers, and a denial that loses becomes a 500",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-advice-order.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-JsonOut",
+            "{stageDir}/advice-order.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "backend-integration",
+      "title": "Testcontainers integration tests (pgvector PostgreSQL + Redis)",
+      "owner": "backend module owners",
+      "requirement": "plan.md 7.1 stage 5; PROJECT_REQUIREMENTS 7 (missing services are failures)",
+      "junit": {
+        "resultsDirs": [
+          "backend/database/build/test-results/test",
+          "backend/crm-core/build/test-results/test",
+          "backend/identity-access/build/test-results/test",
+          "backend/inbox-helpdesk/build/test-results/test",
+          "backend/channels/build/test-results/test",
+          "backend/worker-runtime/build/test-results/test",
+          "backend/notifications-realtime/build/test-results/test",
+          "backend/ai-rag/build/test-results/test",
+          "backend/administration/build/test-results/test",
+          "backend/workflows-sla-routing/build/test-results/test",
+          "backend/operations-observability/build/test-results/test"
+        ],
+        "scope": [
+          "database",
+          "crm-core",
+          "identity-access",
+          "inbox-helpdesk",
+          "channels",
+          "worker-runtime",
+          "notifications-realtime",
+          "ai-rag",
+          "administration",
+          "workflows-sla-routing",
+          "operations-observability"
+        ]
+      },
+      "timeoutMinutes": 90,
+      "commands": [
+        {
+          "label": "Docker availability (a missing engine fails this stage; it never degrades to a skip)",
+          "exe": "docker",
+          "args": [
+            "version",
+            "--format",
+            "{{.Server.Version}}"
+          ]
+        },
+        {
+          "label": "every Testcontainers-backed module",
+          "exe": "{gradlew}",
+          "args": [
+            ":backend:database:test",
+            ":backend:crm-core:test",
+            ":backend:identity-access:test",
+            ":backend:inbox-helpdesk:test",
+            ":backend:channels:test",
+            ":backend:worker-runtime:test",
+            ":backend:notifications-realtime:test",
+            ":backend:ai-rag:test",
+            ":backend:administration:test",
+            ":backend:workflows-sla-routing:test",
+            ":backend:operations-observability:test",
+            "--rerun-tasks",
+            "--no-build-cache",
+            "--no-daemon",
+            "--console=plain",
+            "--stacktrace"
+          ]
+        }
+      ],
+      "whyRerunTasks": "See backend-compile. This is the stage Phase 2/3/4/5a all record as non-negotiable: without --rerun-tasks --no-build-cache the Testcontainers fixture reports UP-TO-DATE and a skipped migration test reads as a pass."
+    },
+    {
+      "name": "openapi-contract",
+      "title": "OpenAPI / HTTP contract",
+      "owner": "Agent L (quality) + backend module owners",
+      "requirement": "plan.md 7.1 stage 6; Phase-3 risk 7 and Phase-4 risk 9 ('no OpenAPI contract test pins the endpoints')",
+      "timeoutMinutes": 15,
+      "commands": [
+        {
+          "label": "committed route inventory must equal the controllers, and every route must be under /api/v1 except the documented webhook surface",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-openapi-contract.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-JsonOut",
+            "{stageDir}/openapi-contract.json"
+          ]
+        },
+        {
+          "label": "error-body contract: every error response carries code, message, details and requestId, and no response body carries a secret field name",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/tests/contracts/check-error-contract.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-JsonOut",
+            "{stageDir}/error-contract.json"
+          ]
+        },
+        {
+          "label": "committed OpenAPI SCHEMA document must equal the document the application serves: every path, and every operation body, so a generated client cannot be built from a contract the code no longer implements",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-openapi-document.ps1",
+            "-RepoRoot",
+            "{repoRoot}"
+          ]
+        }
+      ],
+      "scopeNote": "Both halves are covered here. The PATH half (committed route inventory equals the controllers) is check-openapi-contract.ps1. The SCHEMA half (the committed springdoc document equals what the application actually serves) is check-openapi-document.ps1, which asks the running application for its own document through MockMvc and therefore needs no listening socket and touches no database. A remaining gap, deliberately not closed by a static check: there is no booted-service request/response test yet, so the document is proven to match the code but not proven to match live wire behaviour. Phase 11 adds the browser journeys, and Phase 12 the staging rehearsal."
+    },
+    {
+      "name": "security-tenant-negative",
+      "title": "Security and tenant-isolation negatives",
+      "owner": "Agent L (quality) + the security agent",
+      "requirement": "plan.md 7.1 stage 7 and 7.2; FR-1; FR-2.7",
+      "timeoutMinutes": 15,
+      "commands": [
+        {
+          "label": "plan.md 7.2 specification is consistent with the required-suite manifest and with the JUnit reports this run produced",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/tests/security/check-negative-spec.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-ResultsDir",
+            "backend/tenant-security/build/test-results/test,backend/identity-access/build/test-results/test,backend/crm-core/build/test-results/test,backend/inbox-helpdesk/build/test-results/test,backend/channels/build/test-results/test,backend/worker-runtime/build/test-results/test,backend/notifications-realtime/build/test-results/test,backend/ai-rag/build/test-results/test",
+            "-JsonOut",
+            "{stageDir}/negative-spec.json"
+          ]
+        },
+        {
+          "label": "the tenant-scope invariants are still declared in source: no controller binds a client tenant id",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-architecture.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-JsonOut",
+            "{stageDir}/architecture-security-slice.json"
+          ]
+        }
+      ],
+      "note": "The behavioural negatives are NOT re-run here and NOT duplicated here. They already execute in backend-unit and backend-integration and are asserted by the no-hidden-skips stage through tests/contracts/expected-suites.json; this stage exists so that a requirement pointing at a suite that no longer exists fails loudly instead of quietly losing its coverage."
+    },
+    {
+      "name": "worker-idempotency-recovery",
+      "title": "Worker, idempotency and recovery",
+      "owner": "the worker/channel agent + Agent L (quality)",
+      "requirement": "plan.md 7.1 stage 8; PROJECT_REQUIREMENTS 7 (a worker restart must not lose or duplicate)",
+      "timeoutMinutes": 10,
+      "commands": [
+        {
+          "label": "the crash/retry/dead-letter/replay suites are present and were not skipped (read-only assertion over this run's JUnit reports)",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-no-hidden-skips.ps1",
+            "-ResultsDir",
+            "backend/channels/build/test-results/test,backend/worker-runtime/build/test-results/test",
+            "-ModuleScope",
+            "channels,worker-runtime",
+            "-Manifest",
+            "{repoRoot}/tests/contracts/expected-suites.json",
+            "-AllowList",
+            "{repoRoot}/ops/quality/waivers/no-hidden-skips.allow.json",
+            "-Stage",
+            "worker-idempotency-recovery",
+            "-JsonOut",
+            "{stageDir}/no-hidden-skips-worker.json"
+          ]
+        }
+      ],
+      "note": "Re-asserting over the reports the integration stage produced rather than re-executing: the behaviour is the same tests, executed once, and the value of a separate stage is that a red worker/idempotency finding is reported as its own required status and cannot be hidden behind a green aggregate build."
+    },
+    {
+      "name": "export-finance",
+      "title": "Export redaction and finance reconciliation",
+      "owner": "the finance and export agents",
+      "requirement": "plan.md 7.1 stage 9; FR-7; FR-8",
+      "requiresPaths": [
+        "backend/reporting-finance",
+        "backend/reporting-exports"
+      ],
+      "pending": {
+        "reason": "Phase 8 and Phase 9 modules do not exist yet. NEG-04, NEG-05 and NEG-14 cannot be enforced until they do.",
+        "opensAtPhase": "Phase 8 / Phase 9"
+      },
+      "timeoutMinutes": 60,
+      "commands": [
+        {
+          "label": "export/finance unit and integration suites",
+          "exe": "{gradlew}",
+          "args": [
+            ":backend:reporting-finance:test",
+            ":backend:reporting-exports:test",
+            "--rerun-tasks",
+            "--no-build-cache",
+            "--no-daemon",
+            "--console=plain",
+            "--stacktrace"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "angular-component",
+      "title": "Angular component and guard-UX tests",
+      "owner": "the Angular agent",
+      "requirement": "plan.md 7.1 stage 10; FR-9",
+      "requiresPaths": [
+        "frontend"
+      ],
+      "pending": {
+        "reason": "No frontend/ workspace exists; the target client is still apps/web (React). Stage the command now so the moment the Angular workspace lands the gate is already wired.",
+        "opensAtPhase": "Phase 11"
+      },
+      "timeoutMinutes": 60,
+      "commands": [
+        {
+          "label": "Angular unit/component suite",
+          "exe": "{yarn}",
+          "args": [
+            "workspace",
+            "@firstelement/web:test",
+            "--watch=false"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "playwright-journeys",
+      "title": "Playwright browser journeys (Arabic RTL and English LTR)",
+      "owner": "the Angular agent + Agent L (quality)",
+      "requirement": "plan.md 7.1 stage 11; Phase-11 gate",
+      "requiresPaths": [
+        "frontend/playwright.config.ts"
+      ],
+      "requiresPathsNote": "PHASE 49. This listed `e2e/playwright.config.ts` as well, which has never existed -- the config has only ever been at `frontend/playwright.config.ts`. The gate resolves these paths and FAILED the stage on 'REQUIRED MODULE ABSENT: e2e/playwright.config.ts' before running a single journey, which is the correct behaviour for a genuinely absent module and the wrong behaviour for a path that was simply wrong. A requirement naming a file nobody ever wrote is not a safety property; it is a stage that can never go green.",
+      "pending": {
+        "reason": "No Angular workspace and no Playwright installation. A browser suite that silently does not exist is the exact failure this stage exists to prevent.",
+        "opensAtPhase": "Phase 11"
+      },
+      "pendingNote": "The reason above is obsolete: the Angular workspace and the Playwright installation both exist. What was still wrong was the command, and it failed loudly rather than passing quietly: `yarn playwright test` at the repository root answered 'Command playwright not found' (exit 1) because `frontend/` is a standalone npm package, not a yarn workspace. The matrix therefore had never been enforced by a gate.",
+      "timeoutMinutes": 90,
+      "commands": [
+        {
+          "label": "the browser suite is discoverable: 438 journeys across six locale/width projects",
+          "exe": "{npm}",
+          "args": [
+            "--prefix",
+            "frontend",
+            "run",
+            "e2e",
+            "--",
+            "--list"
+          ]
+        },
+        {
+          "label": "browser journeys at desktop/tablet/mobile in ar-RTL and en-LTR",
+          "exe": "{npm}",
+          "args": [
+            "--prefix",
+            "frontend",
+            "run",
+            "e2e"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "performance-smoke",
+      "title": "Performance smoke with recorded percentiles and telemetry",
+      "owner": "Agent L (quality)",
+      "requirement": "plan.md 7.3; PROJECT_REQUIREMENTS 7 Performance",
+      "timeoutMinutes": 45,
+      "commands": [
+        {
+          "label": "boot a disposable seeded application, run the smoke, tear the whole thing down",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/run-performance-smoke.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-Report",
+            "{stageDir}/performance.json",
+            "-EvidenceDir",
+            "{stageDir}"
+          ]
+        }
+      ],
+      "scopeNote": "REWRITTEN IN PHASE 43. This stage had never passed: its only command invoked run-smoke.ps1 with no -TargetBaseUrl and no -SessionCookie, which the harness correctly REFUSES -- and the runner scored that refusal as a failure. A gate that cannot pass is not a gate. The command now goes through a wrapper that supplies the missing orchestration: it creates a disposable database, boots the application against it on ports 4501/4502 (clear of shadow-parity's 4401-4403), loads tests/performance/dataset.sql, signs in as the seeded performance identity, runs the smoke, and drops the database in a finally block. It refuses to touch any database not on its disposable-name check, and it builds nothing -- a gate that compiles its own subject can report green about code it compiled rather than code it was given. The 'never skips' property is unchanged and now structural: every failure path exits 1 with the reason, and there is no branch that reports a pass it did not measure.",
+      "note": "The performance identity's password is generated per run and never committed. Only its bcrypt hash reaches dataset.sql, and the database holding that hash is dropped at teardown -- including on failure -- so no usable credential survives the run. This replaced a deliberately INVALID hash that made the stage unwirable; see the note at the users insert in dataset.sql."
+    },
+    {
+      "name": "migration-verification",
+      "title": "Migration verification against a disposable database",
+      "owner": "the database agent + Agent L (quality)",
+      "requirement": "plan.md 7.1 stage 13; Phase-2 gate; ADR-0002",
+      "rationale": "Runs the full V1-V11 bundle on a throwaway database that has just had the whole chain applied, and proves the development database was not touched by comparing its verification bundle before and after. Expected counts are NOT hardcoded here: ops/flyway/expected-state.json holds the preBoot and postBoot profiles and verify-schema-state.ps1 selects between them by asking the database whether flyway_schema_history exists, failing if neither matches. This is what stops the pipeline failing on cutover day because a number written before the first Flyway boot no longer describes the database.",
+      "timeoutMinutes": 60,
+      "gateDatabase": "firstelement_gate_migration_check",
+      "protectedDatabase": "firstelement",
+      "commands": [
+        {
+          "label": "the development database is never a rehearsal target",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-disposable-targets.ps1",
+            "-RepoRoot",
+            "{repoRoot}",
+            "-JsonOut",
+            "{stageDir}/disposable-targets.json"
+          ]
+        },
+        {
+          "label": "read-only verification bundle of the development database, BEFORE (profile chosen by asking the database whether Flyway has stamped it)",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/verify-schema-state.ps1",
+            "-Container",
+            "firstelement-postgres",
+            "-Database",
+            "firstelement",
+            "-OutputDir",
+            "{stageDir}/devdb-before",
+            "-ThrowOnViolation"
+          ]
+        },
+        {
+          "label": "create a DISPOSABLE database and apply the whole Flyway chain to it",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/prepare-throwaway-db.ps1",
+            "-Container",
+            "firstelement-postgres",
+            "-DbUser",
+            "firstelement",
+            "-ProtectedDatabase",
+            "firstelement",
+            "-Database",
+            "firstelement_gate_migration_check",
+            "-MigrateChain"
+          ]
+        },
+        {
+          "label": "verification bundle on the disposable database, asserting the profile that database actually is (the whole chain is applied to it, so it asserts postBoot)",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/verify-schema-state.ps1",
+            "-Container",
+            "firstelement-postgres",
+            "-Database",
+            "firstelement_gate_migration_check",
+            "-OutputDir",
+            "{stageDir}/throwaway",
+            "-ThrowOnViolation"
+          ]
+        },
+        {
+          "label": "the whole Flyway chain applies to a DISPOSABLE database created from empty, and the resulting state matches expected-state.json postBoot -- this is the check that would have caught V20261006110000, whose guard compared rendered constraint DDL that changes with search_path",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/flyway/verification/verify-clean-bootstrap.ps1",
+            "-Container",
+            "firstelement-postgres",
+            "-Database",
+            "firstelement_cleancheck_boot",
+            "-EvidenceDir",
+            "{stageDir}/cleancheck"
+          ]
+        },
+        {
+          "label": "read-only verification bundle of the development database, AFTER (same profile as BEFORE)",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/verify-schema-state.ps1",
+            "-Container",
+            "firstelement-postgres",
+            "-Database",
+            "firstelement",
+            "-OutputDir",
+            "{stageDir}/devdb-after",
+            "-ThrowOnViolation"
+          ]
+        },
+        {
+          "label": "the development database's fingerprint and row counts are identical before and after",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-dev-database-untouched.ps1",
+            "-BeforeDir",
+            "{stageDir}/devdb-before",
+            "-AfterDir",
+            "{stageDir}/devdb-after",
+            "-JsonOut",
+            "{stageDir}/devdb-untouched.json"
+          ]
+        }
+      ],
+      "alwaysCommands": [
+        {
+          "label": "drop the disposable database, whatever happened above",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/prepare-throwaway-db.ps1",
+            "-Container",
+            "firstelement-postgres",
+            "-DbUser",
+            "firstelement",
+            "-ProtectedDatabase",
+            "firstelement",
+            "-Database",
+            "firstelement_gate_migration_check",
+            "-Dispose"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "restore-rehearsal",
+      "title": "Backup, restore rehearsal and dev-database immutability",
+      "owner": "the database agent + Agent L (quality)",
+      "requirement": "plan.md 7.1 stage 14; PROJECT_REQUIREMENTS 7 (backups are tested with documented restore evidence)",
+      "rationale": "A backup nobody has restored is a hypothesis. The rehearsal restores into a database whose name is required to look disposable, disposes of it, and re-checks that the development database is byte-identical afterwards.",
+      "timeoutMinutes": 60,
+      "gateDatabase": "firstelement_restore_check",
+      "protectedDatabase": "firstelement",
+      "commands": [
+        {
+          "label": "pg_dump -Fc of the development database (read-only against the database) with a SHA-256 manifest",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/backup-restore/backup.ps1",
+            "-Container",
+            "firstelement-postgres",
+            "-Database",
+            "firstelement",
+            "-OutputDir",
+            "{stageDir}/backup"
+          ]
+        },
+        {
+          "label": "restore into firstelement_restore_check, verify schema fingerprint, enum contract and every row count, then drop it",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/prepare-restore-rehearsal.ps1",
+            "-BackupDir",
+            "{stageDir}/backup",
+            "-EvidenceDir",
+            "{stageDir}/restore",
+            "-TargetDatabase",
+            "firstelement_restore_check",
+            "-SourceDatabase",
+            "firstelement",
+            "-Container",
+            "firstelement-postgres"
+          ]
+        },
+        {
+          "label": "the development database's fingerprint and row counts are identical after the backup and the rehearsal",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-dev-database-untouched.ps1",
+            "-BeforeDir",
+            "{stageDir}/backup/verification",
+            "-AfterDir",
+            "{stageDir}/restore/source",
+            "-JsonOut",
+            "{stageDir}/devdb-untouched.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "shadow-parity",
+      "title": "Shadow-read parity against the frozen legacy runtime",
+      "owner": "Agent L (quality)",
+      "requirement": "plan.md Phase 12 steps 1-2 (shadow reads; compare row counts, authorization decisions, status transitions, analytics, finance rollups, exports)",
+      "rationale": "Compares the frozen NestJS/Prisma implementation against the Spring/PostgreSQL one, each on its own DISPOSABLE database seeded from one file, and reports differences. It is EXPECTED TO FAIL until parity is real: its verdict is evidence, not a target. A comparison that only ever passes is decoration, so the harness asserts nine deliberate perturbations to prove each check can go red.",
+      "scopeNote": "Bootstraps two runtimes for about two and a half minutes on ports 4401-4403 and releases them on exit; do not run it concurrently with another gate binding those ports. It NEVER touches the firstelement database. The FIRST TWO commands are pure node suites and are ordered before the harness on purpose. They cover the two things the harness itself cannot be trusted to report about: PN-08's verdict (it lived inside this 1,000-line script where no one could exercise it, and examination found its 'generation 1 stayed frozen' conjunct compared `olderGenerations` against itself -- true by construction, and true when no generation-1 row existed), and the snapshot partitioning that FEEDS it. That second one is Phase 43: `olderGenerations` was computed by an inline loop that dropped every displaced generation, so it was structurally ALWAYS empty for an ascending result and a run could not see generation 1 even with generation 1 in the table. Both suites execute the pre-fix logic to prove it was blind, rather than asserting the new behaviour in prose.",
+      "timeoutMinutes": 30,
+      "commands": [
+        {
+          "label": "PN-08 verdict proof, both states, no databases and no runtimes",
+          "exe": "{node}",
+          "args": [
+            "--test",
+            "{repoRoot}/tests/shadow/pn08-proof.test.mjs"
+          ]
+        },
+        {
+          "label": "snapshot generation partitioning, including the pre-fix logic proven blind",
+          "exe": "{node}",
+          "args": [
+            "--test",
+            "{repoRoot}/tests/shadow/finance-generations.test.mjs"
+          ]
+        },
+        {
+          "label": "legacy-vs-Spring read parity, authorization decisions, status transitions and finance rollups",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-shadow-parity.ps1",
+            "-JsonOut",
+            "{stageDir}/shadow-parity.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "no-hidden-skips",
+      "title": "No hidden skips across every JUnit report this run produced",
+      "owner": "Agent L (quality)",
+      "requirement": "AGENTS.md Quality rules; plan.md rule 10; plan.md section 10",
+      "rationale": "The cross-cutting gate. It runs last so it sees every report the earlier stages produced, and it fails the run if ANY suite reported a skip, if any required suite is missing from a module that was in scope, or if a waiver is expired, blanket or stale.",
+      "timeoutMinutes": 15,
+      "junit": {
+        "resultsDirs": [
+          "backend/shared-kernel/build/test-results/test",
+          "backend/tenant-security/build/test-results/test",
+          "backend/app-bootstrap/build/test-results/test",
+          "backend/database/build/test-results/test",
+          "backend/crm-core/build/test-results/test",
+          "backend/identity-access/build/test-results/test",
+          "backend/inbox-helpdesk/build/test-results/test",
+          "backend/channels/build/test-results/test",
+          "backend/worker-runtime/build/test-results/test",
+          "backend/notifications-realtime/build/test-results/test",
+          "backend/ai-rag/build/test-results/test",
+          "backend/administration/build/test-results/test",
+          "backend/workflows-sla-routing/build/test-results/test",
+          "backend/operations-observability/build/test-results/test"
+        ],
+        "scope": [
+          "shared-kernel",
+          "tenant-security",
+          "app-bootstrap",
+          "database",
+          "crm-core",
+          "identity-access",
+          "inbox-helpdesk",
+          "channels",
+          "worker-runtime",
+          "notifications-realtime",
+          "ai-rag",
+          "administration",
+          "workflows-sla-routing",
+          "operations-observability"
+        ]
+      },
+      "commands": [
+        {
+          "label": "skipped>0 anywhere, a missing required suite, or an invalid waiver all fail the run",
+          "exe": "{powershell}",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{repoRoot}/ops/quality/checks/check-no-hidden-skips.ps1",
+            "-ResultsDir",
+            "backend/shared-kernel/build/test-results/test,backend/tenant-security/build/test-results/test,backend/app-bootstrap/build/test-results/test,backend/database/build/test-results/test,backend/crm-core/build/test-results/test,backend/identity-access/build/test-results/test,backend/inbox-helpdesk/build/test-results/test,backend/channels/build/test-results/test,backend/worker-runtime/build/test-results/test,backend/notifications-realtime/build/test-results/test,backend/ai-rag/build/test-results/test,backend/administration/build/test-results/test,backend/workflows-sla-routing/build/test-results/test,backend/operations-observability/build/test-results/test",
+            "-ModuleScope",
+            "shared-kernel,tenant-security,app-bootstrap,database,crm-core,identity-access,inbox-helpdesk,channels,worker-runtime,notifications-realtime,ai-rag,administration,workflows-sla-routing,operations-observability",
+            "-Manifest",
+            "{repoRoot}/tests/contracts/expected-suites.json",
+            "-AllowList",
+            "{repoRoot}/ops/quality/waivers/no-hidden-skips.allow.json",
+            "-Stage",
+            "no-hidden-skips",
+            "-JsonOut",
+            "{stageDir}/no-hidden-skips.json"
+          ]
+        }
+      ]
+    }
+  ]
+}

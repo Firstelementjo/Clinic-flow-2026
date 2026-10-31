@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "note": "Self-test fixture manifest. Declares exactly the two synthetic suites under tests/contracts/fixtures/junit/clean so the checker has something to require.",
+  "suites": [
+    {
+      "suite": "com.firstelement.security.TenantContextTest",
+      "module": "tenant-security",
+      "minTests": 3,
+      "stage": "self-test",
+      "note": "fixture"
+    },
+    {
+      "suite": "com.firstelement.security.session.SessionTokenCodecTest",
+      "module": "tenant-security",
+      "minTests": 2,
+      "stage": "self-test",
+      "note": "fixture"
+    }
+  ]
+}

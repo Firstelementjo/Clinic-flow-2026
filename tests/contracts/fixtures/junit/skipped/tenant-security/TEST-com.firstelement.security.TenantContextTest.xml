@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Self-test fixture: one honestly reported skip. Must FAIL the gate. -->
+<testsuite name="com.firstelement.security.TenantContextTest" tests="3" skipped="1" failures="0" errors="0" timestamp="2026-10-04T00:00:00.000Z" hostname="fixture" time="0.100">
+  <properties/>
+  <testcase name="organizationId is mandatory: there is no 'no tenant' context" classname="com.firstelement.security.TenantContextTest" time="0.010"/>
+  <testcase name="a capability the principal type may not hold is refused at construction" classname="com.firstelement.security.TenantContextTest" time="0.012"/>
+  <testcase name="the project set is a defensive copy and cannot be mutated after construction" classname="com.firstelement.security.TenantContextTest">
+    <skipped message="Docker is not available on this host"/>
+  </testcase>
+</testsuite>
