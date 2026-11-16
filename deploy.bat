@@ -33,29 +33,40 @@ if "%1"=="1" goto DEPLOY_DOCKER
 if "%1"=="--docker" goto DEPLOY_DOCKER
 if "%1"=="2" goto DEPLOY_DEV
 if "%1"=="--dev" goto DEPLOY_DEV
-if "%1"=="3" goto STOP_SERVICES
+if "%1"=="3" goto REBUILD_DOCKER
+if "%1"=="--build" goto REBUILD_DOCKER
+if "%1"=="4" goto STOP_SERVICES
 if "%1"=="--stop" goto STOP_SERVICES
 
 echo Select deployment mode:
-echo   [1] Full Docker Deployment (Production: DB, Redis, API, Web)
+echo   [1] Fast Launch (Full Docker Stack: DB, Redis, API, Web) [Instant]
 echo   [2] Fast Local Dev Mode (Docker DB + Local Spring Boot and Angular)
-echo   [3] Stop and Clean All Running Services
+echo   [3] Rebuild and Launch Docker Stack (Fresh build from source)
+echo   [4] Stop and Clean All Running Services
 echo.
-set /p MODE="Enter choice (1-3) [default: 1]: "
+set /p MODE="Enter choice (1-4) [default: 1]: "
 set MODE=%MODE: =%
 if "%MODE%"=="" set MODE=1
 
 if "%MODE%"=="1" goto DEPLOY_DOCKER
 if "%MODE%"=="2" goto DEPLOY_DEV
-if "%MODE%"=="3" goto STOP_SERVICES
+if "%MODE%"=="3" goto REBUILD_DOCKER
+if "%MODE%"=="4" goto STOP_SERVICES
 goto INVALID_CHOICE
 
 :DEPLOY_DOCKER
 echo.
 echo ================================================================
-echo [1/3] Deploying Full Docker Production Stack...
+echo [1/3] Starting Full Docker Production Stack...
 echo ================================================================
-docker compose -f docker-compose.yml up -d --build
+:: Check if images exist, build only if missing
+docker image inspect clinicflow-backend:latest >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Pre-built images not found. Performing initial build...
+    docker compose -f docker-compose.yml build
+)
+
+docker compose -f docker-compose.yml up -d
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Docker deployment failed.
@@ -67,7 +78,7 @@ echo.
 echo ================================================================
 echo [2/3] Waiting for services to become healthy...
 echo ================================================================
-timeout /t 8 /nobreak >nul
+ping 127.0.0.1 -n 6 >nul 2>&1
 
 echo.
 echo ================================================================
@@ -82,8 +93,8 @@ echo   - PostgreSQL Port:  5435
 echo   - Redis Port:       6381
 echo.
 echo Default Credentials:
-echo   - Super Admin: admin@clinicflow.io / Password123!
-echo   - Platform:    platform@clinicflow.io / Password123!
+echo   - Super Admin: admin@clinicflow.io / Password123^^!
+echo   - Platform:    platform@clinicflow.io / Password123^^!
 echo.
 start http://localhost
 goto END
@@ -91,8 +102,12 @@ goto END
 :DEPLOY_DEV
 echo.
 echo ================================================================
-echo [1/4] Starting PostgreSQL and Redis via Docker...
+echo [1/4] Preparing Local Dev Environment...
 echo ================================================================
+:: Free port 4000 if Docker backend is running
+docker stop clinicflow-backend clinicflow-frontend >nul 2>&1
+
+:: Start database and redis in Docker
 docker compose -f docker-compose.yml up -d postgres redis
 
 echo.
@@ -116,8 +131,23 @@ echo.
 echo ================================================================
 echo [4/4] Waiting for services to initialize...
 echo ================================================================
-timeout /t 5 /nobreak >nul
+ping 127.0.0.1 -n 6 >nul 2>&1
 start http://localhost:4200
+goto END
+
+:REBUILD_DOCKER
+echo.
+echo ================================================================
+echo Rebuilding and Deploying Docker Stack from Scratch...
+echo ================================================================
+docker compose -f docker-compose.yml up -d --build
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Docker build failed.
+    pause
+    exit /b %ERRORLEVEL%
+)
+ping 127.0.0.1 -n 6 >nul 2>&1
+start http://localhost
 goto END
 
 :STOP_SERVICES
@@ -128,7 +158,7 @@ echo [OK] All services stopped.
 goto END
 
 :INVALID_CHOICE
-echo [ERROR] Invalid choice. Please run the script again and select 1, 2, or 3.
+echo [ERROR] Invalid choice. Please run the script again and select 1, 2, 3, or 4.
 pause
 exit /b 1
 
