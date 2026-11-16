@@ -75,9 +75,11 @@ echo [3/3] Deployment Successful!
 echo ================================================================
 echo.
 echo Application URLs:
-echo   - Web Workstation: http://localhost
+echo   - Web Workstation:  http://localhost
 echo   - Backend REST API: http://localhost:4000
 echo   - Actuator Health:  http://localhost:4101/actuator/health
+echo   - PostgreSQL Port:  5435
+echo   - Redis Port:       6381
 echo.
 echo Default Credentials:
 echo   - Super Admin: admin@clinicflow.io / Password123!
@@ -100,6 +102,8 @@ echo ================================================================
 set WEB_ORIGIN=http://localhost:4200,http://localhost
 set SESSION_SECRET=wVj2K9yNqL7xP3sT6uB1eR5aZ8dF0mC4hI9gO2vY1nU=
 set ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+set SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5435/firstelement
+set SPRING_DATA_REDIS_PORT=6381
 start "ClinicFlow Backend (Spring Boot)" cmd /k "gradlew.bat :backend:app-bootstrap:bootRun"
 
 echo.

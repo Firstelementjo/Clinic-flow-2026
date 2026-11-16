@@ -33,7 +33,7 @@ RUN addgroup -S clinicflow && adduser -S clinicflow -G clinicflow
 WORKDIR /app
 
 # Copy the produced BootJar
-COPY --from=builder /workspace/backend/app-bootstrap/build/libs/app-bootstrap-*.jar /app/clinic-flow-api.jar
+COPY --from=builder /workspace/backend/app-bootstrap/build/libs/*.jar /app/clinic-flow-api.jar
 
 # Adjust ownership
 RUN chown -R clinicflow:clinicflow /app

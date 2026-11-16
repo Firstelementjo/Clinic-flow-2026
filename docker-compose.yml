@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-firstelement}
       POSTGRES_DB: ${DATABASE_NAME:-firstelement}
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '${POSTGRES_PORT:-5435}:5432'
     volumes:
       - clinicflow-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes']
     ports:
-      - '${REDIS_PORT:-6379}:6379'
+      - '${REDIS_PORT:-6381}:6379'
     volumes:
       - clinicflow-redisdata:/data
     healthcheck:
@@ -58,7 +58,8 @@ services:
       DATABASE_USER: ${DATABASE_USER:-firstelement}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-firstelement}
       REDIS_URL: redis://redis:6379
-      APP_ENV: ${APP_ENV:-PRODUCTION}
+      APP_ENV: ${APP_ENV:-LOCAL}
+      FIRSTELEMENT_EXPORTS_SIGNING_KEY: ${EXPORT_SIGNING_KEY:-c11n1c-f10w-2026-s3cur3-3xp0rt-s1gn1ng-k3y-32-chars}
       API_PORT: 4000
       MANAGEMENT_PORT: 4101
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
