@@ -1,188 +1,168 @@
-# FirstElement Dental Clinic
+# Clinic Flow 2026
 
-A dental clinic management system with patient records, appointments,
-odontogram (tooth notation), treatment plans, billing, and AI assistant.
+<div align="center">
 
-Arabic-first with full RTL, English as an equal second locale.
+![Clinic Flow](https://img.shields.io/badge/Clinic%20Flow-2026-0d9488?style=for-the-badge)
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-brightgreen?style=for-the-badge&logo=springboot)
+![Angular](https://img.shields.io/badge/Angular-18%2B-red?style=for-the-badge&logo=angular)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20(pgvector)-336791?style=for-the-badge&logo=postgresql)
+![Architecture](https://img.shields.io/badge/Architecture-Modular%20Monolith-orange?style=for-the-badge)
 
-## Status
+**Enterprise Dental Clinic Management System, Clinical Workstation & Omnichannel Patient CRM**  
+*Arabic-first with native RTL support, alongside comprehensive English LTR.*
 
-Built in vertical slices (see [plan.md](plan.md) §16). Each slice is
-runnable end to end before the next begins.
+</div>
 
-| # | Slice | State |
-| --- | --- | --- |
-| 1 | Foundation — auth, organization, project, ADMIN/EMPLOYEE roles | **Done** |
-| 2 | Core CRM — customer, conversation, message, unified inbox | **Done** |
-| 3 | Mock channel — inbound/outbound through the real pipeline | **Done** |
-| 4 | Knowledge — upload, processing, embeddings, project-scoped RAG | **Done** |
-| 5 | AI agent — agent versions, AI runs, tracing, memory | **Done** |
-| 6 | Scoring + escalation — score history, rules, atomic handoff | **Done** |
-| 7 | Routing — availability, workload, CSV import, assignment | **Done** |
-| 8 | Real connectors — WhatsApp, Instagram, Messenger, Telegram | **Done** |
-| 9 | Analytics, notifications, audit surfacing, system health | **Done** |
+---
 
-What works today: sign in, session-cookie auth with server-side RBAC,
-organization and project management, employee management with project
-membership, audit logging, health check, and the Arabic/English RTL app
-shell built on the design system — plus the CRM core: customers with
-multi-channel identity resolution, conversations, messages, an append-only
-conversation timeline fed by domain events, the three-pane unified inbox
-with its saved views, and the customer 360 view.
+## Executive Summary
 
-Messages now flow through the real pipeline: the mock connector accepts a
-simulated inbound webhook, the worker resolves the customer, opens or
-continues a conversation, stores the message idempotently, and agent
-replies are queued for delivery through the connector rather than assumed
-sent.
+**Clinic Flow 2026** is a modern, Arabic-first dental clinic CRM and clinical workstation powered by Spring Boot and Angular. It delivers end-to-end management for patient journeys, appointments, multi-chair operatories, and clinician schedules. The platform integrates advanced clinical tools including interactive odontograms, DICOM imaging, and 3D dental model viewing, while streamlining clinic finance with automated invoicing, treatment plans, lab orders, and doctor payout tracking.
 
-Projects now have knowledge bases: upload or paste documents, watch them
-move through UPLOADED → PROCESSING → INDEXING → READY, and test what the
-agent would retrieve for a question, with scores, before a customer asks.
+**باللغة العربية:**
+1. **كلينك فلو (Clinic Flow 2026):** نظام متكامل لإدارة عيادات ومراكز طب الأسنان مبني بأحدث تقنيات Spring Boot و Angular بدعم كامل ومثالي للغة العربية.
+2. **إدارة سريرية متطورة:** تنظيم المواعيد، وجداول الأطباء، ومتابعة كراسي العيادة (Operatories) في شاشة تفاعلية ذكية وسلسة.
+3. **أدوات طبية وتشخيصية:** يدعم مخطط الأسنان التفاعلي (Odontogram)، واستعراض الأشعة بصيغة DICOM، والمجسمات ثلاثية الأبعاد (3D Dental Viewer).
+4. **منظومة مالية وإدارية شاملة:** إدارة خطط العلاج، الفواتير، طلبات المعامل والمختبرات، وحساب عمولات ومستحقات الأطباء بدقة وموثوقية.
 
-Projects with an enabled agent now answer automatically: the orchestrator
-retrieves from the project's knowledge, runs permitted tools, replies or
-hands over, and records every turn as an AI run an employee can open —
-which version answered, which documents it cited, which tools it called,
-and what it cost. The bundled mock provider makes all of that work with no
-API key.
+---
 
-Every customer turn is now scored — frustration, sentiment, urgency, risk —
-and kept as history, with a sparkline in the conversation header showing
-the trend against the escalation threshold. Admin-editable rules decide
-when the AI hands over, the transition is atomic so it cannot race a manual
-takeover, and each escalation arrives with the rule that fired and a
-handover summary written for the person inheriting it.
+## Key Capabilities & Modules
 
-Escalations now get an owner. Routing filters by project membership,
-department, skill, availability, working hours in each employee's own
-timezone, and workload headroom, then assigns the least-loaded eligible
-person — deterministically, so the same escalation always routes the same
-way. When nobody qualifies it says which stage blocked it instead of
-failing quietly. Employees arrive by CSV or Excel through a wizard that
-reports every bad row rather than skipping it.
+### 1. Multi-Chair Dental Calendar & Scheduling
+- **Multi-Chair Operatory Board:** Visual management of clinic operatories (`Operatory 1` to `Operatory 4` and unassigned chairs) in a unified, non-clipping responsive view.
+- **Agenda Feed:** Chronological appointment stream organized by day with quick triage actions (`تأكيد`, `وصل`, `الزيارة السريرية`, `إتمام`).
+- **Doctor-Centric View:** Real-time clinician availability, schedules, and active bookings with doctor initials and specialties.
+- **BiDi & Typography Optimization:** Tailored typography with zero text overlap, proper Arabic line-heights, and clear separation between titles, descriptions, and counter badges.
 
-All four real channels are implemented against the official APIs:
-WhatsApp Cloud API, the Messenger Platform for Instagram and Messenger,
-and the Telegram Bot API. Credentials are encrypted at rest with
-AES-256-GCM and are write-only through the API — no endpoint returns them.
-Webhooks are public but verified on every request: Meta signatures over the
-raw request bytes, Telegram's secret token, both compared in constant time.
+### 2. Clinical Workstation & Encounters
+- **Clinical Encounter Flow:** Structured consultation workflows capturing chief complaints, clinical examination notes, and diagnostic assessments.
+- **SOAP Notes & History:** Standardized clinical documentation linked directly to the patient's ongoing electronic health record (EHR).
+- **Interactive FDI Odontogram:** Digital tooth chart (adult 11–48 and pediatric 51–85) tracking restorations, crowns, endodontic treatments, and missing teeth.
+- **Diagnostic Imaging & 3D Visualization:** In-browser DICOM medical image parsing and interactive 3D STL/OBJ dental mesh rendering.
 
-The loop closes with analytics, notifications and system health: an
-assignment reaches the agent through a persisted notification and a live
-SSE stream, the dashboard leads with the unassigned escalation queue and
-then AI resolution rate, response times, AI spend and the knowledge gaps
-the agent could not answer, and admins get the audit trail and a health
-view of queues, providers and channels.
+### 3. Patient Journey & Engagement
+- **Patient 360 Profile:** Centralized patient records, medical alert badges (allergies, systemic conditions), appointment history, and financial balance.
+- **Digital Prescriptions:** Electronic prescription generator supporting clinic letterhead printing, dosage rules, and medication catalogs.
+- **Dental Lab Tracking:** Digital lab slip dispatch, fabrication stage tracking (Impressions, Framework, Try-in, Fitting), and delivery verification.
+- **Patient Feedback System:** Net Promoter Score (NPS) and satisfaction rating collection after completed visits.
 
-The plan's §17 acceptance scenario runs end to end as an integration test:
-project → employees → knowledge → agent → escalation rule → mock channel →
-customer message → AI answer from knowledge → frustration → escalation with
-summary → routing → human takeover → resolution → analytics.
+### 4. Billing, Financials & Payouts
+- **High-Precision Multi-Currency Ledger:** Native support for 3-decimal currencies (such as Jordanian Dinar `JOD 0.000`) and standard 2-decimal currencies.
+- **Invoices & Payments:** Real-time generation of invoices from treatment plans, automated balance due tracking, discounts, and payment receipts.
+- **Doctor Commission & Payouts:** Automated clinician payout calculator factoring procedure commission percentages, lab expense deductions, and payment status.
+- **Revenue Analytics:** Clinic financial reports by service category, doctor productivity, and payment method breakdowns.
 
-## Requirements
+### 5. Omnichannel Messaging & Clinical AI
+- **Unified Communication Inbox:** Integration with WhatsApp Cloud API, Instagram, Messenger, and Telegram for patient inquiries and reminders.
+- **Clinical AI Assistant:** Safe, governed clinical AI companion with strict human-in-the-loop review, patient privacy protection, and immediate kill-switch safety controls.
 
-- Node 20+ and Yarn (Corepack: `corepack enable`)
-- Docker (for PostgreSQL with pgvector, and Redis)
+---
 
-## Quick start
+## Architecture & Technology Stack
+
+```
++---------------------------------------------------------------------------------------+
+|                               CLINIC FLOW 2026 ARCHITECTURE                           |
++-------------------------------------------+-------------------------------------------+
+|          FRONTEND APPLICATION             |             BACKEND SERVICES              |
+|  - Angular 18+ (Standalone Components)    |  - Spring Boot 3.3 (Modular Monolith)     |
+|  - Angular Signals & Reactive State       |  - Spring Security with Tenant Guards     |
+|  - Native RTL/LTR Bilingual Design System |  - Multi-Tenant Row-Level Data Isolation  |
+|  - 3D Canvas Mesh & DICOM Renderers       |  - PostgreSQL 16 with pgvector & Flyway   |
+|  - High-Efficiency Tabular Numeric Engine |  - Redis 7 (Session & Rate Limiting)      |
++-------------------------------------------+-------------------------------------------+
+```
+
+### Backend
+- **Framework:** Spring Boot 3.3.x (Java 21)
+- **Security:** Session cookie-based authentication, strict CSRF tokens, and tenant-scoped security queries.
+- **Persistence:** Spring Data JDBC with explicitly mapped schemas and Flyway versioned migrations.
+- **Database:** PostgreSQL 16 with `pgvector` extension for semantic knowledge and clinical search.
+- **Caching & Queues:** Redis 7 for distributed session management and rate limiting.
+
+### Frontend
+- **Framework:** Angular 18+ utilizing Standalone Components, Signal-based reactivity, and control flow syntax (`@if`, `@for`).
+- **Design System:** Custom enterprise clinical theme adhering to rectangular geometry (`border-radius: 2px - 3px`), high-contrast clinical teal palette, and no distracting rounded elements.
+- **Typography:** Fully optimized for Arabic typography with `IBM Plex Sans Arabic` and `Plus Jakarta Sans`, featuring `caret-color: transparent` on interactive buttons to eliminate click artifacts.
+
+---
+
+## Directory Structure
+
+```text
+.
+├── backend/
+│   ├── app-bootstrap/          # Spring Boot main application runner & properties
+│   ├── crm-core/               # Core clinic domain (Patients, Encounters, Dental, Billing)
+│   ├── inbox-helpdesk/         # REST API Controllers (Clinic, Operations, Encounters, AI)
+│   ├── tenant-security/        # RBAC, tenant context guards, and security policies
+│   ├── ai-rag/                 # Vector embeddings and clinical assistance logic
+│   └── database/               # Database migrations and baseline scripts
+├── frontend/
+│   ├── src/app/features/clinic/# Dental clinic views (Calendar, Encounters, Invoices, etc.)
+│   ├── src/app/core/           # Services (Auth, Session, I18n, API, DICOM/3D utils)
+│   ├── src/app/ui/             # Reusable UI controls (Page header, Status chip, Icons)
+│   └── src/styles/             # Global tokens, base styles, and component themes
+├── ops/                        # Flyway migrations, backup scripts, and deployment configs
+└── docker-compose.prod.yml     # Production container orchestration
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+- **Java 21** or higher
+- **Node.js 20+** and **npm**
+- **Docker** and **Docker Compose**
+
+### 1. Launch Supporting Infrastructure
+Start PostgreSQL with `pgvector` and Redis:
 
 ```bash
-corepack enable && yarn install
+docker compose -f docker-compose.prod.yml up -d postgres redis
 ```
+
+### 2. Run the Spring Boot Backend
+Navigate to the root directory and launch the application:
 
 ```bash
-cp .env.example .env
-```
+# Set required environment variables
+export WEB_ORIGIN="http://localhost:4200,http://localhost"
+export SESSION_SECRET="a-very-secure-32-character-secret-key"
+export ENCRYPTION_KEY="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
-Generate the two secrets `.env` needs:
+# Build and start via Gradle
+./gradlew :backend:app-bootstrap:bootRun
+```
+*The API service will be accessible on port `4000`.*
+
+### 3. Run the Angular Frontend
+In a separate terminal, install dependencies and launch the dev server:
 
 ```bash
-node -e "console.log('SESSION_SECRET=' + require('crypto').randomBytes(24).toString('hex')); console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
+cd frontend
+npm install
+npm start
 ```
+*The application workstation will be available at [http://localhost:4200](http://localhost:4200).*
 
-Start the datastores:
+---
 
-```bash
-docker compose up -d postgres redis
-```
+## Default Access & Roles
 
-Create the schema and demo data:
+For local testing and evaluation, the following pre-configured tenant accounts can be used:
 
-```bash
-yarn db:generate && yarn db:push && yarn db:seed
-```
+| Role | Email | Password | Permissions |
+|---|---|---|---|
+| **Super Admin** | `admin@clinicflow.io` | `Password123!` | Full clinic configuration, financials, users, and audit logs |
+| **Platform Operator** | `platform@clinicflow.io` | `Password123!` | Platform-level monitoring and organization management |
 
-Run the API and the web app in two terminals:
+---
 
-```bash
-yarn dev:api
-```
+## License
 
-```bash
-yarn dev:web
-```
-
-The app is at http://localhost:5173 and the API at http://localhost:4000/api.
-Seeded sign-in: `admin@firstelement.dev` / `DemoPassword123!` (demo data
-only — see `packages/database/src/seed.ts`).
-
-## Checks
-
-```bash
-yarn typecheck && yarn lint && yarn test
-```
-
-The integration suites need a reachable PostgreSQL with pgvector; without
-one they skip rather than passing silently. `vitest.config.ts` loads
-`.env`, so `DATABASE_URL` reaches the test process — without that, the
-suites skip themselves and a green run proves nothing.
-
-## Layout
-
-```
-apps/api        NestJS API — auth, RBAC, tenant-scoped **clinic** modules
-apps/web        Angular standalone client (Arabic-first, RTL)
-apps/worker     BullMQ worker process
-packages/auth   Password hashing, session tokens, cookie handling
-packages/config Validated environment configuration
-packages/events Domain event vocabulary and envelope (plan §8b)
-packages/connectors Messaging adapters, capability table, MockConnector
-packages/messaging Identity resolution, inbound pipeline, outbound dispatch
-packages/ai Providers, tools, orchestrator, run tracing, embeddings
-packages/knowledge-base Parsing, chunking, ingestion, embeddings, retrieval
-packages/routing Assignment pipeline, working hours, employee import
-packages/database Prisma schema, migrations, tenant scoping helpers, seed
-packages/shared Enums, zod DTOs and error codes shared by API and web
-packages/ui Design system: tokens, primitives, RTL direction support
-```
-
-## V1.2
-
-Agent status with per-status timers and time reporting, employee
-administration (accounts, activation, project assignment, per-agent
-conversation limits), configurable case classification with a
-project-scoped knowledge lookup, the case solution record with close and
-reopen, CSAT/DSAT/AHT/resolve-rate on the dashboard, and the inbox as a
-floating window that keeps the conversation live while you use the rest of
-the CRM.
-
-See [docs/v1.2-changes.md](docs/v1.2-changes.md) — including the bugs found
-along the way, one of which had been hiding every integration test.
-
-## Documentation
-
-- [docs/architecture.md](docs/architecture.md) — system shape and boundaries
-- [docs/local-dev.md](docs/local-dev.md) — running and troubleshooting
-- [docs/database.md](docs/database.md) — schema, migrations, tenancy rules
-- [docs/auth.md](docs/auth.md) — sessions, RBAC, threat notes
-- [docs/connectors.md](docs/connectors.md) — channels, capabilities, idempotency
-- [docs/rag.md](docs/rag.md) — knowledge base, chunking, embeddings, retrieval
-- [docs/ai-system.md](docs/ai-system.md) — agent versions, tools, tracing, injection defense
-- [docs/scoring-escalation.md](docs/scoring-escalation.md) — signals, rules, the atomic handover
-- [docs/routing.md](docs/routing.md) — the assignment pipeline, working hours, import
-- [docs/deployment.md](docs/deployment.md) — processes, migrations, webhooks, what to watch
-- [docs/v1.2-changes.md](docs/v1.2-changes.md) — V1.2 scope, decisions and findings
-- [docs/design-system.md](docs/design-system.md) — the visual brief and why
-- [docs/testing.md](docs/testing.md) — what is tested and how to run it
+This project is licensed under the terms of the [MIT License](LICENSE).  
+Copyright © 2026 FirstElement.
