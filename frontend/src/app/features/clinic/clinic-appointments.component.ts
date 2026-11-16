@@ -253,43 +253,43 @@ const STATUS_STATES = [
                       }
                     </td>
                     <td>
-                      <span class="tl-patient-cell">
+                      <div class="tl-patient-cell">
                         @if (row.patientName) {
                           <span class="tl-avatar tl-avatar--sm">
                             {{ initials(row.patientName) }}
                           </span>
                         }
-                        <span class="tl-stack">
+                        <div class="tl-stack">
                           <span class="tl-strong">{{ row.patientName || '—' }}</span>
                           @if (row.patientEmail) {
                             <span class="tl-muted tl-mono" dir="ltr">{{ row.patientEmail }}</span>
                           }
-                        </span>
-                      </span>
+                        </div>
+                      </div>
                     </td>
                     <td class="tl-nowrap">
                       {{ formatDate(row.appointmentDate) }}
                     </td>
                     <td>
-                      {{ row.service || '—' }}
+                      <span class="tl-service-text">{{ row.service || '—' }}</span>
                     </td>
                     <td class="tl-mono tl-nowrap">
                       {{ formatPrice(row.totalAmount ?? row.price) }}
                     </td>
                     <td>
-                      <span class="tl-patient-cell">
+                      <div class="tl-patient-cell">
                         @if (row.doctorName) {
                           <span class="tl-avatar tl-avatar--sm tl-avatar--doc">
                             {{ initials(row.doctorName) }}
                           </span>
                         }
-                        <span class="tl-stack">
-                          <span>{{ row.doctorName || '—' }}</span>
+                        <div class="tl-stack">
+                          <span class="tl-strong">{{ row.doctorName || '—' }}</span>
                           @if (doctorEmail(row.doctorId); as email) {
                             <span class="tl-muted tl-mono" dir="ltr">{{ email }}</span>
                           }
-                        </span>
-                      </span>
+                        </div>
+                      </div>
                     </td>
                     <td>
                       <select
@@ -355,7 +355,7 @@ const STATUS_STATES = [
                               </svg>
                             </a>
                           }
-                          <!-- 2. COMPLETED: Show yes symbol (green check mark) -->
+                          <!-- 2. COMPLETED: Show view encounter record button -->
                           @else if (row.status === 'COMPLETED') {
                             <a
                               class="tl-icon-btn tl-icon-btn--success"
@@ -381,20 +381,6 @@ const STATUS_STATES = [
                               </svg>
                             </a>
                           }
-                          <!-- 3. CANCELLED / NO_SHOW: Show X symbol -->
-                          @else if (row.status === 'CANCELLED' || row.status === 'NO_SHOW') {
-                            <span
-                              class="tl-icon-btn tl-icon-btn--danger-symbol"
-                              title="الموعد ملغي / لم يحضر"
-                              aria-label="Cancelled or No Show"
-                            >
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                              </svg>
-                            </span>
-                          }
-                          <!-- 4. PENDING / CONFIRMED: Don't show anything here -->
 
                           <a
                             class="tl-icon-btn"
@@ -592,10 +578,34 @@ const STATUS_STATES = [
       .tl-strong {
         font-weight: 600;
       }
+      .tl-patient-cell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
       .tl-stack {
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 1px;
+        min-width: 0;
+      }
+      .tl-stack .tl-strong {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink-strong);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 160px;
+      }
+      .tl-stack .tl-muted {
+        font-size: 11px;
+        color: var(--mute);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 160px;
       }
       .tl-doctor {
         display: inline-flex;
@@ -603,11 +613,23 @@ const STATUS_STATES = [
         gap: var(--fe-space-2);
       }
       .tl-avatar {
-        inline-size: 2rem;
-        block-size: 2rem;
-        border-radius: 999px;
-        object-fit: cover;
+        inline-size: 1.75rem;
+        block-size: 1.75rem;
+        border-radius: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--pri-soft);
+        color: var(--pri);
+        font-size: 11px;
+        font-weight: 700;
         flex: none;
+        border: 1px solid rgba(44, 181, 166, 0.25);
+      }
+      .tl-avatar--doc {
+        background: var(--surf2);
+        color: var(--ink-soft);
+        border-color: var(--line);
       }
       .tl-avatar--initials {
         display: inline-flex;
@@ -621,6 +643,30 @@ const STATUS_STATES = [
       .tl-money {
         font-variant-numeric: tabular-nums;
         font-weight: 600;
+      }
+      .tl-service-text {
+        display: block;
+        max-width: 170px;
+        line-height: 1.35;
+        font-size: 12.5px;
+        color: var(--ink-strong);
+      }
+      .tl-code {
+        display: inline-block;
+        font-family: var(--fe-font-mono);
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--tl-teal);
+        background: var(--pri-soft);
+        padding: 2px 6px;
+        border-radius: 2px;
+        text-decoration: none;
+        border: 1px solid rgba(44, 181, 166, 0.25);
+        transition: all 0.15s ease;
+      }
+      .tl-code:hover {
+        background: var(--tl-teal);
+        color: #ffffff;
       }
       .tl-badge--appointment {
         background: var(--pri-soft);
@@ -642,22 +688,32 @@ const STATUS_STATES = [
         background: var(--surf2);
         color: var(--mute);
       }
+      .tl-badge-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 1px 8px;
+        border-radius: 2px;
+        font-size: 11px;
+        font-weight: 600;
+      }
       .tl-actions {
         display: inline-flex;
         align-items: center;
-        gap: var(--fe-space-1);
+        gap: 4px;
       }
       .tl-icon-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        inline-size: 1.8rem;
-        block-size: 1.8rem;
+        inline-size: 1.65rem;
+        block-size: 1.65rem;
         border: 1px solid var(--line);
-        border-radius: 6px;
+        border-radius: 2px;
         background: var(--surf);
         color: var(--ink-soft);
         cursor: pointer;
+        transition: all 0.15s ease;
       }
       .tl-icon-btn svg {
         inline-size: 0.95rem;
@@ -665,7 +721,8 @@ const STATUS_STATES = [
       }
       .tl-icon-btn:hover:not(:disabled) {
         border-color: var(--tl-teal);
-        color: var(--tl-teal-deep, var(--pri));
+        color: var(--tl-teal);
+        background: var(--pri-soft);
       }
       .tl-icon-btn:disabled {
         opacity: 0.4;
@@ -681,9 +738,9 @@ const STATUS_STATES = [
         border-color: var(--tl-teal);
       }
       .tl-icon-btn--success {
-        background: rgba(16, 185, 129, 0.12);
-        color: #10b981;
-        border-color: rgba(16, 185, 129, 0.4);
+        background: var(--accent-green-soft);
+        color: var(--accent-green-ink);
+        border-color: rgba(22, 163, 74, 0.3);
       }
       .tl-icon-btn--success:hover {
         background: #10b981;
@@ -691,20 +748,20 @@ const STATUS_STATES = [
         border-color: #10b981;
       }
       .tl-icon-btn--danger-symbol {
-        background: rgba(239, 68, 68, 0.12);
-        color: #ef4444;
-        border-color: rgba(239, 68, 68, 0.35);
+        background: var(--accent-red-soft);
+        color: var(--accent-red-ink);
+        border-color: rgba(220, 38, 38, 0.3);
         cursor: default;
       }
       .tl-icon-btn--teal:hover:not(:disabled) {
-        background: var(--tl-teal-deep);
+        background: var(--tl-teal-hover);
         color: var(--on-accent);
-        border-color: var(--tl-teal-deep);
+        border-color: var(--tl-teal-hover);
       }
       .tl-icon-btn--checkin {
-        background: rgba(16, 185, 129, 0.12);
-        color: #10b981;
-        border-color: #10b981;
+        background: var(--accent-green-soft);
+        color: var(--accent-green-ink);
+        border-color: rgba(22, 163, 74, 0.3);
       }
       .tl-icon-btn--checkin:hover:not(:disabled) {
         background: #10b981;
@@ -712,20 +769,90 @@ const STATUS_STATES = [
         border-color: #10b981;
       }
       .tl-inline-select {
-        appearance: auto;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        padding: 4px 8px;
-        font-size: var(--fe-text-xs, 0.78rem);
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        display: inline-flex;
+        align-items: center;
+        height: 25px;
+        padding: 1px 20px 1px 8px;
+        font-size: 11px;
         font-weight: 600;
-        background: var(--surf);
-        color: var(--ink);
+        border-radius: 2px;
+        border: 1px solid transparent;
         cursor: pointer;
-        min-inline-size: 6.75rem;
+        transition: all 0.15s ease;
+        background-repeat: no-repeat;
+        background-position: right 6px center;
+        background-size: 9px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        min-inline-size: 6rem;
       }
-      .tl-inline-select:focus {
+      [dir="rtl"] .tl-inline-select {
+        padding: 1px 8px 1px 20px;
+        background-position: left 6px center;
+      }
+      .tl-inline-select.tl-badge--appointment {
+        background-color: var(--pri-soft);
+        color: var(--pri);
+        border-color: rgba(44, 181, 166, 0.3);
+      }
+      .tl-inline-select.tl-badge--success {
+        background-color: var(--accent-green-soft);
+        color: var(--accent-green-ink);
+        border-color: rgba(22, 163, 74, 0.3);
+      }
+      .tl-inline-select.tl-badge--warning {
+        background-color: var(--accent-amber-soft);
+        color: var(--accent-amber-ink);
+        border-color: rgba(245, 158, 11, 0.3);
+      }
+      .tl-inline-select.tl-badge--danger {
+        background-color: var(--accent-red-soft);
+        color: var(--accent-red-ink);
+        border-color: rgba(220, 38, 38, 0.3);
+      }
+      .tl-inline-select.tl-badge--muted {
+        background-color: var(--surf2);
+        color: var(--mute);
+        border-color: var(--line);
+      }
+      .tl-inline-select:focus-visible {
         outline: 2px solid var(--tl-teal);
         outline-offset: 1px;
+      }
+      .tl-table thead tr {
+        background: var(--surf2);
+        color: var(--mute);
+        border-bottom: 1px solid var(--line);
+      }
+      .tl-table th {
+        padding: 10px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--mute);
+        background: var(--surf2);
+        border: none;
+        border-bottom: 1px solid var(--line);
+        white-space: nowrap;
+      }
+      .tl-table td {
+        padding: 10px 12px;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        border-bottom: 1px solid var(--line);
+        vertical-align: middle;
+      }
+      .tl-table tbody tr {
+        transition: background-color 0.15s ease;
+      }
+      .tl-table tbody tr:hover {
+        background: var(--surf2);
+      }
+      .tl-table tbody tr.is-selected {
+        background: var(--pri-soft);
       }
       .tl-pagination {
         display: flex;

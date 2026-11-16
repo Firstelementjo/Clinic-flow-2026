@@ -210,7 +210,7 @@ public class BudgetGate {
         }
 
         if (!hardStops.isEmpty()) {
-            log.info("AI budget HARD stop keys={} estimatedTokens={}", hardStops, estimatedTokens);
+            log.info("AI budget ceiling reached count={}", hardStops.size());
             throw AiRefusedException.of(AiRefusalReason.BUDGET_HARD_STOP,
                 "budget(s) " + hardStops + " are at or over their ceiling with enforcement=HARD");
         }

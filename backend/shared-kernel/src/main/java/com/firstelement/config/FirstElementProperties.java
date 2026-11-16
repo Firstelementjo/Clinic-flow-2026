@@ -53,7 +53,7 @@ public class FirstElementProperties {
         private String webOrigin = "http://localhost:5173";
 
         @Size(min = 32, message = "SESSION_SECRET must be at least 32 characters")
-        private String sessionSecret = "change-me-to-a-long-random-string-min-32-chars";
+        private String sessionSecret;
 
         public int getPort() {
             return port;

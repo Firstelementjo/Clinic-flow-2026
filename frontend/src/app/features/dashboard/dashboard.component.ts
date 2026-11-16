@@ -281,6 +281,33 @@ export class DashboardComponent implements OnInit {
 
   protected readonly upcomingAppointments = signal<readonly UpcomingApt[]>([]);
 
+  /** On-demand descriptions toggled via the circular '?' buttons */
+  protected readonly showPerformanceInfo = signal(false);
+  protected readonly showWithheldInfo = signal(false);
+  protected readonly showChartInfo = signal(false);
+  protected readonly showAgeInfo = signal(false);
+  protected readonly showUpcomingInfo = signal(false);
+
+  togglePerformanceInfo(): void {
+    this.showPerformanceInfo.update((v) => !v);
+  }
+
+  toggleWithheldInfo(): void {
+    this.showWithheldInfo.update((v) => !v);
+  }
+
+  toggleChartInfo(): void {
+    this.showChartInfo.update((v) => !v);
+  }
+
+  toggleAgeInfo(): void {
+    this.showAgeInfo.update((v) => !v);
+  }
+
+  toggleUpcomingInfo(): void {
+    this.showUpcomingInfo.update((v) => !v);
+  }
+
   /** The window the Performance section is showing, in words. */
   protected readonly windowLabel = computed<string>(() =>
     this.i18n.t('dashboard.performance.window', {

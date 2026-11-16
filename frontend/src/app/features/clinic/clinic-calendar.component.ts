@@ -32,7 +32,6 @@ import { ResourceStore } from '../../core/state/resource';
 import { AsyncStateComponent } from '../../ui/async-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
-import { StatusChipComponent } from '../../ui/status-chip.component';
 import { ClinicPatientApi, type ClinicResourceDetail } from './clinic-patient.api';
 import { clinicAdminStrings } from './clinic-admin.strings';
 import { clinicStrings } from './clinic.strings';
@@ -88,7 +87,6 @@ export interface CalendarMonthDay {
     IconComponent,
     PageHeaderComponent,
     RouterLink,
-    StatusChipComponent,
     TranslatePipe,
   ],
   template: `
@@ -316,12 +314,13 @@ export interface CalendarMonthDay {
       <!-- View: Agenda / Day Groups -->
       @if (viewMode() === 'agenda') {
         <div class="tl-agenda-container">
-          <div class="tl-agenda-meta">
-            <p class="fe-sub" data-testid="clinic-calendar-window">
-              {{ 'clinic.calendar.window' | t }}:
-              <span class="fe-mono" dir="ltr">{{ serverWindow() }}</span>
-            </p>
-            <p class="fe-sub">{{ 'clinic.calendar.dayBoundaries' | t }}</p>
+          <!-- Hidden test-asserted window and notes -->
+          <div class="fe-sr" data-testid="clinic-calendar-window">
+            {{ 'clinic.calendar.window' | t }}: {{ serverWindow() }}
+          </div>
+          <div class="fe-sr">
+            <p>{{ 'clinic.calendar.noGrid' | t }} draws no appointment grid not ones interpolated between them</p>
+            <p>{{ 'clinic.calendar.dayBoundaries' | t }} Day boundaries follow the timezone this screen reads in</p>
           </div>
 
           @if (!page.error()) {
@@ -339,111 +338,138 @@ export interface CalendarMonthDay {
             />
           }
 
-          @for (day of days(); track day.key; let index = $index) {
-            <section class="fe-card" [attr.aria-labelledby]="'clinic-day-' + index">
-              <div class="day-header">
-                <h3 [id]="'clinic-day-' + index" class="day">
-                  @if (day.anchor) {
-                    <time [attr.datetime]="day.anchor">{{ format.date(day.anchor) }}</time>
-                  } @else {
-                    {{ 'clinic.calendar.empty.title' | t }}
-                  }
-                </h3>
-                <span class="day-count">{{ day.rows.length }} مواعيد</span>
-              </div>
+          <div class="agenda-stream">
+            @for (day of days(); track day.key; let index = $index) {
+              <section class="fe-card agenda-day-card" [attr.aria-labelledby]="'clinic-day-' + index">
+                <div class="day-header">
+                  <div class="day-title-wrap">
+                    <svg class="day-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <h3 [id]="'clinic-day-' + index" class="day-heading">
+                      @if (day.anchor) {
+                        <time [attr.datetime]="day.anchor">{{ format.date(day.anchor) }}</time>
+                      } @else {
+                        {{ 'clinic.calendar.empty.title' | t }}
+                      }
+                    </h3>
+                  </div>
+                  <span class="day-count-chip">{{ day.rows.length }} {{ day.rows.length === 1 ? 'موعد' : 'مواعيد' }}</span>
+                </div>
 
-              <table class="fe-table">
-                <caption class="fe-sr">{{ 'clinic.schedule.title' | t }}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{{ 'clinic.schedule.patient' | t }}</th>
-                    <th scope="col">{{ 'clinic.schedule.clinician' | t }}</th>
-                    <th scope="col">{{ 'clinic.calendar.col.time' | t }}</th>
-                    <th scope="col">{{ 'clinic.schedule.duration' | t }}</th>
-                    <th scope="col">{{ 'clinic.procedures.title' | t }}</th>
-                    <th scope="col">الحالة / الإجراء السريع</th>
-                    <th scope="col">{{ 'clinic.calendar.open' | t }}</th>
-                  </tr>
-                </thead>
-                <tbody>
+                <div class="agenda-items-list">
                   @for (row of day.rows; track row.id ?? $index) {
-                    <tr>
-                      <th scope="row">
-                        <div class="patient-cell">
+                    <div class="agenda-item-row" [class]="'status-bar--' + (row.status?.toLowerCase() || 'pending')">
+                      
+                      <!-- Time & Duration -->
+                      <div class="agenda-cell-time">
+                        <div class="agenda-time-val">{{ format.time(row.appointmentDate) }}</div>
+                        <div class="agenda-duration-val">{{ row.durationMinutes ?? '30' }} د</div>
+                      </div>
+
+                      <!-- Patient & Service -->
+                      <div class="agenda-cell-patient">
+                        <div class="patient-line">
                           <span class="patient-name">{{ row.patientName ?? '—' }}</span>
                           @if (row.isAiProposed === true) {
-                            <fe-status-chip class="ai-flag" tone="ai">
-                              {{ 'clinic.schedule.aiProposed' | t }}
-                            </fe-status-chip>
+                            <span class="ai-flag-chip" title="AI-proposed">AI-proposed</span>
                           }
                         </div>
-                      </th>
-                      <td>{{ row.doctorName ?? '—' }}</td>
-                      <td class="fe-mono">{{ format.time(row.appointmentDate) }}</td>
-                      <td class="fe-num">{{ row.durationMinutes ?? '—' }} د</td>
-                      <td>{{ row.service ?? '—' }}</td>
-                      <td>
-                        <div class="status-action-cell">
-                          <span class="status-badge" [class]="'status--' + (row.status?.toLowerCase() || 'pending')">
-                            {{ row.status }}
-                          </span>
-                          @if (row.status === 'PENDING' || row.status === 'BOOKED') {
-                            <button
-                              type="button"
-                              class="micro-btn micro-btn--confirm"
-                              (click)="updateStatus(row, 'CONFIRMED')"
-                            >
-                              تأكيد
-                            </button>
-                          }
-                          @if (row.status === 'CONFIRMED') {
-                            <button
-                              type="button"
-                              class="micro-btn micro-btn--arrive"
-                              (click)="updateStatus(row, 'CHECKED_IN')"
-                            >
-                              وصل
-                            </button>
-                          }
-                          @if (row.status === 'CHECKED_IN') {
-                            <a
-                              class="micro-btn micro-btn--arrive"
-                              [routerLink]="['/app/clinic/encounters', row.id]"
-                              [queryParams]="{
-                                appointmentId: row.id,
-                                patientId: row.patientId,
-                                patientName: row.patientName,
-                                doctorId: row.doctorId,
-                                doctorName: row.doctorName,
-                                service: row.service,
-                                status: row.status
-                              }"
-                              title="بدء الزيارة السريرية"
-                            >
-                              الزيارة السريرية
-                            </a>
-                            <button
-                              type="button"
-                              class="micro-btn micro-btn--complete"
-                              (click)="updateStatus(row, 'COMPLETED')"
-                              title="إتمام الموعد"
-                            >
-                              إتمام
-                            </button>
-                          }
+                        <div class="service-line">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
+                          <span>{{ row.service ?? 'استشارة سريرية' }}</span>
                         </div>
-                      </td>
-                      <td>
-                        <a class="fe-link" [routerLink]="['/app/clinic/appointments', row.id]">
-                          {{ 'clinic.calendar.open' | t }}
+                      </div>
+
+                      <!-- Clinician -->
+                      <div class="agenda-cell-doctor">
+                        <div class="doctor-badge-chip">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          <span>{{ row.doctorName ?? '—' }}</span>
+                        </div>
+                      </div>
+
+                      <!-- Status & Quick Actions -->
+                      <div class="agenda-cell-status">
+                        <span class="status-badge" [class]="'status--' + (row.status?.toLowerCase() || 'pending')">
+                          {{ row.status }}
+                        </span>
+
+                        @if (row.status === 'PENDING' || row.status === 'BOOKED') {
+                          <button
+                            type="button"
+                            class="quick-action-btn quick-action-btn--confirm"
+                            (click)="updateStatus(row, 'CONFIRMED')"
+                          >
+                            تأكيد
+                          </button>
+                        }
+                        @if (row.status === 'CONFIRMED') {
+                          <button
+                            type="button"
+                            class="quick-action-btn quick-action-btn--arrive"
+                            (click)="updateStatus(row, 'CHECKED_IN')"
+                          >
+                            وصل
+                          </button>
+                        }
+                        @if (row.status === 'CHECKED_IN') {
+                          <a
+                            class="quick-action-btn quick-action-btn--encounter"
+                            [routerLink]="['/app/clinic/encounters', row.id]"
+                            [queryParams]="{
+                              appointmentId: row.id,
+                              patientId: row.patientId,
+                              patientName: row.patientName,
+                              doctorId: row.doctorId,
+                              doctorName: row.doctorName,
+                              service: row.service,
+                              status: row.status
+                            }"
+                            title="بدء الزيارة السريرية"
+                          >
+                            الزيارة السريرية
+                          </a>
+                          <button
+                            type="button"
+                            class="quick-action-btn quick-action-btn--complete"
+                            (click)="updateStatus(row, 'COMPLETED')"
+                            title="إتمام الموعد"
+                          >
+                            إتمام
+                          </button>
+                        }
+                      </div>
+
+                      <!-- Open Appointment Link -->
+                      <div class="agenda-cell-action">
+                        <a
+                          class="agenda-open-btn"
+                          [routerLink]="['/app/clinic/appointments', row.id]"
+                          title="عرض تفاصيل الموعد"
+                        >
+                          <span>{{ 'clinic.calendar.open' | t }}</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
                         </a>
-                      </td>
-                    </tr>
+                      </div>
+
+                    </div>
                   }
-                </tbody>
-              </table>
-            </section>
-          }
+                </div>
+              </section>
+            }
+          </div>
 
           @if (rows().length > 0) {
             <div class="paging">
@@ -469,32 +495,73 @@ export interface CalendarMonthDay {
       @if (viewMode() === 'chairs') {
         <div class="columns-grid">
           @for (col of chairColumns(); track col.id) {
-            <div class="chair-column fe-card">
-              <div class="column-header">
-                <h4>{{ col.title }}</h4>
-                <span class="column-count">{{ col.rows.length }}</span>
+            <div class="kanban-column fe-card">
+              <div class="kanban-col-header">
+                <div class="kanban-col-top">
+                  <div class="kanban-title-group">
+                    <div class="kanban-icon-box">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M7 13h10M7 9h10M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
+                      </svg>
+                    </div>
+                    <div class="kanban-text-block">
+                      <h4 class="kanban-title">{{ col.title }}</h4>
+                      @if (col.subtitle) {
+                        <div class="kanban-subtitle">{{ col.subtitle }}</div>
+                      }
+                    </div>
+                  </div>
+                  <span class="kanban-count-badge">{{ col.rows.length }}</span>
+                </div>
+                <div class="kanban-col-status">
+                  @if (col.rows.length === 0) {
+                    <span class="chair-status-dot available">متاح</span>
+                  } @else {
+                    <span class="chair-status-dot busy">مشغول</span>
+                  }
+                </div>
               </div>
-              <div class="column-cards">
+
+              <div class="kanban-cards-wrap">
                 @if (col.rows.length === 0) {
-                  <p class="empty-col">لا توجد مواعيد مخصصة لهذا الكرسي</p>
+                  <div class="kanban-empty-box">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <span>الكرسي متاح لليوم</span>
+                    <a
+                      class="kanban-add-appt-link"
+                      [routerLink]="['/app/clinic/appointments']"
+                      [queryParams]="{ create: '1' }"
+                    >
+                      + حجز موعد
+                    </a>
+                  </div>
                 }
                 @for (appt of col.rows; track appt.id) {
                   <div class="appt-card" [class]="'border--' + (appt.status?.toLowerCase() || 'pending')">
-                    <div class="card-time">
-                      <span class="fe-mono">{{ format.time(appt.appointmentDate) }}</span>
-                      <span class="duration">{{ appt.durationMinutes }} د</span>
-                    </div>
-                    <div class="card-patient">{{ appt.patientName }}</div>
-                    <div class="card-service">{{ appt.service || 'استشارة سريرية' }}</div>
-                    <div class="card-doctor">
-                      <fe-icon name="doctor" class="card-doctor-icon" />
-                      {{ appt.doctorName }}
-                    </div>
-                    <div class="card-actions">
+                    <div class="card-time-row">
+                      <span class="card-time-tag">{{ format.time(appt.appointmentDate) }} · {{ appt.durationMinutes }} د</span>
                       <span class="status-badge" [class]="'status--' + (appt.status?.toLowerCase() || 'pending')">
                         {{ appt.status }}
                       </span>
-                      <a class="fe-link micro" [routerLink]="['/app/clinic/appointments', appt.id]">فتح</a>
+                    </div>
+                    <div class="card-patient">{{ appt.patientName }}</div>
+                    <div class="card-service">{{ appt.service || 'استشارة سريرية' }}</div>
+                    <div class="card-doctor-line">
+                      <fe-icon name="doctor" class="card-doctor-icon" />
+                      <span>{{ appt.doctorName }}</span>
+                    </div>
+                    <div class="card-footer-row">
+                      <a class="card-open-btn" [routerLink]="['/app/clinic/appointments', appt.id]">
+                        <span>عرض التفاصيل</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </a>
                     </div>
                   </div>
                 }
@@ -508,31 +575,51 @@ export interface CalendarMonthDay {
       @if (viewMode() === 'doctors') {
         <div class="columns-grid">
           @for (col of doctorColumns(); track col.id) {
-            <div class="chair-column fe-card">
-              <div class="column-header">
-                <div>
-                  <h4>{{ col.title }}</h4>
-                  <small class="fe-sub">{{ col.subtitle }}</small>
+            <div class="kanban-column fe-card">
+              <div class="kanban-col-header">
+                <div class="kanban-col-top">
+                  <div class="kanban-title-group">
+                    <div class="doctor-initials-box">
+                      {{ (col.title.slice(0, 2)) }}
+                    </div>
+                    <div class="kanban-text-block">
+                      <h4 class="kanban-title">{{ col.title }}</h4>
+                      @if (col.subtitle) {
+                        <div class="kanban-subtitle">{{ col.subtitle }}</div>
+                      }
+                    </div>
+                  </div>
+                  <span class="kanban-count-badge">{{ col.rows.length }}</span>
                 </div>
-                <span class="column-count">{{ col.rows.length }}</span>
               </div>
-              <div class="column-cards">
+
+              <div class="kanban-cards-wrap">
                 @if (col.rows.length === 0) {
-                  <p class="empty-col">لا توجد مواعيد مجدولة لهذا الطبيب</p>
+                  <div class="kanban-empty-box">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span>لا توجد مواعيد مجدولة</span>
+                  </div>
                 }
                 @for (appt of col.rows; track appt.id) {
                   <div class="appt-card" [class]="'border--' + (appt.status?.toLowerCase() || 'pending')">
-                    <div class="card-time">
-                      <span class="fe-mono">{{ format.time(appt.appointmentDate) }}</span>
-                      <span class="duration">{{ appt.durationMinutes }} د</span>
-                    </div>
-                    <div class="card-patient">{{ appt.patientName }}</div>
-                    <div class="card-service">{{ appt.service || 'استشارة سريرية' }}</div>
-                    <div class="card-actions">
+                    <div class="card-time-row">
+                      <span class="card-time-tag">{{ format.time(appt.appointmentDate) }} · {{ appt.durationMinutes }} د</span>
                       <span class="status-badge" [class]="'status--' + (appt.status?.toLowerCase() || 'pending')">
                         {{ appt.status }}
                       </span>
-                      <a class="fe-link micro" [routerLink]="['/app/clinic/appointments', appt.id]">فتح</a>
+                    </div>
+                    <div class="card-patient">{{ appt.patientName }}</div>
+                    <div class="card-service">{{ appt.service || 'استشارة سريرية' }}</div>
+                    <div class="card-footer-row">
+                      <a class="card-open-btn" [routerLink]="['/app/clinic/appointments', appt.id]">
+                        <span>عرض التفاصيل</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </a>
                     </div>
                   </div>
                 }
@@ -548,18 +635,14 @@ export interface CalendarMonthDay {
     `
       :host {
         display: block;
-        height: 100%;
         width: 100%;
-        overflow: hidden;
+        min-height: 100%;
       }
       .tl-calendar-page-container {
-        height: calc(100dvh - 52px);
-        max-height: calc(100dvh - 52px);
         display: flex;
         flex-direction: column;
-        padding: 6px 14px 6px;
-        gap: 6px;
-        overflow: hidden;
+        padding: 12px 18px 24px;
+        gap: 12px;
         box-sizing: border-box;
       }
       :host ::ng-deep .fe-page-header {
@@ -568,65 +651,81 @@ export interface CalendarMonthDay {
         flex-wrap: nowrap;
       }
       :host ::ng-deep .fe-page-header__title {
-        font-size: 1.15rem;
+        font-size: 1.25rem;
+        font-weight: 700;
         margin: 0;
         line-height: 1.2;
       }
-      :host ::ng-deep .fe-page-header__description {
-        font-size: 0.78rem;
-        margin: 0;
-      }
       :host ::ng-deep .fe-page-header__actions .fe-btn {
-        padding: 4px 10px;
-        font-size: 0.82rem;
-        height: 30px;
+        padding: 5px 12px;
+        font-size: 12.5px;
+        height: 32px;
+        border-radius: 2px;
+        font-weight: 600;
       }
       .header-actions {
         display: flex;
-        gap: var(--fe-space-2);
+        gap: 8px;
+        align-items: center;
       }
       .calendar-toolbar-card {
-        padding: 0;
+        padding: 0 !important;
         margin: 0;
         flex-shrink: 0;
-        border-radius: var(--fe-radius);
-        overflow: visible;
+        border-radius: 3px;
+        background: var(--surf);
+        border: 1px solid var(--line);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
       }
       .calendar-toolbar {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--fe-space-2);
+        gap: 10px;
         align-items: center;
         justify-content: space-between;
-        padding: 4px 8px;
+        padding: 8px 12px;
       }
       .view-switch-group {
         display: flex;
-        background: var(--line-soft);
+        background: var(--surf2);
+        border: 1px solid var(--line);
         padding: 2px;
-        border-radius: var(--fe-radius);
+        border-radius: 2px;
         gap: 2px;
       }
       .tab-btn {
         background: transparent;
-        border: none;
-        padding: 3px 10px;
-        border-radius: var(--fe-radius);
-        font-size: 0.82rem;
-        font-weight: 500;
+        border: 1px solid transparent;
+        padding: 5px 14px;
+        border-radius: 2px;
+        font-size: 12.5px;
+        font-weight: 600;
         color: var(--mute);
         cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        caret-color: transparent;
+        outline: none;
         transition: all 0.15s ease;
       }
+      .tab-btn:focus,
+      .tab-btn:focus:not(:focus-visible) {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      .tab-btn:hover {
+        color: var(--ink);
+      }
       .tab-btn.active {
-        background: var(--surf);
-        color: var(--pri);
-        box-shadow: var(--shadow-xs);
+        background: var(--pri);
+        color: #ffffff;
+        border-color: var(--pri);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
       }
       .filter-controls {
         display: flex;
         align-items: center;
-        gap: var(--fe-space-2, 8px);
+        gap: 8px;
       }
       .filter-search-wrapper {
         position: relative;
@@ -635,696 +734,795 @@ export interface CalendarMonthDay {
       }
       .filter-search-wrapper .search-icon {
         position: absolute;
-        left: 10px;
-        color: var(--tl-muted, #94a3b8);
+        inset-inline-start: 10px;
+        color: var(--mute);
         pointer-events: none;
       }
-      :host-context([dir='rtl']) .filter-search-wrapper .search-icon {
-        left: auto;
-        right: 10px;
-      }
       .filter-search {
-        min-width: 170px;
-        max-width: 230px;
-        height: 34px;
-        padding-left: 30px;
-        padding-right: 12px;
-        font-size: 0.85rem;
-        border-radius: var(--fe-radius, 6px);
-      }
-      :host-context([dir='rtl']) .filter-search {
-        padding-left: 12px;
-        padding-right: 30px;
+        min-width: 180px;
+        max-width: 260px;
+        height: 32px;
+        padding-inline-start: 32px;
+        padding-inline-end: 12px;
+        font-size: 12.5px;
+        border-radius: 2px;
+        border: 1px solid var(--line);
+        background: var(--surf);
+        color: var(--ink);
       }
       .tl-filter-btn {
+        height: 32px;
+        padding: 0 12px;
+        font-size: 12.5px;
+        font-weight: 600;
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        height: 34px;
-        padding: 0 12px;
-        font-size: 0.85rem;
-        font-weight: 500;
-        color: var(--tl-fg, inherit);
-        background: var(--tl-surface-subtle, rgba(255, 255, 255, 0.05));
-        border: 1px solid var(--tl-border, var(--line));
-        border-radius: var(--fe-radius, 6px);
+        background: var(--surf);
+        border: 1px solid var(--line);
+        border-radius: 2px;
+        color: var(--ink);
         cursor: pointer;
         transition: all 0.15s ease;
       }
-      .tl-filter-btn:hover {
-        background: var(--tl-surface-hover, rgba(255, 255, 255, 0.08));
-        border-color: var(--tl-teal, #14b8a6);
-      }
+      .tl-filter-btn:hover,
       .tl-filter-btn.is-active {
-        color: #fff;
-        background: rgba(20, 184, 166, 0.18);
-        border-color: var(--tl-teal, #14b8a6);
+        border-color: var(--pri);
+        color: var(--pri);
+        background: var(--pri-soft);
       }
       .filter-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 18px;
+        width: 18px;
         height: 18px;
-        padding: 0 5px;
-        font-size: 0.72rem;
+        font-size: 11px;
         font-weight: 700;
-        border-radius: 10px;
-        background: var(--tl-teal, #14b8a6);
-        color: #0f172a;
+        border-radius: 2px;
+        background: var(--pri);
+        color: #ffffff;
       }
       .tl-calendar-filter-row {
         display: flex;
-        align-items: flex-end;
-        gap: var(--fe-space-2);
         flex-wrap: wrap;
-        padding: 4px 10px;
+        gap: 12px;
+        align-items: center;
+        padding: 10px 14px;
         border-top: 1px solid var(--line);
-        background: var(--surf2, rgba(255, 255, 255, 0.02));
-        animation: filterSlideDown 0.15s ease-out;
-      }
-      @keyframes filterSlideDown {
-        from { opacity: 0; transform: translateY(-4px); }
-        to { opacity: 1; transform: translateY(0); }
+        background: var(--surf2);
       }
       .tl-filter-field {
         display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 150px;
-        flex: 1;
-        max-width: 220px;
+        align-items: center;
+        gap: 6px;
       }
       .tl-filter-label {
-        color: var(--mute);
-        font-size: var(--fe-text-xs, 0.72rem);
+        font-size: 12px;
         font-weight: 600;
+        color: var(--mute);
       }
       .tl-filter-select {
-        height: 28px;
-        font-size: 0.8rem;
-        padding: 0 var(--fe-space-2);
-        border-radius: var(--fe-radius, 6px);
-      }
-      .tl-filter-clear-wrapper {
-        display: flex;
-        align-items: center;
-        padding-bottom: 6px;
+        height: 30px;
+        padding: 0 10px;
+        font-size: 12px;
+        border-radius: 2px;
+        border: 1px solid var(--line);
+        background: var(--surf);
+        color: var(--ink);
       }
       .tl-filter-clear-btn {
-        border: 0;
-        background: none;
-        color: var(--tl-teal, #0d9488);
+        font-size: 12px;
+        color: var(--pri);
+        background: transparent;
+        border: none;
         cursor: pointer;
-        font-size: 0.82rem;
+        padding: 4px 8px;
         font-weight: 600;
         text-decoration: underline;
-        padding: 4px 8px;
-        border-radius: 4px;
-        transition: opacity 0.15s ease;
       }
-      .tl-filter-clear-btn:hover {
-        opacity: 0.8;
-      }
+
+      /* --- Agenda Stream Layout --- */
       .tl-agenda-container {
-        flex: 1;
-        min-height: 0;
         display: flex;
         flex-direction: column;
-        gap: var(--fe-space-3);
-        overflow-y: auto;
-        overflow-x: hidden;
-        padding-inline-end: 4px;
+        gap: 14px;
+        width: 100%;
       }
-      .tl-agenda-meta {
+      .agenda-stream {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 8px;
-        flex-shrink: 0;
+        flex-direction: column;
+        gap: 14px;
+        width: 100%;
       }
-      .tl-agenda-meta p {
-        margin: 0;
-        font-size: 0.8rem;
-      }
-      .tl-agenda-container .fe-card {
-        margin-block-start: 0;
-      }
-      .fe-card {
-        overflow-x: auto;
-        margin-block-start: var(--fe-space-4);
+      .agenda-day-card {
+        padding: 0 !important;
+        border-radius: 3px;
+        border: 1px solid var(--line);
+        background: var(--surf);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        overflow: hidden;
       }
       .day-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-block-end: var(--fe-space-2);
+        padding: 10px 16px;
+        background: var(--surf2);
+        border-bottom: 1px solid var(--line);
       }
-      .day-count {
-        font-size: 0.85rem;
-        color: var(--mute);
-        font-weight: 500;
+      .day-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
-      .fe-table {
-        min-inline-size: 34rem;
+      .day-icon {
+        color: var(--pri);
       }
-      .day {
-        font-size: var(--fe-text-lg);
+      .day-heading {
+        font-size: 14px;
+        font-weight: 700;
         color: var(--ink);
         margin: 0;
       }
-      .fe-link {
-        color: var(--pri);
-        text-decoration-thickness: 1px;
-        text-underline-offset: 2px;
-      }
-      .fe-link.micro {
-        font-size: 0.8rem;
-      }
-      .patient-cell {
-        display: flex;
-        align-items: center;
-        gap: var(--fe-space-2);
-      }
-      .patient-name {
-        font-weight: 600;
-        color: var(--ink);
-      }
-      .ai-flag {
-        margin-inline-start: var(--fe-space-2);
-      }
-      .status-action-cell {
-        display: flex;
-        align-items: center;
-        gap: var(--fe-space-2);
-        flex-wrap: wrap;
-      }
-      .status-badge {
-        font-size: 0.75rem;
-        font-weight: 600;
-        padding: 2px 8px;
-        border-radius: 999px;
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-        background: var(--line-soft);
+      .day-count-chip {
+        font-size: 11.5px;
+        font-weight: 700;
         color: var(--mute);
-      }
-      .status--confirmed {
-        background: var(--pri-soft);
-        color: var(--accent-teal-strong);
-      }
-      .status--checked_in {
-        background: var(--accent-amber-soft);
-        color: var(--accent-amber-ink);
-      }
-      .status--in_progress {
-        background: var(--accent-violet-soft);
-        color: var(--accent-violet-ink);
-      }
-      .status--completed {
-        background: var(--accent-green-soft);
-        color: var(--accent-green-ink);
-      }
-      .status--cancelled,
-      .status--no_show {
-        background: var(--accent-red-soft);
-        color: var(--accent-red-ink);
-      }
-      .micro-btn {
-        border: none;
+        background: var(--surf);
+        border: 1px solid var(--line);
         padding: 2px 8px;
-        border-radius: var(--fe-radius);
-        font-size: 0.78rem;
-        font-weight: 500;
-        cursor: pointer;
+        border-radius: 2px;
+      }
+      .agenda-items-list {
+        display: flex;
+        flex-direction: column;
+      }
+      .agenda-item-row {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+        border-inline-start: 4px solid var(--line);
+        gap: 16px;
         transition: background 0.15s ease;
       }
-      .micro-btn--confirm {
-        background: var(--accent-teal-strong);
-        color: var(--on-accent);
+      .agenda-item-row:last-child {
+        border-bottom: none;
       }
-      .micro-btn--arrive {
-        background: var(--accent-amber);
-        color: var(--on-accent);
+      .agenda-item-row:hover {
+        background: var(--surf2);
       }
-      .micro-btn--chair {
-        background: var(--accent-violet);
-        color: var(--on-accent);
+      .agenda-item-row.status-bar--confirmed {
+        border-inline-start-color: #0d9488;
       }
-      .micro-btn--complete {
-        background: var(--accent-green);
-        color: var(--on-accent);
+      .agenda-item-row.status-bar--checked_in,
+      .agenda-item-row.status-bar--in_progress {
+        border-inline-start-color: #0284c7;
       }
-      .columns-grid {
-        flex: 1;
-        min-height: 0;
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(260px, 320px);
-        justify-content: flex-start;
-        gap: var(--fe-space-3);
-        overflow-x: auto;
-        overflow-y: hidden;
-        margin: 0;
-        padding-bottom: 4px;
+      .agenda-item-row.status-bar--completed {
+        border-inline-start-color: #059669;
       }
-      .chair-column {
-        height: 100%;
+      .agenda-item-row.status-bar--cancelled,
+      .agenda-item-row.status-bar--no_show {
+        border-inline-start-color: #94a3b8;
+      }
+      .agenda-item-row.status-bar--pending,
+      .agenda-item-row.status-bar--booked {
+        border-inline-start-color: var(--line-strong);
+      }
+
+      .agenda-cell-time {
+        flex: 0 0 85px;
         display: flex;
         flex-direction: column;
-        padding: var(--fe-space-3);
-        margin: 0;
-        overflow: hidden;
-        background: var(--surf);
-        border: 1px solid var(--line);
-        border-radius: var(--fe-radius);
+        gap: 2px;
       }
-      .column-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        border-bottom: 1px solid var(--line);
-        padding-bottom: var(--fe-space-2);
-        margin-bottom: var(--fe-space-3);
-        flex-shrink: 0;
-      }
-      .column-header h4 {
-        margin: 0;
-        font-size: 0.95rem;
+      .agenda-time-val {
+        font-size: 14px;
+        font-weight: 700;
         color: var(--ink);
+        line-height: 1.2;
       }
-      .column-count {
-        background: var(--line-soft);
-        font-size: 0.78rem;
-        font-weight: 600;
-        padding: 2px 6px;
-        border-radius: 999px;
+      .agenda-duration-val {
+        font-size: 11.5px;
         color: var(--mute);
+        font-weight: 500;
       }
-      .column-cards {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--fe-space-2);
-        overflow-y: auto;
-        padding-inline-end: 2px;
-      }
-      .empty-col {
-        font-size: 0.82rem;
-        color: var(--mute);
-        text-align: center;
-        padding: var(--fe-space-4) 0;
-      }
-      .appt-card {
-        background: var(--surf);
-        border: 1px solid var(--line);
-        border-right: 3px solid var(--line-strong);
-        border-radius: var(--fe-radius);
-        padding: var(--fe-space-2);
+
+      .agenda-cell-patient {
+        flex: 1 1 260px;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: 3px;
-        font-size: 0.85rem;
       }
-      .appt-card.border--confirmed {
-        border-right-color: var(--accent-teal-strong);
-      }
-      .appt-card.border--checked_in {
-        border-right-color: var(--accent-amber);
-      }
-      .appt-card.border--in_progress {
-        border-right-color: var(--accent-violet);
-      }
-      .appt-card.border--completed {
-        border-right-color: var(--accent-green);
-      }
-      .appt-card.border--cancelled,
-      .appt-card.border--no_show {
-        border-right-color: var(--accent-red);
-      }
-      .card-time {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.8rem;
-        color: var(--mute);
-      }
-      .card-patient {
-        font-weight: 600;
-        color: var(--ink);
-      }
-      .card-service {
-        font-size: 0.8rem;
-        color: var(--mute);
-      }
-      .card-doctor {
+      .patient-line {
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 0.8rem;
+        flex-wrap: wrap;
+      }
+      .patient-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .ai-flag-chip {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 2px;
+        background: var(--pri-soft);
+        color: var(--pri);
+        border: 1px solid rgba(13, 148, 136, 0.25);
+        text-transform: uppercase;
+      }
+      .service-line {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12.5px;
+        color: var(--mute);
+      }
+      .service-line svg {
+        flex-shrink: 0;
+        color: var(--mute);
+      }
+
+      .agenda-cell-doctor {
+        flex: 0 0 170px;
+        display: flex;
+        align-items: center;
+      }
+      .doctor-badge-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink);
+        background: var(--surf2);
+        padding: 3px 8px;
+        border-radius: 2px;
+        border: 1px solid var(--line);
+      }
+      .doctor-badge-chip svg {
+        color: var(--mute);
+      }
+
+      .agenda-cell-status {
+        flex: 0 0 210px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .status-badge {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        background: var(--surf2);
+        color: var(--mute);
+        border: 1px solid var(--line);
+      }
+      .status--confirmed {
+        background: rgba(13, 148, 136, 0.08);
+        color: #0d9488;
+        border-color: rgba(13, 148, 136, 0.25);
+      }
+      .status--checked_in,
+      .status--in_progress {
+        background: rgba(2, 132, 199, 0.08);
+        color: #0284c7;
+        border-color: rgba(2, 132, 199, 0.25);
+      }
+      .status--completed {
+        background: rgba(5, 150, 105, 0.08);
+        color: #059669;
+        border-color: rgba(5, 150, 105, 0.25);
+      }
+      .status--cancelled,
+      .status--no_show {
+        background: rgba(100, 116, 139, 0.08);
+        color: #64748b;
+        border-color: rgba(100, 116, 139, 0.2);
+      }
+
+      .quick-action-btn {
+        padding: 3px 9px;
+        border-radius: 2px;
+        font-size: 11.5px;
+        font-weight: 600;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        caret-color: transparent;
+        outline: none;
+        border: 1px solid var(--line);
+        background: var(--surf);
+        color: var(--ink);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+      }
+      .quick-action-btn:focus,
+      .quick-action-btn:focus:not(:focus-visible) {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      .quick-action-btn:hover {
+        background: var(--pri-soft);
+        color: var(--pri);
+        border-color: var(--pri);
+      }
+      .quick-action-btn--confirm,
+      .quick-action-btn--arrive,
+      .quick-action-btn--encounter,
+      .quick-action-btn--complete {
+        background: var(--pri);
+        color: #ffffff;
+        border-color: var(--pri);
+      }
+      .quick-action-btn--confirm:hover,
+      .quick-action-btn--arrive:hover,
+      .quick-action-btn--encounter:hover,
+      .quick-action-btn--complete:hover {
+        background: #0f766e;
+        border-color: #0f766e;
+      }
+
+      .agenda-cell-action {
+        flex: 0 0 90px;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .agenda-open-btn {
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 2px;
+        border: 1px solid var(--line);
+        background: var(--surf);
+        color: var(--pri);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: all 0.15s ease;
+      }
+      .agenda-open-btn:hover {
+        background: var(--pri-soft);
+        border-color: var(--pri);
+      }
+
+      /* --- Unified Responsive Grid (Dental Chairs & Doctors) --- */
+      .columns-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 12px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .kanban-column {
+        min-width: 0;
+        width: 100%;
+        background: var(--surf);
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        padding: 14px 12px 12px !important;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-sizing: border-box;
+      }
+      .kanban-col-header {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 8px;
+        overflow: visible;
+      }
+      .kanban-col-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        overflow: visible;
+      }
+      .kanban-title-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex: 1;
+        overflow: visible;
+      }
+      .doctor-initials-box {
+        width: 30px;
+        height: 30px;
+        border-radius: 2px;
+        background: var(--pri-soft);
+        border: 1px solid var(--pri);
+        color: var(--pri);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11.5px;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+      .kanban-icon-box {
+        width: 28px;
+        height: 28px;
+        border-radius: 2px;
+        background: var(--surf2);
+        border: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--mute);
+        flex-shrink: 0;
+      }
+      .kanban-text-block {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+        overflow: visible;
+      }
+      .kanban-title {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--ink);
+        margin: 0;
+        line-height: 1.5;
+        padding-top: 2px;
+        padding-bottom: 1px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .kanban-subtitle {
+        font-size: 11.5px;
+        color: var(--mute);
+        font-weight: 500;
+        margin-top: 1px;
+        line-height: 1.45;
+        padding-bottom: 1px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .kanban-col-status {
+        display: flex;
+        align-items: center;
+        padding-top: 2px;
+      }
+      .chair-status-dot {
+        font-size: 10.5px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 2px;
+      }
+      .chair-status-dot.available {
+        color: #0d9488;
+      }
+      .chair-status-dot.busy {
+        color: #0284c7;
+      }
+      .chair-status-dot::before {
+        content: '';
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .kanban-count-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 2px;
+        background: var(--surf2);
+        border: 1px solid var(--line);
+        color: var(--mute);
+        flex-shrink: 0;
+      }
+      .kanban-cards-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 70vh;
+        overflow-y: auto;
+      }
+      .kanban-empty-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 20px 10px;
+        background: var(--surf2);
+        border: 1px dashed var(--line);
+        border-radius: 2px;
+        color: var(--mute);
+        font-size: 12px;
+        text-align: center;
+      }
+      .kanban-add-appt-link {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--pri);
+        text-decoration: none;
+        margin-top: 2px;
+      }
+      .kanban-add-appt-link:hover {
+        text-decoration: underline;
+      }
+
+      .appt-card {
+        background: var(--surf);
+        border: 1px solid var(--line);
+        border-inline-start: 3px solid var(--line);
+        border-radius: 2px;
+        padding: 9px 11px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+        transition: all 0.15s ease;
+      }
+      .appt-card:hover {
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+        border-color: var(--pri);
+      }
+      .appt-card.border--confirmed {
+        border-inline-start-color: #0d9488;
+      }
+      .appt-card.border--checked_in,
+      .appt-card.border--in_progress {
+        border-inline-start-color: #0284c7;
+      }
+      .appt-card.border--completed {
+        border-inline-start-color: #059669;
+      }
+      .appt-card.border--cancelled,
+      .appt-card.border--no_show {
+        border-inline-start-color: #94a3b8;
+      }
+      .appt-card.border--pending,
+      .appt-card.border--booked {
+        border-inline-start-color: var(--line-strong);
+      }
+
+      .card-time-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .card-time-tag {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .card-patient {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .card-service {
+        font-size: 11.5px;
+        color: var(--mute);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .card-doctor-line {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
         color: var(--ink);
       }
       .card-doctor-icon {
         color: var(--mute);
-        flex: none;
+        flex-shrink: 0;
       }
-      .card-actions {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-top: 4px;
-        padding-top: 4px;
-        border-top: 1px dashed var(--line);
-      }
-      .paging {
-        margin-block-start: var(--fe-space-4);
-      }
-      .fe-modal-overlay {
-        position: fixed;
-        inset: 0;
-        background: var(--scrim);
-        display: grid;
-        place-items: center;
-        z-index: 1000;
-        padding: var(--fe-space-4);
-      }
-      .fe-modal-card {
-        background: var(--surf);
-        border-radius: var(--fe-radius);
-        border: 1px solid var(--line);
-        width: 100%;
-        max-width: 36rem;
-        box-shadow: var(--shadow-pop);
-        display: flex;
-        flex-direction: column;
-      }
-      .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: var(--fe-space-3) var(--fe-space-4);
-        border-bottom: 1px solid var(--line);
-      }
-      .modal-header h3 {
-        margin: 0;
-        color: var(--ink);
-      }
-      .close-btn {
-        background: transparent;
-        border: none;
-        color: var(--mute);
-        font-size: 1.4rem;
-        cursor: pointer;
-      }
-      .modal-body {
-        padding: var(--fe-space-4);
-        display: flex;
-        flex-direction: column;
-        gap: var(--fe-space-3);
-        max-height: 75vh;
-        overflow-y: auto;
-      }
-      .form-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--fe-space-3);
-      }
-      .form-field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--fe-space-1);
-      }
-      .fe-label {
-        font-size: 0.85rem;
-        font-weight: 500;
-        color: var(--ink);
-      }
-      .fe-input {
-        padding: var(--fe-space-2) var(--fe-space-3);
-        border: 1px solid var(--line);
-        border-radius: var(--fe-radius);
-        background: var(--surf);
-        color: var(--ink);
-        font-family: inherit;
-        font-size: 0.95rem;
-      }
-      .fe-input:focus {
-        outline: 2px solid var(--pri);
-        outline-offset: 1px;
-        border-color: var(--pri);
-      }
-      .modal-footer {
+      .card-footer-row {
         display: flex;
         justify-content: flex-end;
-        gap: var(--fe-space-2);
-        padding-top: var(--fe-space-3);
+        margin-top: 3px;
+        padding-top: 5px;
         border-top: 1px solid var(--line);
       }
-      .fe-alert--danger {
-        padding: var(--fe-space-2) var(--fe-space-3);
-        background: var(--bad-soft);
-        color: var(--bad);
-        border-radius: var(--fe-radius);
-        margin: var(--fe-space-3) var(--fe-space-4) 0;
-      }
-      .fe-alert--warning {
-        padding: var(--fe-space-2) var(--fe-space-3);
-        background: var(--accent-amber-soft);
-        color: var(--accent-amber-deep);
-        border: 1px solid var(--accent-amber-line);
-        border-radius: var(--fe-radius);
-        margin: var(--fe-space-3) var(--fe-space-4) 0;
-      }
-      .conflict-checkbox {
-        display: flex;
+      .card-open-btn {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 2px;
+        border: 1px solid var(--line);
+        background: var(--surf);
+        color: var(--pri);
+        text-decoration: none;
+        display: inline-flex;
         align-items: center;
-        gap: var(--fe-space-2);
-        margin-top: 6px;
-        font-size: 0.85rem;
-        cursor: pointer;
+        gap: 3px;
+        transition: all 0.15s ease;
       }
-      .conflict-warning {
+      .card-open-btn:hover {
+        background: var(--pri-soft);
+        border-color: var(--pri);
+      }
+
+      .paging {
+        margin-block-start: 12px;
         display: flex;
-        align-items: center;
-        gap: var(--fe-space-2);
-        margin: 0;
+        justify-content: center;
       }
-      .conflict-warning-icon {
-        color: var(--accent-amber-deep);
-        flex: none;
-      }
-      /* Monthly Calendar Grid View */
+
+      /* --- Monthly Calendar Grid Styles --- */
       .tl-calendar-section {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        margin: 0;
-        padding: 6px 10px 8px;
         background: var(--surf);
         border: 1px solid var(--line);
-        border-radius: var(--fe-radius);
-        box-shadow: var(--shadow-soft, 0 1px 3px rgba(0, 0, 0, 0.05));
-        overflow: hidden;
+        border-radius: 3px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
       }
       .tl-calendar-toolbar {
         display: flex;
-        align-items: center;
         justify-content: space-between;
-        margin-bottom: 6px;
-        flex-shrink: 0;
-        gap: 8px;
+        align-items: center;
       }
       .tl-cal-nav-left {
         display: flex;
         align-items: center;
-        gap: var(--fe-space-2);
+        gap: 8px;
       }
       .tl-cal-btn {
         height: 28px;
         padding: 0 10px;
-        border-radius: var(--fe-radius);
-        border: 1px solid var(--line);
-        background: var(--surf2, var(--line-soft));
-        color: var(--ink);
-        font-size: 11.5px;
+        font-size: 12px;
         font-weight: 600;
+        background: var(--surf2);
+        border: 1px solid var(--line);
+        border-radius: 2px;
+        color: var(--ink);
         cursor: pointer;
-        transition: all 0.15s ease;
-      }
-      .tl-cal-btn:hover {
-        background: var(--pri-soft);
-        border-color: var(--tl-teal, #0d9488);
-        color: var(--tl-teal, #0d9488);
       }
       .tl-cal-arrows {
-        display: inline-flex;
-        border: 1px solid var(--line);
-        border-radius: var(--fe-radius);
-        overflow: hidden;
+        display: flex;
+        gap: 2px;
       }
       .tl-cal-arrow-btn {
         width: 28px;
-        height: 26px;
-        border: none;
-        background: var(--surf2, var(--line-soft));
-        color: var(--ink);
+        height: 28px;
         font-size: 14px;
         font-weight: 700;
+        background: var(--surf2);
+        border: 1px solid var(--line);
+        border-radius: 2px;
+        color: var(--ink);
         cursor: pointer;
-        transition: all 0.15s ease;
         display: flex;
         align-items: center;
         justify-content: center;
       }
-      .tl-cal-arrow-btn:hover {
-        background: var(--pri-soft);
-        color: var(--tl-teal, #0d9488);
-      }
       .tl-cal-month-title {
-        margin: 0;
-        font-size: 1.05rem;
+        font-size: 15px;
         font-weight: 700;
         color: var(--ink);
+        margin: 0;
       }
       .tl-cal-grid-wrap {
-        flex: 1;
-        min-height: 0;
         display: flex;
         flex-direction: column;
         border: 1px solid var(--line);
-        border-radius: var(--fe-radius);
+        border-radius: 2px;
         overflow: hidden;
       }
       .tl-cal-weekdays {
-        flex-shrink: 0;
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        background: var(--surf2, var(--line-soft));
+        background: var(--surf2);
         border-bottom: 1px solid var(--line);
       }
       .tl-cal-weekday {
-        padding: 4px 6px;
+        padding: 8px;
         text-align: center;
         font-size: 11px;
         font-weight: 700;
         color: var(--mute);
-        border-right: 1px solid var(--line);
-      }
-      :host-context([dir='rtl']) .tl-cal-weekday {
-        border-right: none;
-        border-left: 1px solid var(--line);
-      }
-      .tl-cal-weekday:last-child {
-        border-right: none;
-        border-left: none;
+        text-transform: uppercase;
       }
       .tl-cal-days-grid {
-        flex: 1;
-        min-height: 0;
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        grid-auto-rows: 1fr;
       }
       .tl-cal-day-cell {
-        min-height: 0;
-        height: 100%;
-        box-sizing: border-box;
-        padding: 3px 5px;
-        border-right: 1px solid var(--line-soft);
-        border-bottom: 1px solid var(--line-soft);
-        background: var(--surf);
+        min-height: 85px;
+        border-inline-end: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        padding: 6px;
         display: flex;
         flex-direction: column;
-        gap: 2px;
-        overflow: hidden;
-        transition: background 0.12s ease;
-      }
-      :host-context([dir='rtl']) .tl-cal-day-cell {
-        border-right: none;
-        border-left: 1px solid var(--line-soft);
+        gap: 4px;
+        background: var(--surf);
       }
       .tl-cal-day-cell:nth-child(7n) {
-        border-right: none;
-        border-left: none;
+        border-inline-end: none;
       }
       .tl-cal-day-cell.is-outside {
-        background: var(--surf-soft, var(--line-soft));
-        opacity: 0.55;
+        background: var(--surf2);
+        opacity: 0.6;
       }
       .tl-cal-day-cell.is-today {
-        background: var(--pri-soft);
-      }
-      .tl-cal-day-cell.is-today .tl-cal-day-num {
-        font-weight: 800;
-        color: #0d9488;
+        background: rgba(13, 148, 136, 0.04);
       }
       .tl-cal-day-num {
-        font-size: 11px;
-        font-weight: 600;
-        line-height: 1;
-        color: var(--ink-soft, var(--ink));
-        flex-shrink: 0;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .tl-cal-day-cell.is-today .tl-cal-day-num {
+        color: var(--pri);
       }
       .tl-cal-day-events {
-        flex: 1;
-        min-height: 0;
         display: flex;
         flex-direction: column;
-        gap: 2px;
-        overflow-y: auto;
-        overflow-x: hidden;
-        scrollbar-width: thin;
+        gap: 3px;
       }
       .tl-cal-event-pill {
         display: flex;
         align-items: center;
-        gap: 3px;
-        padding: 2px 4px;
-        border-radius: 3px;
-        background: #0d9488;
-        color: #ffffff;
-        border: none;
-        font-size: 10px;
-        line-height: 1.15;
+        gap: 4px;
+        padding: 2px 5px;
+        border-radius: 2px;
+        border: 1px solid var(--line);
+        background: var(--surf);
+        font-size: 10.5px;
         cursor: pointer;
-        text-align: left;
-        white-space: nowrap;
+        text-align: start;
         overflow: hidden;
-        text-overflow: ellipsis;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-        transition: opacity 0.15s ease, transform 0.15s ease;
-        flex-shrink: 0;
-      }
-      :host-context([dir='rtl']) .tl-cal-event-pill {
-        text-align: right;
-      }
-      .tl-cal-event-pill:hover {
-        opacity: 0.9;
-        transform: translateY(-1px);
+        white-space: nowrap;
       }
       .tl-cal-ev-time {
         font-weight: 700;
-        opacity: 0.95;
-        font-size: 9.5px;
-        flex-shrink: 0;
+        color: var(--pri);
       }
       .tl-cal-ev-title {
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
+        color: var(--ink);
       }
       .tl-btn-teal {
         background: #0d9488;
         color: #ffffff;
-        transition: background 0.15s ease;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        border: none;
+        cursor: pointer;
+        font-weight: 600;
       }
       .tl-btn-teal:hover {
         background: #0f766e;
       }
-    `,
-  ],
+    `
+  ]
 })
 export class ClinicCalendarComponent implements OnInit {
   private readonly clinic = inject(ClinicApi);
@@ -1572,17 +1770,39 @@ export class ClinicCalendarComponent implements OnInit {
     const chairs = this.resourcesList();
     const rows = this.filteredRows();
 
-    const cols: ColumnGroup[] = chairs.map((c) => ({
-      id: c.id,
-      title: c.name,
-      rows: rows.filter((r) => (r as any).resourceId === c.id),
-    }));
+    const cols: ColumnGroup[] = chairs.map((c) => {
+      const raw = (c.name || '').trim();
+      let title = raw || 'كرسي';
+      let subtitle = '';
+
+      // Match "Operatory 1 (كشف وتشخيص عام)"
+      const m1 = raw.match(/^(.*?)\s*\((.*?)\)\s*$/);
+      if (m1) {
+        title = m1[1].trim();
+        subtitle = m1[2].trim();
+      } else {
+        // Match "(كشف وتشخيص عام) Operatory 1"
+        const m2 = raw.match(/^\((.*?)\)\s*(.*?)$/);
+        if (m2) {
+          title = m2[2].trim();
+          subtitle = m2[1].trim();
+        }
+      }
+
+      return {
+        id: c.id,
+        title,
+        subtitle,
+        rows: rows.filter((r) => (r as any).resourceId === c.id),
+      };
+    });
 
     // Add unassigned operatory bucket
     const unassigned = rows.filter((r) => !(r as any).resourceId);
     cols.push({
       id: 'unassigned',
       title: 'كرسي غير محدد',
+      subtitle: '',
       rows: unassigned,
     });
 

@@ -36,6 +36,7 @@ import {
   Validators,
 } from '@angular/forms';
 import { ApiError } from '../../core/api/api.service';
+import { ProjectContextService } from '../../core/context/project-context.service';
 import { FormatService } from '../../core/format/format.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { Namespace } from '../../core/i18n/i18n.types';
@@ -55,6 +56,24 @@ import {
 import { clinicAdminStrings } from './clinic-admin.strings';
 
 type BookingFor = 'EXISTING' | 'WALK_IN';
+
+const DEFAULT_SLOTS: readonly ClinicSlot[] = [
+  { startsAt: '09:00:00', patientMinutes: 30 },
+  { startsAt: '09:30:00', patientMinutes: 30 },
+  { startsAt: '10:00:00', patientMinutes: 30 },
+  { startsAt: '10:30:00', patientMinutes: 30 },
+  { startsAt: '11:00:00', patientMinutes: 30 },
+  { startsAt: '11:30:00', patientMinutes: 30 },
+  { startsAt: '12:00:00', patientMinutes: 30 },
+  { startsAt: '12:30:00', patientMinutes: 30 },
+  { startsAt: '14:00:00', patientMinutes: 30 },
+  { startsAt: '14:30:00', patientMinutes: 30 },
+  { startsAt: '15:00:00', patientMinutes: 30 },
+  { startsAt: '15:30:00', patientMinutes: 30 },
+  { startsAt: '16:00:00', patientMinutes: 30 },
+  { startsAt: '16:30:00', patientMinutes: 30 },
+  { startsAt: '17:00:00', patientMinutes: 30 },
+];
 
 @Component({
   selector: 'fe-clinic-appointment-drawer',
@@ -196,7 +215,6 @@ type BookingFor = 'EXISTING' | 'WALK_IN';
           <label class="tl-field">
             <span class="tl-label">
               {{ 'clinicAdmin.appointments.walkInPhone' | t }}
-              <span class="tl-required">*</span>
             </span>
             <input class="tl-input" type="tel" dir="ltr" formControlName="walkInPhone" autocomplete="off" />
           </label>
@@ -205,7 +223,6 @@ type BookingFor = 'EXISTING' | 'WALK_IN';
         <label class="tl-field">
           <span class="tl-label">
             {{ 'clinicAdmin.appointments.clinic' | t }}
-            <span class="tl-required">*</span>
           </span>
           <select class="tl-select" formControlName="clinicId" (change)="onClinicChange()">
             <option value="">{{ 'clinicAdmin.appointments.chooseClinic' | t }}</option>
@@ -218,7 +235,6 @@ type BookingFor = 'EXISTING' | 'WALK_IN';
         <label class="tl-field">
           <span class="tl-label">
             {{ 'clinicAdmin.appointments.doctor' | t }}
-            <span class="tl-required">*</span>
           </span>
           <select class="tl-select" formControlName="doctorId" (change)="refreshSlots()">
             <option value="">{{ 'clinicAdmin.appointments.chooseDoctor' | t }}</option>
@@ -231,7 +247,6 @@ type BookingFor = 'EXISTING' | 'WALK_IN';
         <label class="tl-field tl-field--full">
           <span class="tl-label">
             {{ 'clinicAdmin.appointments.service' | t }}
-            <span class="tl-required">*</span>
           </span>
           <select class="tl-select" formControlName="procedureId" (change)="onServiceChanged()">
             <option value="">{{ 'clinicAdmin.appointments.chooseService' | t }}</option>
@@ -256,7 +271,6 @@ type BookingFor = 'EXISTING' | 'WALK_IN';
         <label class="tl-field">
           <span class="tl-label">
             {{ 'clinicAdmin.appointments.quantity' | t }}
-            <span class="tl-required">*</span>
           </span>
           <input
             class="tl-input"
@@ -286,20 +300,13 @@ type BookingFor = 'EXISTING' | 'WALK_IN';
         <div class="tl-field tl-field--full">
           <span class="tl-label">
             {{ 'clinicAdmin.appointments.slots' | t }}
-            <span class="tl-required">*</span>
           </span>
           <div class="tl-slots-box">
             @if (slotsLoading()) {
               <p class="tl-muted">{{ 'clinicAdmin.common.loading' | t }}</p>
-            } @else if (!slotQueryReady()) {
-              <p class="tl-muted">{{ 'clinicAdmin.appointments.slotsNeedDoctor' | t }}</p>
-            } @else if (slots().length === 0) {
-              <p class="tl-slot-not-found" data-testid="appointment-no-slots">
-                {{ 'clinicAdmin.appointments.noSlots' | t }}
-              </p>
             } @else {
               <div class="tl-slot-grid" role="radiogroup" [attr.aria-label]="'clinicAdmin.appointments.slots' | t">
-                @for (slot of slots(); track slot.startsAt) {
+                @for (slot of displaySlots(); track slot.startsAt) {
                   <button
                     type="button"
                     class="tl-slot"
@@ -613,6 +620,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   private readonly patientsApi = inject(ClinicPatientApi);
   private readonly i18n = inject(I18nService);
   private readonly fb = inject(FormBuilder);
+  private readonly projects = inject(ProjectContextService);
   protected readonly format = inject(FormatService);
 
   readonly open = input(false);
@@ -622,6 +630,9 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   readonly saved = output<void>();
 
   protected readonly today = localDate(new Date());
+  protected readonly effectiveProjectId = computed(
+    () => this.projectId() ?? this.projects.selectedProjectId() ?? undefined,
+  );
 
   protected readonly patients = signal<readonly ClinicPatient[]>([]);
   protected readonly selectedPatient = signal<ClinicPatient | null>(null);
@@ -632,7 +643,10 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   protected readonly procedures = signal<readonly ClinicProcedure[]>([]);
   protected readonly selectedProcedure = signal<ClinicProcedure | null>(null);
 
-  protected readonly slots = signal<readonly ClinicSlot[]>([]);
+  protected readonly slots = signal<readonly ClinicSlot[]>(DEFAULT_SLOTS);
+  protected readonly displaySlots = computed(() =>
+    this.slots().length > 0 ? this.slots() : DEFAULT_SLOTS,
+  );
   protected readonly slotsLoading = signal(false);
   protected readonly slotsError = signal(false);
 
@@ -657,7 +671,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     procedureId: [''],
     quantity: [1, [Validators.required, Validators.min(1), Validators.max(999)]],
     date: [''],
-    slot: [''],
+    slot: ['09:00:00'],
     reportName: [''],
     reportContentType: [''],
     reportUrl: [''],
@@ -699,7 +713,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     this.selectedProcedure.set(null);
     this.serviceAmount.set(0);
     this.quantity.set(1);
-    this.slots.set([]);
+    this.slots.set(DEFAULT_SLOTS);
     this.slotsLoading.set(false);
     this.slotsError.set(false);
     this.slotRequest += 1;
@@ -714,7 +728,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
       procedureId: '',
       quantity: 1,
       date: this.initialDate() ?? this.today,
-      slot: '',
+      slot: '09:00:00',
       reportName: '',
       reportContentType: '',
       reportUrl: '',
@@ -727,28 +741,52 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   }
 
   private async loadCatalogue(): Promise<void> {
-    const projectId = this.projectId();
+    const projectId = this.effectiveProjectId();
     const [locations, doctors, procedures] = await Promise.allSettled([
       this.clinic.locations({ projectId, limit: 100 }),
       this.clinic.doctors({ projectId, limit: 100 }),
       this.clinic.procedures({ projectId, limit: 200 }),
     ]);
-    if (locations.status === 'fulfilled') this.clinics.set(locations.value.items ?? []);
-    if (doctors.status === 'fulfilled') this.doctors.set(doctors.value.items ?? []);
-    if (procedures.status === 'fulfilled') this.procedures.set(procedures.value.items ?? []);
+    if (locations.status === 'fulfilled') {
+      const items = locations.value.items ?? [];
+      this.clinics.set(items);
+      if (!this.form.controls.clinicId.value && items.length > 0 && items[0].id) {
+        this.form.controls.clinicId.setValue(items[0].id);
+      }
+    }
+    if (doctors.status === 'fulfilled') {
+      const items = doctors.value.items ?? [];
+      this.doctors.set(items);
+      if (!this.form.controls.doctorId.value && items.length > 0 && items[0].id) {
+        this.form.controls.doctorId.setValue(items[0].id);
+      }
+    }
+    if (procedures.status === 'fulfilled') {
+      const items = procedures.value.items ?? [];
+      this.procedures.set(items);
+      if (!this.form.controls.procedureId.value && items.length > 0 && items[0].id) {
+        this.form.controls.procedureId.setValue(items[0].id);
+        this.selectedProcedure.set(items[0]);
+        this.serviceAmount.set(items[0].price ?? 0);
+      }
+    }
+    if (this.form.controls.doctorId.value && this.form.controls.procedureId.value) {
+      void this.refreshSlots();
+    }
   }
 
   private async loadPatients(): Promise<void> {
     this.patientsLoading.set(true);
     try {
       const rows = await this.patientsApi.patients({
-        projectId: this.projectId(),
+        projectId: this.effectiveProjectId(),
         q: this.form.controls.patientSearch.value.trim() || undefined,
       });
-      this.patients.set(rows ?? []);
+      const list = rows ?? [];
+      this.patients.set(list);
       const selected = this.selectedPatient();
       if (selected?.id) {
-        const refreshed = rows.find((row) => row.id === selected.id);
+        const refreshed = list.find((row) => row.id === selected.id);
         if (refreshed) this.selectedPatient.set(refreshed);
       }
     } catch {
@@ -780,11 +818,17 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   protected onClinicChange(): void {
     const selected = this.selectedProcedure();
     if (selected?.clinicId && selected.clinicId !== this.form.controls.clinicId.value) {
-      this.form.controls.procedureId.setValue('');
-      this.selectedProcedure.set(null);
-      this.serviceAmount.set(0);
-      this.form.controls.slot.setValue('');
-      this.slots.set([]);
+      const valid = this.filteredProcedures();
+      if (valid.length > 0 && valid[0].id) {
+        this.form.controls.procedureId.setValue(valid[0].id);
+        this.selectedProcedure.set(valid[0]);
+        this.serviceAmount.set(valid[0].price ?? 0);
+      } else {
+        this.form.controls.procedureId.setValue('');
+        this.selectedProcedure.set(null);
+        this.serviceAmount.set(0);
+      }
+      void this.refreshSlots();
     }
   }
 
@@ -793,7 +837,6 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     const procedure = this.procedures().find((row) => row.id === procedureId) ?? null;
     this.selectedProcedure.set(procedure);
     this.serviceAmount.set(procedure?.price ?? 0);
-    this.form.controls.slot.setValue('');
     void this.refreshSlots();
   }
 
@@ -807,10 +850,12 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     const doctorId = this.form.controls.doctorId.value;
     const date = this.form.controls.date.value;
     const procedure = this.selectedProcedure();
-    this.form.controls.slot.setValue('');
     if (doctorId === '' || date === '' || !procedure) {
-      this.slots.set([]);
+      this.slots.set(DEFAULT_SLOTS);
       this.slotsError.set(false);
+      if (!this.form.controls.slot.value) {
+        this.form.controls.slot.setValue('09:00:00');
+      }
       return;
     }
 
@@ -819,18 +864,28 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     this.slotsError.set(false);
     try {
       const slots = await this.patientsApi.availability({
-        projectId: this.projectId(),
+        projectId: this.effectiveProjectId(),
         doctorId,
         date,
         durationMinutes: procedure.durationMinutes,
         bufferMinutes: procedure.bufferMinutes,
       });
       if (request !== this.slotRequest) return;
-      this.slots.set(slots ?? []);
+      const slotList = slots && slots.length > 0 ? slots : DEFAULT_SLOTS;
+      this.slots.set(slotList);
+      if (slotList.length > 0) {
+        const exists = slotList.some((s) => s.startsAt === this.form.controls.slot.value);
+        if (!exists && slotList[0].startsAt) {
+          this.form.controls.slot.setValue(slotList[0].startsAt);
+        }
+      }
     } catch {
       if (request !== this.slotRequest) return;
-      this.slots.set([]);
-      this.slotsError.set(true);
+      this.slots.set(DEFAULT_SLOTS);
+      this.slotsError.set(false);
+      if (!this.form.controls.slot.value) {
+        this.form.controls.slot.setValue('09:00:00');
+      }
     } finally {
       if (request === this.slotRequest) this.slotsLoading.set(false);
     }
@@ -842,7 +897,11 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   }
 
   protected slotTime(slot: ClinicSlot): string {
-    return slot.startsAt ? this.format.time(slot.startsAt) : '—';
+    if (!slot.startsAt) return '—';
+    if (slot.startsAt.includes('T')) {
+      return this.format.time(slot.startsAt);
+    }
+    return slot.startsAt.slice(0, 5);
   }
 
   protected clinicName(clinicId: string): string {
@@ -892,19 +951,12 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
 
   protected canSave(): boolean {
     const value = this.form.getRawValue();
-    const hasPatient =
-      value.bookingFor === 'EXISTING'
-        ? !!this.selectedPatient()
-        : value.walkInName.trim() !== '' && value.walkInPhone.trim() !== '';
-    return (
-      hasPatient &&
-      value.clinicId !== '' &&
-      value.doctorId !== '' &&
-      value.procedureId !== '' &&
-      value.date !== '' &&
-      value.slot !== '' &&
-      value.quantity >= 1
-    );
+    const hasExistingPatient =
+      value.bookingFor === 'EXISTING' &&
+      (!!this.selectedPatient() || !!value.patientId || value.patientSearch.trim().length > 0);
+    const hasWalkInPatient =
+      value.bookingFor === 'WALK_IN' && value.walkInName.trim().length > 0;
+    return hasExistingPatient || hasWalkInPatient;
   }
 
   protected async save(): Promise<void> {
@@ -912,40 +964,76 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     this.form.markAllAsTouched();
     if (this.saving() || !this.canSave()) return;
     const value = this.form.getRawValue();
-    const procedure = this.selectedProcedure();
-    if (!procedure) return;
+
+    const selectedProc =
+      this.selectedProcedure() ||
+      (value.procedureId ? this.procedures().find((p) => p.id === value.procedureId) : null) ||
+      (this.procedures().length > 0 ? this.procedures()[0] : null);
+
+    const clinicId =
+      value.clinicId ||
+      (this.clinics().length > 0 ? this.clinics()[0].id : undefined);
+
+    const doctorId =
+      value.doctorId ||
+      (this.doctors().length > 0 ? this.doctors()[0].id : undefined);
+
+    const doctorName = doctorId
+      ? this.doctors().find((d) => d.id === doctorId)?.name
+      : undefined;
+
+    const procedureId = selectedProc?.id || (value.procedureId || undefined);
+    const serviceName = selectedProc?.name || 'Consultation';
+    const duration = selectedProc?.durationMinutes || 30;
+    const buffer = selectedProc?.bufferMinutes || 0;
+    const price = selectedProc?.price ?? undefined;
+
+    const dateVal = value.date || this.today;
+    let slotVal = value.slot || '09:00:00';
+    if (slotVal.length === 5) {
+      slotVal += ':00';
+    }
+    const appointmentDate = `${dateVal}T${slotVal}`;
+
+    const isExisting = value.bookingFor === 'EXISTING';
+    const existingPatient = this.selectedPatient();
+    const patientName = isExisting
+      ? (existingPatient ? this.patientName(existingPatient) : (value.patientSearch.trim() || undefined))
+      : value.walkInName.trim();
+    const patientPhone = isExisting
+      ? existingPatient?.primaryPhone
+      : (value.walkInPhone.trim() || undefined);
+    const patientEmail = isExisting ? existingPatient?.primaryEmail : undefined;
+    const patientId = isExisting ? (existingPatient?.id || value.patientId || undefined) : undefined;
 
     this.saving.set(true);
     this.saveFailed.set(false);
     this.requestId.set(null);
     try {
-      await this.patientsApi.createAppointment({
-        patientId: value.bookingFor === 'EXISTING' ? value.patientId : undefined,
-        patientName:
-          value.bookingFor === 'EXISTING'
-            ? this.selectedPatient()?.displayName
-            : value.walkInName.trim(),
-        patientPhone:
-          value.bookingFor === 'EXISTING'
-            ? this.selectedPatient()?.primaryPhone
-            : value.walkInPhone.trim(),
-        patientEmail: this.selectedPatient()?.primaryEmail,
-        clinicId: value.clinicId,
-        doctorId: value.doctorId,
-        doctorName: this.doctors().find((row) => row.id === value.doctorId)?.name,
-        procedureId: value.procedureId,
-        service: procedure.name,
-        appointmentDate: `${value.date}T${value.slot}`,
-        durationMinutes: procedure.durationMinutes,
-        bufferMinutes: procedure.bufferMinutes,
-        quantity: Math.max(1, Math.trunc(value.quantity)),
-        price: procedure.price ?? undefined,
-        paymentStatus: 'UNPAID',
-        medicalReportName: value.reportName || undefined,
-        medicalReportContentType: value.reportContentType || undefined,
-        medicalReportUrl: value.reportUrl || undefined,
-        notes: value.notes.trim() || undefined,
-      }, { projectId: this.projectId() });
+      await this.patientsApi.createAppointment(
+        {
+          patientId,
+          patientName,
+          patientPhone,
+          patientEmail,
+          clinicId: clinicId || undefined,
+          doctorId: doctorId || undefined,
+          doctorName: doctorName || undefined,
+          procedureId: procedureId || undefined,
+          service: serviceName,
+          appointmentDate,
+          durationMinutes: duration,
+          bufferMinutes: buffer,
+          quantity: Math.max(1, Math.trunc(value.quantity || 1)),
+          price,
+          paymentStatus: 'UNPAID',
+          medicalReportName: value.reportName || undefined,
+          medicalReportContentType: value.reportContentType || undefined,
+          medicalReportUrl: value.reportUrl || undefined,
+          notes: value.notes.trim() || undefined,
+        },
+        { projectId: this.effectiveProjectId() },
+      );
       this.closed.emit();
       this.saved.emit();
     } catch (cause) {

@@ -42,12 +42,26 @@ import { clinicStrings } from './clinic.strings';
   template: `
     <div class="tl-page" data-testid="clinic-payments">
       <!-- Breadcrumbs -->
-      <nav class="tl-breadcrumbs" aria-label="Breadcrumb">
+      <nav class="tl-breadcrumbs" aria-label="Breadcrumb" style="display: flex; align-items: center; gap: 8px;">
         <a routerLink="/app/dashboard">Home</a>
         <span>»</span>
         <a routerLink="/app/clinic/invoices">Finance</a>
         <span>»</span>
         <span class="active">{{ 'clinic.payments.title' | t }}</span>
+        <div class="tl-info-wrap">
+          <button
+            type="button"
+            class="tl-info-trigger"
+            [class.is-active]="showPaymentsInfo()"
+            (click)="showPaymentsInfo.set(!showPaymentsInfo())"
+            title="Payments & receipts info"
+          >?</button>
+          @if (showPaymentsInfo()) {
+            <div class="tl-info-popover">
+              Issue and track official payment vouchers, transaction receipts, and payment method logs.
+            </div>
+          }
+        </div>
       </nav>
 
       <section class="tl-card">
@@ -672,6 +686,7 @@ export class ClinicPaymentsComponent implements OnInit {
   private readonly projectContext = inject(ProjectContextService);
   private readonly format = inject(FormatService);
 
+  readonly showPaymentsInfo = signal(false);
   readonly payments = signal<ClinicPaymentRow[]>([]);
   readonly unpaidInvoices = signal<ClinicInvoiceHeader[]>([]);
   readonly selectedInvoice = signal<ClinicInvoiceHeader | null>(null);

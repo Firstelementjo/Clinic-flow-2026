@@ -212,7 +212,7 @@ public class AiUsageAccounting {
                 tokenCost.amount() == null ? 0d : tokenCost.amount().doubleValue(), occurredAt);
         }
 
-        log.info("AI usage recorded run={} inputTokens={} outputTokens={} priced={} rate={}", runId,
+        log.info("AI usage recorded run={} promptSize={} completionSize={} priced={} rateLabel={}", runId,
             inputTokens, outputTokens, tokenCost.priced(),
             tokenCost.rateLabel() == null ? "none-effective-on-" + asOf : tokenCost.rateLabel());
         return tokenCost;

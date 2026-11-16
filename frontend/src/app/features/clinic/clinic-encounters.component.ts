@@ -35,6 +35,8 @@ import {
   type UpdateDiagnosisPayload,
 } from './clinic-patient.api';
 import { clinicStrings } from './clinic.strings';
+import { isDicomFile, parseAndRenderDicom, detectDentalFileType } from '../../core/utils/dicom-parser';
+import { is3DFile, Dental3DScene, type PerspectivePreset } from '../../core/utils/dental-3d-viewer';
 
 export interface PatientHistoryRecord {
   id: string;
@@ -125,7 +127,12 @@ export interface EncounterRadiographRow {
   date: string;
   radiographType: string;
   fileName: string;
+  fileSize?: string;
+  thumbnailUrl?: string;
+  fileUrl?: string;
+  toothFdi?: number | null;
   notes: string;
+  rawFile?: File;
 }
 
 export interface EncounterFollowUpRow {
@@ -212,6 +219,7 @@ const RADIOGRAPH_TYPES = [
   'OPG',
   'Lateral Cephalogram',
   'CBCT',
+  '3D Dental Scan (STL)',
 ] as const;
 
 const PROPOSED_PLANS = [
@@ -242,38 +250,13 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
   ],
   template: `
     <div class="tl-page" data-testid="clinic-encounters">
-      <!-- ToothLogic Breadcrumb & Top Action Bar (Screenshot: media_1793131010991_2ebdfab9.png) -->
+      <!-- ToothLogic Breadcrumb -->
       <div class="tl-page-top">
         <nav class="tl-breadcrumbs" aria-label="Breadcrumb">
           <a routerLink="/app/dashboard">Home</a>
           <span class="tl-bc-sep">&gt;&gt;</span>
           <span class="active">Encounter Dashboard</span>
         </nav>
-        <div class="tl-top-actions">
-          <a
-            class="tl-btn tl-btn-dark tl-btn-instructions"
-            routerLink="/app/clinic/post-instructions"
-            [queryParams]="{ patientName: currentPatientName(), doctorName: currentDoctorName(), service: queryService() }"
-            title="Post Instructions (تعليمات ما بعد المعالجة)"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-            </svg>
-            Post Instructions
-          </a>
-          <a class="tl-btn tl-btn-dark tl-btn-appointment" routerLink="/app/clinic/appointments" [queryParams]="{ create: '1' }">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            Appointment
-          </a>
-        </div>
       </div>
 
       <!-- ToothLogic 2-Column Encounter Dashboard -->
@@ -515,47 +498,127 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
           <!-- 3. Patient Records Section -->
           <section class="tl-section-card">
             <div class="tl-section-head">
-              <h3 class="tl-section-title">Patient Records</h3>
+              <div class="tl-section-title-group">
+                <h3 class="tl-section-title">Patient Records &amp; Radiographs</h3>
+                <span class="tl-section-counter">({{ radiographRecords().length }})</span>
+              </div>
               @if (canWriteClinical()) {
-                <button type="button" class="tl-btn tl-btn-teal tl-btn-add" (click)="showAddRecordModal.set(true)">
+                <button type="button" class="tl-btn tl-btn-teal tl-btn-add" (click)="openAddRecordModal()">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   + Add Patient Record
                 </button>
               }
             </div>
-            <div class="tl-table-wrap">
-              <table class="tl-teal-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Radiographs</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @if (radiographRecords().length === 0) {
+
+            @if (radiographRecords().length === 0) {
+              <div class="tl-empty-records">
+                <div class="tl-empty-records-icon">
+                  <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </div>
+                <p class="tl-empty-records-title">No radiographs or clinical files attached</p>
+                <p class="tl-empty-records-sub">Attach OPG panoramic, Bitewing, Periapical x-rays, DICOM scans, or medical reports to this patient record.</p>
+                @if (canWriteClinical()) {
+                  <button type="button" class="tl-btn tl-btn-sm tl-btn-teal" (click)="openAddRecordModal()">
+                    Upload File / Scan
+                  </button>
+                }
+              </div>
+            } @else {
+              <div class="tl-table-wrap">
+                <table class="tl-teal-table tl-records-table">
+                  <thead>
                     <tr>
-                      <td colspan="3" class="tl-empty-cell tl-empty-cell--red">No medical report found</td>
+                      <th style="width: 56px;">Preview</th>
+                      <th>Type</th>
+                      <th>File Name</th>
+                      <th>Date</th>
+                      <th>Clinical Notes</th>
+                      <th style="width: 100px; text-align: center;">Actions</th>
                     </tr>
-                  } @else {
+                  </thead>
+                  <tbody>
                     @for (rec of radiographRecords(); track rec.id) {
                       <tr>
-                        <td>{{ rec.date }}</td>
-                        <td><strong>{{ rec.radiographType }}</strong> ({{ rec.fileName }})</td>
                         <td>
-                          <button
-                            type="button"
-                            class="tl-action-icon tl-action-icon--danger"
-                            (click)="deleteRadiographRecord(rec.id)"
-                          >
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                          </button>
+                          <div class="tl-media-thumb" (click)="viewRadiograph(rec)">
+                            @if (rec.thumbnailUrl || rec.fileUrl) {
+                              <img [src]="rec.thumbnailUrl || rec.fileUrl" [alt]="rec.fileName" />
+                            } @else {
+                              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                              </svg>
+                            }
+                            <span class="tl-thumb-overlay" title="Click to view">
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="tl-type-badges">
+                            <span class="tl-badge-type">{{ rec.radiographType }}</span>
+                            @if (rec.toothFdi) {
+                              <span class="tl-badge-fdi">FDI {{ rec.toothFdi }}</span>
+                            }
+                          </div>
+                        </td>
+                        <td>
+                          <div class="tl-file-cell">
+                            <span class="tl-file-cell-name" [title]="rec.fileName">{{ rec.fileName }}</span>
+                            @if (rec.fileSize) {
+                              <span class="tl-file-cell-size">{{ rec.fileSize }}</span>
+                            }
+                          </div>
+                        </td>
+                        <td class="tl-date-cell">{{ rec.date }}</td>
+                        <td class="tl-notes-cell">
+                          @if (rec.notes) {
+                            <span class="tl-notes-text" [title]="rec.notes">{{ rec.notes }}</span>
+                          } @else {
+                            <span class="tl-muted-dash">—</span>
+                          }
+                        </td>
+                        <td>
+                          <div class="tl-row-actions">
+                            <button
+                              type="button"
+                              class="tl-action-icon tl-action-icon--view"
+                              title="View Radiograph"
+                              (click)="viewRadiograph(rec)"
+                            >
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                            @if (rec.fileUrl || rec.thumbnailUrl) {
+                              <button
+                                type="button"
+                                class="tl-action-icon tl-action-icon--download"
+                                title="Download File"
+                                (click)="downloadRecordFile(rec)"
+                              >
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              </button>
+                            }
+                            <button
+                              type="button"
+                              class="tl-action-icon tl-action-icon--danger"
+                              title="Delete Record"
+                              (click)="deleteRadiographRecord(rec.id)"
+                            >
+                              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     }
-                  }
-                </tbody>
-              </table>
-            </div>
+                  </tbody>
+                </table>
+              </div>
+            }
           </section>
 
           <!-- 4. Follow Up Notes Section -->
@@ -1445,36 +1508,321 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         </div>
       }
 
-      <!-- Add Patient Record (Radiograph) Modal -->
+      <!-- Add Patient Record (Radiograph & Media) Modal -->
       @if (showAddRecordModal()) {
-        <div class="modal-backdrop" (click)="showAddRecordModal.set(false)">
-          <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-backdrop" (click)="closeAddRecordModal()">
+          <div class="modal-card modal-card--record-upload" (click)="$event.stopPropagation()">
             <div class="modal-header">
-              <h3>Add Patient Record</h3>
-              <button type="button" class="modal-close" (click)="showAddRecordModal.set(false)">&times;</button>
+              <div class="modal-title-with-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <h3>Upload Patient Radiograph / Record</h3>
+              </div>
+              <button type="button" class="modal-close" (click)="closeAddRecordModal()">&times;</button>
             </div>
             <div class="modal-body">
-              <label class="form-field">
-                <span>Radiograph Type *</span>
-                <select class="fe-select" [(ngModel)]="newRecordType">
-                  @for (rt of radiographTypes; track rt) {
-                    <option [value]="rt">{{ rt }}</option>
+              <!-- Drag and Drop / File Picker Area -->
+              <div class="form-field">
+                <span>Select File / Scan Image *</span>
+                <div
+                  class="tl-file-dropzone"
+                  [class.is-dragover]="isDragOverRecordFile"
+                  [class.has-file]="!!selectedRecordFile"
+                  (dragover)="onRecordDragOver($event)"
+                  (dragleave)="isDragOverRecordFile = false"
+                  (drop)="onRecordFileDrop($event)"
+                >
+                  <input
+                    type="file"
+                    #recordFileInput
+                    class="tl-file-hidden-input"
+                    accept="image/png,image/jpeg,image/webp,image/tiff,application/pdf,application/dicom,.dcm,.stl,.obj,.ply"
+                    (change)="onRecordFileChosen($event)"
+                  />
+                  @if (!selectedRecordFile) {
+                    <div class="tl-dropzone-content" (click)="recordFileInput.click()">
+                      <div class="tl-dropzone-icon-circle">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="17 8 12 3 7 8"/>
+                          <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                      </div>
+                      <div class="tl-dropzone-texts">
+                        <p class="tl-dropzone-primary">Click to browse or drag &amp; drop file here</p>
+                        <p class="tl-dropzone-secondary">Supports 3D Scans (.stl, .obj, .ply), DICOM (.dcm), X-Ray images &amp; PDF (up to 200MB)</p>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="tl-dropzone-file-preview">
+                      @if (selectedRecordPreviewUrl) {
+                        <img [src]="selectedRecordPreviewUrl" class="tl-file-thumb-large" alt="Preview" />
+                      } @else if (is3DFile(selectedRecordFile.name)) {
+                        <div class="tl-file-icon-placeholder tl-file-icon-placeholder--3d">
+                          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#38bdf8" stroke-width="2">
+                            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                            <polyline points="2 17 12 22 22 17"/>
+                            <polyline points="2 12 12 17 22 12"/>
+                          </svg>
+                          <span class="tl-badge-3d-tag">3D Mesh</span>
+                        </div>
+                      } @else {
+                        <div class="tl-file-icon-placeholder">
+                          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                          </svg>
+                        </div>
+                      }
+                      <div class="tl-file-details">
+                        <div class="tl-file-detail-name" [title]="selectedRecordFile.name">{{ selectedRecordFile.name }}</div>
+                        <div class="tl-file-detail-meta">
+                          <span class="tl-file-badge">{{ formatBytes(selectedRecordFile.size) }}</span>
+                          <span class="tl-file-badge-type">{{ autoDetectedTypeInfo?.type || selectedRecordFile.type || 'DICOM/Binary' }}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="tl-btn-remove-selected-file"
+                        title="Remove file"
+                        (click)="removeRecordFile($event)"
+                      >
+                        &times;
+                      </button>
+                    </div>
                   }
-                </select>
-              </label>
+                </div>
+              </div>
+
+              <!-- Two column row: Radiograph Type and Tooth FDI -->
+              <div class="tl-form-row-2">
+                <label class="form-field">
+                  <div class="tl-field-header-row">
+                    <span>Radiograph Type *</span>
+                    @if (autoDetectedTypeInfo) {
+                      <span class="tl-auto-detected-badge" [title]="autoDetectedTypeInfo.reason">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        {{ autoDetectedTypeInfo.reason }}
+                      </span>
+                    }
+                  </div>
+                  <select class="fe-select" [(ngModel)]="newRecordType">
+                    @if (newRecordType === 'AUTO') {
+                      <option value="AUTO" selected>Auto-detect from file (تحديد تلقائي)</option>
+                    }
+                    @for (rt of radiographTypes; track rt) {
+                      <option [value]="rt">{{ rt }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span>Target Tooth (FDI - Optional)</span>
+                  <input
+                    type="number"
+                    min="11"
+                    max="85"
+                    class="fe-input"
+                    [(ngModel)]="newRecordToothFdi"
+                    placeholder="e.g., 36, 46, 21"
+                  />
+                </label>
+              </div>
+
               <label class="form-field">
-                <span>File / Attachment Name</span>
-                <input type="text" class="fe-input" [(ngModel)]="newRecordFileName" placeholder="e.g., opg-scan-2026.png" />
-              </label>
-              <label class="form-field">
-                <span>Clinical Notes</span>
-                <textarea class="fe-textarea" rows="2" [(ngModel)]="newRecordNotes"></textarea>
+                <span>Clinical Notes &amp; Findings</span>
+                <textarea
+                  class="fe-textarea"
+                  rows="2"
+                  [(ngModel)]="newRecordNotes"
+                  placeholder="e.g., Radiolucency noted at periapical region of #36; bone level normal."
+                ></textarea>
               </label>
             </div>
             <div class="modal-footer">
-              <button type="button" class="tl-btn tl-btn-gray" (click)="showAddRecordModal.set(false)">Cancel</button>
-              <button type="button" class="tl-btn tl-btn-teal" (click)="saveRadiographRecord()">Save Record</button>
+              <button type="button" class="tl-btn tl-btn-gray" (click)="closeAddRecordModal()">Cancel</button>
+              <button
+                type="button"
+                class="tl-btn tl-btn-teal"
+                [disabled]="isUploadingRecord"
+                (click)="saveRadiographRecord()"
+              >
+                @if (isUploadingRecord) {
+                  <span>Uploading...</span>
+                } @else {
+                  <span>Save Record</span>
+                }
+              </button>
             </div>
+          </div>
+        </div>
+      }
+
+      <!-- Viewer Lightbox Modal for Radiographs -->
+      @if (viewingRadiograph(); as viewRec) {
+        <div class="modal-backdrop tl-viewer-backdrop" (click)="closeRadiographViewer()">
+          <div class="tl-viewer-modal" (click)="$event.stopPropagation()">
+            <div class="tl-viewer-header">
+              <div class="tl-viewer-title-info">
+                <h4>{{ viewRec.radiographType }} — {{ viewRec.fileName }}</h4>
+                <div class="tl-viewer-meta">
+                  <span>Date: {{ viewRec.date }}</span>
+                  @if (viewRec.toothFdi) {
+                    <span>Tooth: FDI {{ viewRec.toothFdi }}</span>
+                  }
+                  @if (viewRec.fileSize) {
+                    <span>Size: {{ viewRec.fileSize }}</span>
+                  }
+                  @if (is3DFile(viewRec.fileName)) {
+                    <span class="tl-3d-badge">Interactive 3D</span>
+                  }
+                </div>
+              </div>
+              <div class="tl-viewer-tools">
+                @if (is3DFile(viewRec.fileName)) {
+                  <!-- 3D Specific Perspective & Render Tools -->
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
+                    [class.is-active]="is3DWireframe"
+                    (click)="toggle3DWireframe()"
+                    title="Toggle 3D Wireframe Mesh"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                      <polyline points="2 17 12 22 22 17"/>
+                      <polyline points="2 12 12 17 22 12"/>
+                    </svg>
+                    <span>Wireframe</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
+                    [class.is-active]="is3DAutoRotate"
+                    (click)="toggle3DAutoRotate()"
+                    title="Toggle Continuous 360° Rotation"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                    <span>360° Rotate</span>
+                  </button>
+                  <div class="tl-3d-color-picker">
+                    <button
+                      type="button"
+                      class="tl-color-dot tl-color-dot--ceramic"
+                      [class.is-selected]="current3DColor === 'ceramic'"
+                      (click)="set3DColor('ceramic')"
+                      title="Ceramic Ivory Enamel"
+                    ></button>
+                    <button
+                      type="button"
+                      class="tl-color-dot tl-color-dot--blue"
+                      [class.is-selected]="current3DColor === 'blue'"
+                      (click)="set3DColor('blue')"
+                      title="Medical Cyan"
+                    ></button>
+                    <button
+                      type="button"
+                      class="tl-color-dot tl-color-dot--gold"
+                      [class.is-selected]="current3DColor === 'gold'"
+                      (click)="set3DColor('gold')"
+                      title="Anatomical Gold"
+                    ></button>
+                  </div>
+                  <button type="button" class="tl-tool-btn" (click)="zoom3D(-1)" title="Zoom Out">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <button type="button" class="tl-tool-btn" (click)="zoom3D(1)" title="Zoom In">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <button type="button" class="tl-tool-btn" (click)="set3DPerspective('reset')" title="Reset Perspective">
+                    Reset View
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
+                    [class.is-active]="radiographInverted"
+                    (click)="toggleRadiographInvert()"
+                    title="Invert Colors (Dental X-Ray Contrast)"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                      <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 0 1 0-16z"/>
+                    </svg>
+                    <span>Invert X-Ray</span>
+                  </button>
+                  <button type="button" class="tl-tool-btn" (click)="zoomOutRadiograph()" title="Zoom Out">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <span class="tl-zoom-level">{{ (radiographZoom * 100).toFixed(0) }}%</span>
+                  <button type="button" class="tl-tool-btn" (click)="zoomInRadiograph()" title="Zoom In">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                  </button>
+                  <button type="button" class="tl-tool-btn" (click)="resetRadiographZoom()" title="Reset Zoom">
+                    Reset
+                  </button>
+                }
+                @if (viewRec.fileUrl || viewRec.thumbnailUrl) {
+                  <button type="button" class="tl-tool-btn tl-tool-btn--accent" (click)="downloadRecordFile(viewRec)" title="Download Image">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download</span>
+                  </button>
+                }
+                <button type="button" class="tl-viewer-close" (click)="closeRadiographViewer()">&times;</button>
+              </div>
+            </div>
+            <div class="tl-viewer-viewport">
+              @if (is3DFile(viewRec.fileName)) {
+                <div class="tl-3d-viewport-container" id="dental3dContainer">
+                  <canvas id="dental3dCanvas" class="tl-3d-canvas"></canvas>
+                  @if (is3DLoading) {
+                    <div class="tl-viewer-loading">
+                      <div class="tl-spinner"></div>
+                      <p>Loading &amp; Rendering 3D Dental Model...</p>
+                    </div>
+                  }
+                  <div class="tl-3d-controls-overlay">
+                    <div class="tl-3d-perspectives-pill">
+                      <span class="tl-pill-label">Perspective:</span>
+                      <button type="button" class="tl-pill-btn" (click)="set3DPerspective('front')" title="Front / Anterior View">Front</button>
+                      <button type="button" class="tl-pill-btn" (click)="set3DPerspective('top')" title="Occlusal (Chewing Surface) View">Occlusal (Top)</button>
+                      <button type="button" class="tl-pill-btn" (click)="set3DPerspective('bottom')" title="Basal / Lingual View">Basal</button>
+                      <button type="button" class="tl-pill-btn" (click)="set3DPerspective('left')" title="Left Lateral View">Left</button>
+                      <button type="button" class="tl-pill-btn" (click)="set3DPerspective('right')" title="Right Lateral View">Right</button>
+                      <button type="button" class="tl-pill-btn tl-pill-btn--reset" (click)="set3DPerspective('reset')" title="Reset Camera">Reset</button>
+                    </div>
+                    <div class="tl-3d-hint">
+                      <span>Rotate: Left Click + Drag &nbsp;|&nbsp; Pan: Right Click + Drag &nbsp;|&nbsp; Zoom: Mouse Wheel / Pinch</span>
+                    </div>
+                  </div>
+                </div>
+              } @else if (isDicomDecoding) {
+                <div class="tl-viewer-loading">
+                  <div class="tl-spinner"></div>
+                  <p>Processing DICOM Radiograph Scan...</p>
+                </div>
+              } @else if (viewRec.fileUrl || viewRec.thumbnailUrl) {
+                <img
+                  [src]="viewRec.fileUrl || viewRec.thumbnailUrl"
+                  [alt]="viewRec.fileName"
+                  class="tl-viewer-img"
+                  [style.transform]="'scale(' + radiographZoom + ')'"
+                  [class.is-inverted]="radiographInverted"
+                />
+              } @else {
+                <div class="tl-viewer-fallback">
+                  <p>Preview not available for this format. You can download the file directly.</p>
+                </div>
+              }
+            </div>
+            @if (viewRec.notes) {
+              <div class="tl-viewer-footer-notes">
+                <strong>Clinical Notes:</strong> {{ viewRec.notes }}
+              </div>
+            }
           </div>
         </div>
       }
@@ -1810,9 +2158,9 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         display: block;
       }
       .tl-page {
-        padding: 12px 18px;
+        padding: 12px 18px 24px;
         background: var(--bg);
-        min-height: 100vh;
+        min-height: 100%;
         box-sizing: border-box;
         font-family: inherit;
         color: var(--ink);
@@ -1821,7 +2169,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 10px;
+        margin-bottom: 14px;
       }
       .tl-breadcrumbs {
         display: inline-flex;
@@ -1928,6 +2276,8 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         display: flex;
         flex-direction: column;
         gap: 16px;
+        position: sticky;
+        top: 12px;
       }
       .tl-info-card,
       .tl-section-card {
@@ -2097,7 +2447,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         background: var(--surf);
       }
       .tl-empty-cell--red {
-        color: var(--accent-red-400, #f87171) !important;
+        color: var(--mute, #94a3b8) !important;
         font-weight: 500;
         text-align: center;
         background: var(--surf);
@@ -2145,6 +2495,626 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         background: var(--bad-soft);
         border-color: var(--bad);
       }
+      .tl-action-icon--view {
+        color: var(--tl-teal);
+      }
+      .tl-action-icon--view:hover {
+        background: rgba(20, 184, 166, 0.15);
+        border-color: var(--tl-teal);
+      }
+      .tl-action-icon--download {
+        color: var(--ink);
+      }
+      .tl-action-icon--download:hover {
+        background: var(--surf2);
+      }
+
+      /* Patient Records & Media Styles */
+      .tl-section-counter {
+        font-size: 0.85rem;
+        color: var(--mute);
+        font-weight: 500;
+        margin-inline-start: 4px;
+      }
+      .tl-empty-records {
+        padding: 32px 20px;
+        text-align: center;
+        background: var(--surf2);
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        margin-block-start: 10px;
+      }
+      .tl-empty-records-icon {
+        color: var(--mute);
+        opacity: 0.6;
+        margin-block-end: 2px;
+      }
+      .tl-empty-records-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--ink);
+        margin: 0;
+      }
+      .tl-empty-records-sub {
+        font-size: 0.78rem;
+        color: var(--mute);
+        max-width: 440px;
+        margin: 0 0 8px;
+        line-height: 1.45;
+      }
+      .tl-records-table {
+        margin-block-start: 8px;
+      }
+      .tl-media-thumb {
+        width: 44px;
+        height: 44px;
+        border-radius: 6px;
+        background: var(--surf2);
+        border: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        color: var(--mute);
+        margin: 0 auto;
+      }
+      .tl-media-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .tl-thumb-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      .tl-media-thumb:hover .tl-thumb-overlay {
+        opacity: 1;
+      }
+      .tl-type-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+      }
+      .tl-badge-type {
+        background: rgba(20, 184, 166, 0.12);
+        color: var(--tl-teal);
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 4px;
+        border: 1px solid rgba(20, 184, 166, 0.25);
+      }
+      .tl-badge-fdi {
+        background: var(--surf2);
+        color: var(--ink);
+        font-size: 0.68rem;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+      }
+      .tl-file-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .tl-file-cell-name {
+        font-weight: 600;
+        font-size: 0.84rem;
+        color: var(--ink);
+      }
+      .tl-file-cell-size {
+        font-size: 0.72rem;
+        color: var(--mute);
+      }
+      .tl-date-cell {
+        font-size: 0.8rem;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .tl-notes-cell {
+        max-width: 220px;
+        font-size: 0.8rem;
+        color: var(--ink-dim, #cbd5e1);
+      }
+      .tl-notes-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .tl-muted-dash {
+        color: var(--mute);
+      }
+
+      /* Modal Upload & Dropzone */
+      .modal-card--record-upload {
+        max-width: 540px;
+        width: 100%;
+      }
+      .modal-title-with-icon {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+      }
+      .modal-title-with-icon svg {
+        color: var(--tl-teal);
+      }
+      .modal-title-with-icon h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 700;
+      }
+      .tl-file-dropzone {
+        border: 2px dashed var(--line);
+        border-radius: 8px;
+        background: var(--surf2);
+        padding: 16px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        margin-block-start: 4px;
+      }
+      .tl-file-dropzone:hover,
+      .tl-file-dropzone.is-dragover {
+        border-color: var(--tl-teal);
+        background: rgba(20, 184, 166, 0.06);
+      }
+      .tl-file-dropzone.has-file {
+        border-style: solid;
+        border-color: var(--line);
+        padding: 12px;
+      }
+      .tl-file-hidden-input {
+        display: none;
+      }
+      .tl-dropzone-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        text-align: center;
+        padding: 6px 0;
+      }
+      .tl-dropzone-icon-circle {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: rgba(20, 184, 166, 0.1);
+        color: var(--tl-teal);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .tl-dropzone-primary {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--ink);
+        margin: 0;
+      }
+      .tl-dropzone-secondary {
+        font-size: 0.74rem;
+        color: var(--mute);
+        margin: 2px 0 0;
+      }
+      .tl-dropzone-file-preview {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .tl-file-thumb-large {
+        width: 52px;
+        height: 52px;
+        border-radius: 6px;
+        object-fit: cover;
+        border: 1px solid var(--line);
+      }
+      .tl-file-icon-placeholder {
+        width: 52px;
+        height: 52px;
+        border-radius: 6px;
+        background: var(--surf);
+        border: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--mute);
+      }
+      .tl-file-details {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .tl-file-detail-name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--ink);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tl-file-detail-meta {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .tl-file-badge {
+        font-size: 0.7rem;
+        color: var(--mute);
+      }
+      .tl-file-badge-type {
+        font-size: 0.68rem;
+        background: var(--surf);
+        border: 1px solid var(--line);
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: var(--ink);
+      }
+      .tl-btn-remove-selected-file {
+        border: none;
+        background: none;
+        font-size: 1.4rem;
+        color: var(--mute);
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        line-height: 1;
+      }
+      .tl-btn-remove-selected-file:hover {
+        color: var(--bad, #ef4444);
+      }
+      .tl-form-row-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .tl-field-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-block-end: 2px;
+      }
+      .tl-auto-detected-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.12);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 1px 7px;
+        border-radius: 9999px;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+      .tl-file-icon-placeholder--3d {
+        background: rgba(56, 189, 248, 0.1) !important;
+        border-color: rgba(56, 189, 248, 0.35) !important;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+      }
+      .tl-badge-3d-tag {
+        font-size: 0.62rem;
+        font-weight: 700;
+        color: #38bdf8;
+        line-height: 1;
+      }
+
+      /* Lightbox Viewer Modal for Radiographs */
+      .tl-viewer-backdrop {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        background: rgba(0, 0, 0, 0.92) !important;
+        backdrop-filter: blur(10px);
+        z-index: 999999 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 24px !important;
+        box-sizing: border-box !important;
+      }
+      .tl-viewer-modal {
+        background: #0b1120;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        width: 92vw;
+        max-width: 1150px;
+        height: 86vh;
+        max-height: 86vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.9);
+        overflow: hidden;
+        position: relative;
+        z-index: 1;
+      }
+      .tl-viewer-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 20px;
+        border-bottom: 1px solid #1e293b;
+        background: #090d16;
+        flex-shrink: 0;
+      }
+      .tl-viewer-title-info h4 {
+        margin: 0;
+        font-size: 1rem;
+        color: #f1f5f9;
+        font-weight: 700;
+      }
+      .tl-viewer-meta {
+        display: flex;
+        gap: 12px;
+        font-size: 0.75rem;
+        color: #94a3b8;
+        margin-block-start: 2px;
+      }
+      .tl-viewer-tools {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tl-tool-btn {
+        background: #1e293b;
+        color: #e2e8f0;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 0.78rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        transition: all 0.15s ease;
+      }
+      .tl-tool-btn:hover {
+        background: #334155;
+      }
+      .tl-tool-btn.is-active {
+        background: #0284c7;
+        border-color: #38bdf8;
+        color: #ffffff;
+      }
+      .tl-tool-btn--accent {
+        background: var(--tl-teal, #14b8a6);
+        color: #ffffff;
+        border-color: transparent;
+      }
+      .tl-tool-btn--accent:hover {
+        background: #0d9488;
+      }
+      .tl-zoom-level {
+        font-size: 0.78rem;
+        color: #94a3b8;
+        min-width: 44px;
+        text-align: center;
+        font-family: monospace;
+      }
+      .tl-viewer-close {
+        border: none;
+        background: none;
+        color: #94a3b8;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+        margin-inline-start: 8px;
+      }
+      .tl-viewer-close:hover {
+        color: #ffffff;
+      }
+      .tl-viewer-viewport {
+        flex: 1;
+        min-height: 0;
+        background: #020617;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: auto;
+        padding: 24px;
+      }
+      .tl-viewer-img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        transition: transform 0.2s ease, filter 0.2s ease;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+      }
+      .tl-viewer-img.is-inverted {
+        filter: invert(100%) hue-rotate(180deg);
+      }
+      .tl-viewer-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        color: #94a3b8;
+      }
+      .tl-spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid rgba(20, 184, 166, 0.2);
+        border-top-color: var(--tl-teal);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .tl-viewer-fallback {
+        color: #94a3b8;
+        text-align: center;
+        font-size: 0.9rem;
+      }
+      .tl-viewer-footer-notes {
+        padding: 10px 20px;
+        background: #090d16;
+        border-top: 1px solid #1e293b;
+        font-size: 0.8rem;
+        color: #cbd5e1;
+        flex-shrink: 0;
+      }
+      /* 3D Dental Viewer Styles */
+      .tl-3d-viewport-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 480px;
+        background: radial-gradient(circle at 50% 40%, #0d1527 0%, #030712 100%);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .tl-3d-canvas {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+        cursor: grab;
+      }
+      .tl-3d-canvas:active {
+        cursor: grabbing;
+      }
+      .tl-3d-controls-overlay {
+        position: absolute;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        pointer-events: none;
+        z-index: 10;
+        width: 90%;
+        max-width: 720px;
+      }
+      .tl-3d-perspectives-pill {
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+        background: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(51, 65, 85, 0.85);
+        border-radius: 9999px;
+        padding: 6px 14px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      }
+      .tl-pill-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 4px;
+      }
+      .tl-pill-btn {
+        background: #1e293b;
+        color: #cbd5e1;
+        border: 1px solid #334155;
+        border-radius: 9999px;
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .tl-pill-btn:hover {
+        background: #38bdf8;
+        color: #030712;
+        border-color: #38bdf8;
+      }
+      .tl-pill-btn--reset {
+        background: rgba(239, 68, 68, 0.2);
+        color: #fca5a5;
+        border-color: rgba(239, 68, 68, 0.4);
+      }
+      .tl-pill-btn--reset:hover {
+        background: #ef4444;
+        color: #ffffff;
+      }
+      .tl-3d-hint {
+        font-size: 0.7rem;
+        color: #94a3b8;
+        background: rgba(2, 6, 23, 0.85);
+        padding: 4px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(30, 41, 59, 0.7);
+        text-align: center;
+      }
+      .tl-3d-badge {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(56, 189, 248, 0.15);
+        color: #38bdf8;
+        border: 1px solid rgba(56, 189, 248, 0.35);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .tl-3d-color-picker {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #1e293b;
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px solid #334155;
+      }
+      .tl-color-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        padding: 0;
+        transition: transform 0.15s ease;
+      }
+      .tl-color-dot:hover {
+        transform: scale(1.2);
+      }
+      .tl-color-dot.is-selected {
+        border-color: #ffffff;
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+      }
+      .tl-color-dot--ceramic {
+        background: #f1f5f9;
+      }
+      .tl-color-dot--blue {
+        background: #38bdf8;
+      }
+      .tl-color-dot--gold {
+        background: #f59e0b;
+      }
       .tl-three-col {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -2174,8 +3144,9 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
       }
       .tl-col-hint {
         margin: 0 0 10px;
-        font-size: 0.72rem;
-        color: var(--accent-red-400, #f87171);
+        font-size: 0.76rem;
+        color: var(--mute, #94a3b8);
+        font-weight: 500;
       }
       .tl-select-wrap {
         position: relative;
@@ -2247,11 +3218,15 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
       .tl-tag-remove {
         border: 0;
         background: none;
-        color: var(--accent-red-400, #f87171);
+        color: var(--mute, #94a3b8);
         cursor: pointer;
         font-size: 1rem;
         line-height: 1;
         padding: 0 4px;
+        transition: color 0.15s ease;
+      }
+      .tl-tag-remove:hover {
+        color: var(--bad, #ef4444);
       }
       .tl-tag-list--notes {
         margin-top: 12px;
@@ -2391,13 +3366,16 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
 
       /* 9-Step Wizard Modal */
       .tl-wizard-modal {
+        position: relative;
+        z-index: 100001;
         background: var(--surf);
         border-radius: 12px;
         width: 100%;
         max-width: 1040px;
-        max-height: 92vh;
-        overflow-y: auto;
-        box-shadow: var(--shadow);
+        height: 90vh;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
         display: flex;
         flex-direction: column;
         border: 1px solid var(--line);
@@ -2408,6 +3386,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         align-items: center;
         padding: 16px 24px;
         border-block-end: 1px solid var(--line);
+        flex-shrink: 0;
       }
       .tl-wizard-header h3 {
         margin: 0;
@@ -2416,12 +3395,15 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
       }
       .tl-stepper-bar {
         display: grid;
-        grid-template-columns: repeat(9, 1fr);
-        gap: 4px;
-        padding: 14px 20px;
+        grid-template-columns: repeat(9, minmax(85px, 1fr));
+        gap: 6px;
+        padding: 14px 18px 12px;
         border-block-end: 1px solid var(--line);
         background: var(--surf2);
         overflow-x: auto;
+        overflow-y: hidden;
+        flex-shrink: 0;
+        min-height: 84px;
       }
       .tl-step-item {
         border: 0;
@@ -2431,12 +3413,15 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         align-items: center;
         gap: 6px;
         cursor: pointer;
-        padding: 4px;
+        padding: 4px 2px;
         color: var(--mute);
+        min-width: 0;
       }
       .tl-step-circle {
         width: 28px;
         height: 28px;
+        min-width: 28px;
+        min-height: 28px;
         border-radius: 50%;
         background: var(--line);
         color: var(--ink);
@@ -2445,6 +3430,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         justify-content: center;
         font-size: 0.78rem;
         font-weight: 700;
+        flex-shrink: 0;
       }
       .tl-step-item.is-active .tl-step-circle {
         background: var(--tl-teal);
@@ -2458,12 +3444,21 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         font-size: 0.72rem;
         font-weight: 600;
         text-align: center;
+        line-height: 1.25;
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
       .tl-wizard-body {
         padding: 20px 24px;
         display: flex;
         flex-direction: column;
         gap: 16px;
+        flex: 1 1 auto;
+        overflow-y: auto;
+        min-height: 0;
       }
       .tl-step-heading {
         margin: 0;
@@ -2611,6 +3606,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         padding: 14px 24px;
         border-block-start: 1px solid var(--line);
         background: var(--surf2);
+        flex-shrink: 0;
       }
       .tl-wizard-footer-right {
         display: flex;
@@ -2749,7 +3745,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 9999;
+        z-index: 100000;
         padding: var(--fe-space-4);
       }
       .modal-card {
@@ -2977,10 +3973,26 @@ export class ClinicEncountersComponent {
 
   // Patient Records (Radiographs) & Follow-Up Notes
   protected readonly showAddRecordModal = signal<boolean>(false);
-  protected newRecordType = 'OPG';
+  protected newRecordType = 'AUTO';
+  protected autoDetectedTypeInfo: { type: string; reason: string } | null = null;
   protected newRecordFileName = '';
   protected newRecordNotes = '';
+  protected newRecordToothFdi: number | null = null;
+  protected selectedRecordFile: File | null = null;
+  protected selectedRecordPreviewUrl: string | null = null;
+  protected isDragOverRecordFile = false;
+  protected isUploadingRecord = false;
   protected readonly radiographRecords = signal<EncounterRadiographRow[]>([]);
+  protected readonly viewingRadiograph = signal<EncounterRadiographRow | null>(null);
+  protected radiographZoom = 1;
+  protected radiographInverted = false;
+  protected isDicomDecoding = false;
+  protected is3DLoading = false;
+  protected is3DWireframe = false;
+  protected is3DAutoRotate = false;
+  protected current3DColor: 'ceramic' | 'blue' | 'gold' = 'ceramic';
+  private active3DScene: Dental3DScene | null = null;
+  protected readonly is3DFile = is3DFile;
 
   protected readonly showAddFollowUpModal = signal<boolean>(false);
   protected newFollowUpTitle = '';
@@ -3188,6 +4200,7 @@ export class ClinicEncountersComponent {
         this.patientId.set(pId);
         void this.reloadEncounters();
         void this.loadPatientPlans(pId);
+        void this.loadPatientRadiographs(pId);
       }
     });
 
@@ -3460,24 +4473,417 @@ export class ClinicEncountersComponent {
     this.quickNotesList.update((list) => list.filter((_, i) => i !== index));
   }
 
-  protected saveRadiographRecord(): void {
-    this.radiographRecords.update((list) => [
-      ...list,
-      {
-        id: `rad-${Date.now()}`,
-        date: new Date().toISOString().slice(0, 10),
-        radiographType: this.newRecordType,
-        fileName: this.newRecordFileName.trim() || `${this.newRecordType.toLowerCase()}-scan.png`,
-        notes: this.newRecordNotes.trim(),
-      },
-    ]);
+  protected formatBytes(bytes: number | undefined): string {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  }
+
+  protected openAddRecordModal(): void {
+    this.newRecordType = 'AUTO';
+    this.autoDetectedTypeInfo = null;
     this.newRecordFileName = '';
     this.newRecordNotes = '';
+    this.newRecordToothFdi = null;
+    this.selectedRecordFile = null;
+    this.selectedRecordPreviewUrl = null;
+    this.isDragOverRecordFile = false;
+    this.isUploadingRecord = false;
+    this.showAddRecordModal.set(true);
+  }
+
+  protected closeAddRecordModal(): void {
     this.showAddRecordModal.set(false);
+    this.autoDetectedTypeInfo = null;
+    this.selectedRecordFile = null;
+    this.selectedRecordPreviewUrl = null;
+    this.isDragOverRecordFile = false;
+    this.isUploadingRecord = false;
+  }
+
+  protected onRecordFileChosen(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files[0]) {
+      this.handleRecordFile(input.files[0]);
+    }
+  }
+
+  protected onRecordDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.isDragOverRecordFile = true;
+  }
+
+  protected onRecordFileDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.isDragOverRecordFile = false;
+    if (event.dataTransfer?.files && event.dataTransfer.files[0]) {
+      this.handleRecordFile(event.dataTransfer.files[0]);
+    }
+  }
+
+  protected async handleRecordFile(file: File): Promise<void> {
+    this.selectedRecordFile = file;
+    this.newRecordFileName = file.name;
+
+    // 1. Initial quick auto-detection from filename and MIME
+    const initialDetect = detectDentalFileType(file.name, file.type);
+    this.newRecordType = initialDetect.type;
+    this.autoDetectedTypeInfo = initialDetect;
+
+    // 2. Binary / DICOM deep header detection
+    if (isDicomFile(file.name, file.type)) {
+      try {
+        const buf = await file.arrayBuffer();
+        const dicomRes = await parseAndRenderDicom(buf);
+        this.selectedRecordPreviewUrl = dicomRes.dataUrl;
+
+        // Refine detection with actual DICOM modality, study and series description
+        const refined = detectDentalFileType(file.name, file.type, dicomRes);
+        this.newRecordType = refined.type;
+        this.autoDetectedTypeInfo = refined;
+      } catch (err) {
+        console.warn('Failed to parse DICOM file:', err);
+        this.selectedRecordPreviewUrl = null;
+      }
+    } else if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        this.selectedRecordPreviewUrl = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      this.selectedRecordPreviewUrl = null;
+    }
+  }
+
+  protected removeRecordFile(event: Event): void {
+    event.stopPropagation();
+    this.selectedRecordFile = null;
+    this.selectedRecordPreviewUrl = null;
+    this.newRecordFileName = '';
+    this.autoDetectedTypeInfo = null;
+    this.newRecordType = 'AUTO';
+  }
+
+  private mapCategoryToType(cat: string, fileName?: string): string {
+    if (fileName && is3DFile(fileName)) {
+      return '3D Dental Scan (STL)';
+    }
+    switch (cat) {
+      case 'RADIOGRAPH_PANORAMIC':
+        return 'OPG';
+      case 'RADIOGRAPH_INTRAORAL':
+        return 'Periapical';
+      case 'RADIOGRAPH_CEPHALOMETRIC':
+        return 'Lateral Cephalogram';
+      default:
+        return 'Radiograph';
+    }
+  }
+
+  private mapTypeToCategory(type: string): string {
+    switch (type) {
+      case '3D Dental Scan (STL)':
+        return 'PHOTO_INTRAORAL';
+      case 'OPG':
+      case 'CBCT':
+        return 'RADIOGRAPH_PANORAMIC';
+      case 'Bitewings':
+      case 'Periapical':
+        return 'RADIOGRAPH_INTRAORAL';
+      case 'Lateral Cephalogram':
+        return 'RADIOGRAPH_CEPHALOMETRIC';
+      default:
+        return 'RADIOGRAPH_INTRAORAL';
+    }
+  }
+
+  protected async saveRadiographRecord(): Promise<void> {
+    const file = this.selectedRecordFile;
+    const effectiveType =
+      this.newRecordType === 'AUTO' || !this.newRecordType
+        ? (this.autoDetectedTypeInfo?.type || 'OPG')
+        : this.newRecordType;
+    const fileName =
+      file?.name ||
+      this.newRecordFileName.trim() ||
+      `${effectiveType.toLowerCase().replace(/[^a-z0-9]/g, '-')}-scan.png`;
+    const toothFdi = this.newRecordToothFdi ?? undefined;
+    const notes = this.newRecordNotes.trim();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const previewUrl = this.selectedRecordPreviewUrl;
+    const fileSizeStr = file ? this.formatBytes(file.size) : undefined;
+
+    this.isUploadingRecord = true;
+    let backendMediaId: string | null = null;
+    let backendDownloadUrl: string | null = null;
+
+    try {
+      const pId = this.patientId() || this.activeDetail()?.encounter.patientId;
+      if (pId && file) {
+        const category = this.mapTypeToCategory(effectiveType);
+        const uploaded = await this.api.uploadMedia(
+          pId,
+          {
+            file,
+            category,
+            toothFdi,
+            notes,
+            acquisitionDate: new Date().toISOString(),
+          },
+          { projectId: this.projectId() }
+        );
+        if (uploaded?.id) {
+          backendMediaId = uploaded.id;
+          try {
+            const signed = await this.api.mediaDownloadUrl(pId, uploaded.id, { projectId: this.projectId() });
+            backendDownloadUrl = signed.downloadUrl;
+          } catch {
+            // ignore signed URL error
+          }
+        }
+      }
+    } catch {
+      // offline / mock fallback
+    } finally {
+      this.isUploadingRecord = false;
+    }
+
+    const newRec: EncounterRadiographRow = {
+      id: backendMediaId || `rad-${Date.now()}`,
+      date: dateStr,
+      radiographType: effectiveType,
+      fileName,
+      fileSize: fileSizeStr,
+      thumbnailUrl: previewUrl || backendDownloadUrl || undefined,
+      fileUrl: previewUrl || backendDownloadUrl || undefined,
+      toothFdi: toothFdi ?? null,
+      notes,
+      rawFile: file || undefined,
+    };
+
+    this.radiographRecords.update((list) => [newRec, ...list]);
+    this.closeAddRecordModal();
+  }
+
+  protected async viewRadiograph(rec: EncounterRadiographRow): Promise<void> {
+    this.radiographZoom = 1;
+    this.radiographInverted = false;
+    this.viewingRadiograph.set(rec);
+
+    // If it's an Interactive 3D dental model (.stl, .obj, .ply)
+    if (is3DFile(rec.fileName)) {
+      this.is3DLoading = true;
+      this.is3DWireframe = false;
+      this.is3DAutoRotate = false;
+      this.current3DColor = 'ceramic';
+
+      setTimeout(async () => {
+        try {
+          const container = document.getElementById('dental3dContainer');
+          const canvas = document.getElementById('dental3dCanvas') as HTMLCanvasElement | null;
+          if (!container || !canvas) {
+            console.warn('3D canvas/container element not found');
+            return;
+          }
+
+          if (this.active3DScene) {
+            this.active3DScene.dispose();
+            this.active3DScene = null;
+          }
+
+          this.active3DScene = new Dental3DScene({
+            canvas,
+            container,
+            initialWireframe: this.is3DWireframe,
+            initialAutoRotate: this.is3DAutoRotate,
+          });
+
+          let buf: ArrayBuffer | null = null;
+          if (rec.rawFile) {
+            buf = await rec.rawFile.arrayBuffer();
+          } else {
+            let url = rec.fileUrl;
+            if (!url && rec.id && !rec.id.startsWith('rad-')) {
+              const pId = this.patientId() || this.activeDetail()?.encounter.patientId;
+              if (pId) {
+                const signed = await this.api.mediaDownloadUrl(pId, rec.id, { projectId: this.projectId() });
+                url = signed.downloadUrl;
+              }
+            }
+            if (url) {
+              const resp = await fetch(url);
+              buf = await resp.arrayBuffer();
+            }
+          }
+
+          if (buf) {
+            await this.active3DScene.loadModel(buf, rec.fileName);
+          }
+        } catch (err) {
+          console.error('Failed to load 3D dental model:', err);
+        } finally {
+          this.is3DLoading = false;
+        }
+      }, 50);
+      return;
+    }
+
+    const isDcm = isDicomFile(rec.fileName);
+
+    // If it's a DICOM file and we need to decode its binary to a visible dataUrl
+    if (isDcm && (!rec.fileUrl || !rec.fileUrl.startsWith('data:image/'))) {
+      this.isDicomDecoding = true;
+      try {
+        let buf: ArrayBuffer | null = null;
+        if (rec.rawFile) {
+          buf = await rec.rawFile.arrayBuffer();
+        } else {
+          let url = rec.fileUrl || rec.thumbnailUrl;
+          if (!url && rec.id && !rec.id.startsWith('rad-')) {
+            const pId = this.patientId() || this.activeDetail()?.encounter.patientId;
+            if (pId) {
+              const signed = await this.api.mediaDownloadUrl(pId, rec.id, { projectId: this.projectId() });
+              url = signed.downloadUrl;
+            }
+          }
+          if (url) {
+            const resp = await fetch(url);
+            buf = await resp.arrayBuffer();
+          }
+        }
+        if (buf) {
+          const dicomRes = await parseAndRenderDicom(buf);
+          rec.fileUrl = dicomRes.dataUrl;
+          rec.thumbnailUrl = dicomRes.dataUrl;
+          this.viewingRadiograph.set({ ...rec });
+        }
+      } catch (err) {
+        console.warn('DICOM decode failed:', err);
+      } finally {
+        this.isDicomDecoding = false;
+      }
+      return;
+    }
+
+    if (!rec.fileUrl && !rec.thumbnailUrl && rec.id && !rec.id.startsWith('rad-')) {
+      const pId = this.patientId() || this.activeDetail()?.encounter.patientId;
+      if (pId) {
+        try {
+          const signed = await this.api.mediaDownloadUrl(pId, rec.id, { projectId: this.projectId() });
+          rec.fileUrl = signed.downloadUrl;
+          rec.thumbnailUrl = signed.downloadUrl;
+          this.viewingRadiograph.set({ ...rec });
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  protected set3DPerspective(preset: PerspectivePreset): void {
+    this.active3DScene?.setPerspective(preset);
+  }
+
+  protected toggle3DWireframe(): void {
+    if (this.active3DScene) {
+      this.is3DWireframe = this.active3DScene.toggleWireframe();
+    }
+  }
+
+  protected toggle3DAutoRotate(): void {
+    if (this.active3DScene) {
+      this.is3DAutoRotate = this.active3DScene.toggleAutoRotate();
+    }
+  }
+
+  protected set3DColor(mode: 'ceramic' | 'blue' | 'gold'): void {
+    this.current3DColor = mode;
+    if (this.active3DScene) {
+      const colors = {
+        ceramic: 0xf1f5f9,
+        blue: 0x38bdf8,
+        gold: 0xf59e0b,
+      };
+      this.active3DScene.setMaterialColor(colors[mode] || 0xf1f5f9);
+    }
+  }
+
+  protected zoom3D(delta: number): void {
+    this.active3DScene?.zoom(delta);
+  }
+
+  protected closeRadiographViewer(): void {
+    if (this.active3DScene) {
+      this.active3DScene.dispose();
+      this.active3DScene = null;
+    }
+    this.viewingRadiograph.set(null);
+  }
+
+  protected zoomInRadiograph(): void {
+    this.radiographZoom = Math.min(3, +(this.radiographZoom + 0.25).toFixed(2));
+  }
+
+  protected zoomOutRadiograph(): void {
+    this.radiographZoom = Math.max(0.5, +(this.radiographZoom - 0.25).toFixed(2));
+  }
+
+  protected resetRadiographZoom(): void {
+    this.radiographZoom = 1;
+  }
+
+  protected toggleRadiographInvert(): void {
+    this.radiographInverted = !this.radiographInverted;
+  }
+
+  protected async downloadRecordFile(rec: EncounterRadiographRow): Promise<void> {
+    let url = rec.fileUrl || rec.thumbnailUrl;
+    if (!url && rec.id && !rec.id.startsWith('rad-')) {
+      const pId = this.patientId() || this.activeDetail()?.encounter.patientId;
+      if (pId) {
+        try {
+          const signed = await this.api.mediaDownloadUrl(pId, rec.id, { projectId: this.projectId() });
+          url = signed.downloadUrl;
+        } catch {
+          // ignore
+        }
+      }
+    }
+    if (url) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = rec.fileName || 'radiograph.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   }
 
   protected deleteRadiographRecord(id: string): void {
     this.radiographRecords.update((list) => list.filter((r) => r.id !== id));
+  }
+
+  private async loadPatientRadiographs(pId: string): Promise<void> {
+    try {
+      const media = await this.api.patientMedia(pId, { projectId: this.projectId() });
+      if (media && media.length > 0) {
+        const rows: EncounterRadiographRow[] = media.map((m) => ({
+          id: m.id,
+          date: m.acquisitionDate ? m.acquisitionDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          radiographType: this.mapCategoryToType(m.category, m.fileName),
+          fileName: m.fileName,
+          fileSize: this.formatBytes(m.byteSize),
+          toothFdi: m.toothFdi ?? null,
+          notes: m.notes ?? '',
+        }));
+        this.radiographRecords.set(rows);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   protected saveFollowUpNote(): void {
@@ -3623,6 +5029,7 @@ export class ClinicEncountersComponent {
         this.activeDetail.set(detail);
         if (detail.encounter.patientId) {
           void this.loadPatientPlans(detail.encounter.patientId);
+          void this.loadPatientRadiographs(detail.encounter.patientId);
         }
         return [detail.encounter];
       } catch {

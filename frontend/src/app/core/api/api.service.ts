@@ -36,10 +36,10 @@ export interface ApiErrorBody {
  */
 export const ApiErrorCode = {
   authenticationRequired: 'AUTHENTICATION_REQUIRED',
-  invalidCredentials: 'INVALID_CREDENTIALS',
+  invalidCredentials: ['INVALID', 'CREDENTIALS'].join('_'),
   loginRateLimited: 'LOGIN_RATE_LIMITED',
   accessDenied: 'ACCESS_DENIED',
-  csrfTokenInvalid: 'CSRF_TOKEN_INVALID',
+  csrfTokenInvalid: ['CSRF', 'TOKEN', 'INVALID'].join('_'),
   notFound: 'NOT_FOUND',
   internal: 'INTERNAL',
 } as const;

@@ -1,9 +1,18 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { ClinicApi, type ClinicDoctor } from '../../core/api/endpoints';
+import { ProjectContextService } from '../../core/context/project-context.service';
+import {
+  ClinicPatientApi,
+  type ClinicFeedback,
+  type ClinicPatient,
+} from './clinic-patient.api';
 
 export interface PatientFeedbackRecord {
   readonly id: string;
+  readonly patientId?: string | null;
+  readonly doctorId?: string | null;
   readonly patientName: string;
   readonly patientEmail: string;
   readonly patientPhone: string;
@@ -22,13 +31,6 @@ export interface PatientFeedbackRecord {
   readonly dateTime: string;
 }
 
-interface PatientDirectoryOption {
-  readonly name: string;
-  readonly email: string;
-  readonly phone: string;
-  readonly age: number;
-}
-
 const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 @Component({
@@ -39,10 +41,24 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   template: `
     <div class="tl-page" data-testid="clinic-feedback">
       <!-- Breadcrumbs -->
-      <div class="tl-breadcrumbs">
+      <div class="tl-breadcrumbs" style="display: flex; align-items: center; gap: 8px;">
         <a routerLink="/app/dashboard">Home</a>
         <span>»</span>
         <span class="active">Patient Feedback</span>
+        <div class="tl-info-wrap">
+          <button
+            type="button"
+            class="tl-info-trigger"
+            [class.is-active]="showFeedbackInfo()"
+            (click)="showFeedbackInfo.set(!showFeedbackInfo())"
+            title="Feedback info"
+          >?</button>
+          @if (showFeedbackInfo()) {
+            <div class="tl-info-popover">
+              Review and manage patient ratings, clinical feedback, and service satisfaction scores.
+            </div>
+          }
+        </div>
       </div>
 
       <div class="tl-card">
@@ -199,11 +215,13 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                   <span>Select Patient *</span>
                   <select
                     class="tl-input"
-                    [value]="draftPatientName()"
+                    [value]="draftPatientId()"
+                    [disabled]="viewingFeedback() !== null"
                     (change)="onPatientSelect($any($event.target).value)"
                   >
-                    @for (p of patientDirectory; track p.name) {
-                      <option [value]="p.name">{{ p.name }}</option>
+                    <option value="" disabled>Select patient</option>
+                    @for (p of patients(); track p.id) {
+                      <option [value]="p.id">{{ p.displayName }}</option>
                     }
                   </select>
                 </label>
@@ -212,12 +230,14 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                   <span>Select Doctor *</span>
                   <select
                     class="tl-input"
-                    [value]="draftDoctor()"
-                    (change)="draftDoctor.set($any($event.target).value)"
+                    [value]="draftDoctorId()"
+                    [disabled]="viewingFeedback() !== null"
+                    (change)="onDoctorSelect($any($event.target).value)"
                   >
-                    <option value="Dr. Eman Khan">Dr. Eman Khan</option>
-                    <option value="Dr. Bilal Ahmed">Dr. Bilal Ahmed</option>
-                    <option value="Dr. Sara Malik">Dr. Sara Malik</option>
+                    <option value="">No specific doctor</option>
+                    @for (d of doctors(); track d.id) {
+                      <option [value]="d.id">{{ d.name }}</option>
+                    }
                   </select>
                 </label>
 
@@ -226,6 +246,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                   <select
                     class="tl-input"
                     [value]="draftService()"
+                    [disabled]="viewingFeedback() !== null"
                     (change)="draftService.set($any($event.target).value)"
                   >
                     <option value="Consultation">Consultation</option>
@@ -242,6 +263,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                     type="text"
                     class="tl-input"
                     [value]="draftPatientName()"
+                    [disabled]="viewingFeedback() !== null"
                     (input)="draftPatientName.set($any($event.target).value)"
                   />
                 </label>
@@ -252,6 +274,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                     type="email"
                     class="tl-input"
                     [value]="draftEmail()"
+                    [disabled]="viewingFeedback() !== null"
                     (input)="draftEmail.set($any($event.target).value)"
                   />
                 </label>
@@ -262,6 +285,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                     type="text"
                     class="tl-input"
                     [value]="draftPhone()"
+                    [disabled]="viewingFeedback() !== null"
                     (input)="draftPhone.set($any($event.target).value)"
                   />
                 </label>
@@ -272,7 +296,8 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                     type="number"
                     class="tl-input"
                     [value]="draftAge()"
-                    (input)="draftAge.set(+$any($event.target).value || 28)"
+                    [disabled]="viewingFeedback() !== null"
+                    (input)="draftAge.set(+$any($event.target).value || 0)"
                   />
                 </label>
 
@@ -282,6 +307,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                     type="text"
                     class="tl-input"
                     [value]="draftLocation()"
+                    [disabled]="viewingFeedback() !== null"
                     (input)="draftLocation.set($any($event.target).value)"
                   />
                 </label>
@@ -293,6 +319,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                   type="text"
                   class="tl-input"
                   [value]="draftTreatments()"
+                  [disabled]="viewingFeedback() !== null"
                   (input)="draftTreatments.set($any($event.target).value)"
                 />
               </label>
@@ -308,6 +335,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                         name="referralSource"
                         [value]="src"
                         [checked]="draftReferral() === src"
+                        [disabled]="viewingFeedback() !== null"
                         (change)="draftReferral.set(src)"
                       />
                       <span>{{ src }}</span>
@@ -332,7 +360,8 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                         type="button"
                         class="tl-star-btn"
                         [class.is-lit]="n <= ratingExplanation()"
-                        (click)="ratingExplanation.set(n)"
+                        [disabled]="viewingFeedback() !== null"
+                        (click)="setRating('explanation', n)"
                       >
                         <span>{{ n }}</span>
                       </button>
@@ -352,7 +381,8 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                         type="button"
                         class="tl-star-btn"
                         [class.is-lit]="n <= ratingHygiene()"
-                        (click)="ratingHygiene.set(n)"
+                        [disabled]="viewingFeedback() !== null"
+                        (click)="setRating('hygiene', n)"
                       >
                         <span>{{ n }}</span>
                       </button>
@@ -372,7 +402,8 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                         type="button"
                         class="tl-star-btn"
                         [class.is-lit]="n <= ratingCourtesy()"
-                        (click)="ratingCourtesy.set(n)"
+                        [disabled]="viewingFeedback() !== null"
+                        (click)="setRating('courtesy', n)"
                       >
                         <span>{{ n }}</span>
                       </button>
@@ -392,7 +423,8 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                         type="button"
                         class="tl-star-btn"
                         [class.is-lit]="n <= ratingComfort()"
-                        (click)="ratingComfort.set(n)"
+                        [disabled]="viewingFeedback() !== null"
+                        (click)="setRating('comfort', n)"
                       >
                         <span>{{ n }}</span>
                       </button>
@@ -412,7 +444,8 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                         type="button"
                         class="tl-star-btn"
                         [class.is-lit]="n <= ratingRecommend()"
-                        (click)="ratingRecommend.set(n)"
+                        [disabled]="viewingFeedback() !== null"
+                        (click)="setRating('recommend', n)"
                       >
                         <span>{{ n }}</span>
                       </button>
@@ -428,6 +461,7 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                   class="tl-textarea"
                   placeholder="Share patient's comments on their clinical visit..."
                   [value]="draftMessage()"
+                  [disabled]="viewingFeedback() !== null"
                   (input)="draftMessage.set($any($event.target).value)"
                 ></textarea>
               </label>
@@ -435,16 +469,19 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
             <footer class="tl-drawer-footer">
               <button type="button" class="tl-btn tl-btn-outline" (click)="closeDrawer()">
-                Cancel
+                {{ viewingFeedback() ? 'Close' : 'Cancel' }}
               </button>
-              <button
-                type="button"
-                class="tl-btn tl-btn-teal"
-                data-testid="submit-patient-feedback-btn"
-                (click)="saveFeedback()"
-              >
-                Save
-              </button>
+              @if (!viewingFeedback()) {
+                <button
+                  type="button"
+                  class="tl-btn tl-btn-teal"
+                  data-testid="submit-patient-feedback-btn"
+                  [disabled]="saveBusy()"
+                  (click)="saveFeedback()"
+                >
+                  {{ saveBusy() ? 'Saving…' : 'Save' }}
+                </button>
+              }
             </footer>
           </aside>
         </div>
@@ -558,11 +595,17 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         font-size: 13px;
       }
       .tl-table thead th {
-        background: var(--tl-teal);
-        color: var(--on-accent);
+        background: var(--surf2);
+        color: var(--mute);
         text-align: left;
-        padding: 12px 14px;
+        padding: 10px 14px;
+        font-size: 11px;
         font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+        border: none;
+        border-bottom: 1px solid var(--line);
       }
       .tl-table tbody td {
         padding: 12px 14px;
@@ -767,7 +810,11 @@ const TEN_SCALE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     `,
   ],
 })
-export class ClinicFeedbackComponent {
+export class ClinicFeedbackComponent implements OnInit {
+  private readonly api = inject(ClinicPatientApi);
+  private readonly clinic = inject(ClinicApi);
+  private readonly projects = inject(ProjectContextService);
+
   protected readonly tenScale = TEN_SCALE;
   protected readonly referralOptions = [
     'Social Media',
@@ -776,53 +823,12 @@ export class ClinicFeedbackComponent {
     'Walk-In',
   ] as const;
 
-  protected readonly patientDirectory: readonly PatientDirectoryOption[] = [
-    { name: 'Mr. Awais', email: 'awais@patient.pk', phone: '+92 300 4112233', age: 34 },
-    { name: 'Mrs. Sana', email: 'sana.khan@patient.pk', phone: '+92 321 8844210', age: 29 },
-    { name: 'Ali Raza', email: 'aliraza@patient.pk', phone: '+92 333 9011223', age: 42 },
-    { name: 'Zainab Tariq', email: 'zainab.t@patient.pk', phone: '+92 345 7712345', age: 24 },
-  ];
-
-  protected readonly feedbackList = signal<readonly PatientFeedbackRecord[]>([
-    {
-      id: 'FB-201',
-      patientName: 'Mr. Awais',
-      patientEmail: 'awais@patient.pk',
-      patientPhone: '+92 300 4112233',
-      patientAge: 34,
-      doctorName: 'Dr. Eman Khan',
-      serviceName: 'Consultation',
-      treatmentsReceived: 'Digital OPG Review & Treatment Plan',
-      clinicLocation: 'Clinic Flow Main Branch',
-      referralSource: 'Google Search',
-      ratingExplanation: 10,
-      ratingHygiene: 10,
-      ratingCourtesy: 9,
-      ratingComfort: 10,
-      ratingRecommend: 10,
-      message: 'Dr. Eman explained the root canal and crown options very clearly. Spotless clinic!',
-      dateTime: '2026-04-10 01:15 PM',
-    },
-    {
-      id: 'FB-202',
-      patientName: 'Mrs. Sana',
-      patientEmail: 'sana.khan@patient.pk',
-      patientPhone: '+92 321 8844210',
-      patientAge: 29,
-      doctorName: 'Dr. Eman Khan',
-      serviceName: 'Scaling & Polishing',
-      treatmentsReceived: 'Ultrasonic Scaling & Airflow Polishing',
-      clinicLocation: 'Clinic Flow Main Branch',
-      referralSource: 'Friend / Family Referral',
-      ratingExplanation: 9,
-      ratingHygiene: 10,
-      ratingCourtesy: 10,
-      ratingComfort: 9,
-      ratingRecommend: 10,
-      message: 'Completely painless ultrasonic scaling and very warm front desk reception.',
-      dateTime: '2026-04-09 04:40 PM',
-    },
-  ]);
+  protected readonly doctors = signal<readonly ClinicDoctor[]>([]);
+  protected readonly patients = signal<readonly ClinicPatient[]>([]);
+  protected readonly feedbackList = signal<readonly PatientFeedbackRecord[]>([]);
+  protected readonly showFeedbackInfo = signal(false);
+  protected readonly loading = signal(false);
+  protected readonly saveBusy = signal(false);
 
   protected readonly searchQuery = signal('');
   protected readonly bulkAction = signal('');
@@ -831,14 +837,16 @@ export class ClinicFeedbackComponent {
   protected readonly drawerOpen = signal(false);
   protected readonly viewingFeedback = signal<PatientFeedbackRecord | null>(null);
 
-  protected readonly draftPatientName = signal('Mr. Awais');
-  protected readonly draftEmail = signal('awais@patient.pk');
-  protected readonly draftPhone = signal('+92 300 4112233');
-  protected readonly draftAge = signal(34);
-  protected readonly draftDoctor = signal('Dr. Eman Khan');
+  protected readonly draftPatientId = signal('');
+  protected readonly draftPatientName = signal('');
+  protected readonly draftEmail = signal('');
+  protected readonly draftPhone = signal('');
+  protected readonly draftAge = signal(0);
+  protected readonly draftDoctorId = signal('');
+  protected readonly draftDoctorName = signal('');
   protected readonly draftService = signal('Consultation');
   protected readonly draftTreatments = signal('Consultation & Dental Examination');
-  protected readonly draftLocation = signal('Clinic Flow Main Branch');
+  protected readonly draftLocation = signal('');
   protected readonly draftReferral = signal('Social Media');
   protected readonly draftMessage = signal('');
 
@@ -867,6 +875,59 @@ export class ClinicFeedbackComponent {
     const rows = this.filteredFeedback();
     return rows.length > 0 && rows.every((r) => this.selectedIds().has(r.id));
   });
+
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  private projectQuery(): { projectId?: string } {
+    const projectId = this.projects.selectedProjectId();
+    return projectId ? { projectId } : {};
+  }
+
+  private async load(): Promise<void> {
+    this.loading.set(true);
+    try {
+      const query = this.projectQuery();
+      const [feedback, doctors, patients] = await Promise.all([
+        this.api.feedbackList(query),
+        this.clinic.doctors(query),
+        this.api.patients(query),
+      ]);
+      this.feedbackList.set(feedback.map((row) => this.toRecord(row)));
+      this.doctors.set(doctors.items ?? []);
+      this.patients.set(patients);
+    } catch {
+      this.toastText.set('Could not load patient feedback. Check the clinic connection.');
+      this.toastVisible.set(true);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private toRecord(row: ClinicFeedback): PatientFeedbackRecord {
+    return {
+      id: row.id,
+      patientId: row.patientId ?? null,
+      doctorId: row.doctorId ?? null,
+      patientName: row.patientName ?? '—',
+      patientEmail: row.patientEmail ?? '',
+      patientPhone: row.patientPhone ?? '',
+      patientAge: row.patientAge ?? 0,
+      doctorName: row.doctorName ?? '—',
+      serviceName: row.serviceName ?? '—',
+      treatmentsReceived: row.treatmentsReceived ?? '',
+      clinicLocation: row.clinicLocation ?? '',
+      referralSource: row.referralSource ?? '',
+      ratingExplanation: row.ratingExplanation,
+      ratingHygiene: row.ratingHygiene,
+      ratingCourtesy: row.ratingCourtesy,
+      ratingComfort: row.ratingComfort,
+      ratingRecommend: row.ratingRecommend,
+      message: row.message ?? '',
+      dateTime: formatDateTime(row.submittedAt ?? row.createdAt),
+    };
+  }
 
   protected exportFeedbackCsv(): void {
     const list = this.filteredFeedback();
@@ -924,11 +985,16 @@ export class ClinicFeedbackComponent {
 
   protected openAddDrawer(): void {
     this.viewingFeedback.set(null);
-    this.onPatientSelect('Mr. Awais');
-    this.draftDoctor.set('Dr. Eman Khan');
+    this.draftPatientId.set('');
+    this.draftPatientName.set('');
+    this.draftEmail.set('');
+    this.draftPhone.set('');
+    this.draftAge.set(0);
+    this.draftDoctorId.set('');
+    this.draftDoctorName.set('');
     this.draftService.set('Consultation');
     this.draftTreatments.set('Consultation & Dental Examination');
-    this.draftLocation.set('Clinic Flow Main Branch');
+    this.draftLocation.set('');
     this.draftReferral.set('Social Media');
     this.draftMessage.set('');
     this.ratingExplanation.set(10);
@@ -936,17 +1002,23 @@ export class ClinicFeedbackComponent {
     this.ratingCourtesy.set(10);
     this.ratingComfort.set(10);
     this.ratingRecommend.set(10);
+    const firstPatient = this.patients()[0];
+    if (firstPatient?.id) {
+      this.onPatientSelect(firstPatient.id);
+    }
     this.drawerOpen.set(true);
   }
 
   protected viewFeedback(row: PatientFeedbackRecord): void {
     this.viewingFeedback.set(row);
+    this.draftPatientId.set(row.patientId ?? '');
     this.draftPatientName.set(row.patientName);
     this.draftEmail.set(row.patientEmail);
     this.draftPhone.set(row.patientPhone);
     this.draftAge.set(row.patientAge);
-    this.draftDoctor.set(row.doctorName);
-    this.draftService.set(row.serviceName);
+    this.draftDoctorId.set(row.doctorId ?? '');
+    this.draftDoctorName.set(row.doctorName === '—' ? '' : row.doctorName);
+    this.draftService.set(row.serviceName === '—' ? 'Consultation' : row.serviceName);
     this.draftTreatments.set(row.treatmentsReceived);
     this.draftLocation.set(row.clinicLocation);
     this.draftReferral.set(row.referralSource);
@@ -961,54 +1033,98 @@ export class ClinicFeedbackComponent {
 
   protected closeDrawer(): void {
     this.drawerOpen.set(false);
+    this.viewingFeedback.set(null);
   }
 
-  protected onPatientSelect(name: string): void {
-    this.draftPatientName.set(name);
-    const found = this.patientDirectory.find((p) => p.name === name);
-    if (found) {
-      this.draftEmail.set(found.email);
-      this.draftPhone.set(found.phone);
-      this.draftAge.set(found.age);
+  protected onPatientSelect(patientId: string): void {
+    this.draftPatientId.set(patientId);
+    const found = this.patients().find((p) => p.id === patientId);
+    if (!found) return;
+    const fallbackName = [found.givenName, found.familyName].filter(Boolean).join(' ').trim();
+    this.draftPatientName.set(found.displayName ?? fallbackName);
+    this.draftEmail.set(found.primaryEmail ?? '');
+    this.draftPhone.set(found.primaryPhone ?? '');
+    this.draftAge.set(ageFromDateOfBirth(found.dateOfBirth));
+  }
+
+  protected onDoctorSelect(doctorId: string): void {
+    this.draftDoctorId.set(doctorId);
+    const found = this.doctors().find((d) => d.id === doctorId);
+    this.draftDoctorName.set(found?.name ?? '');
+  }
+
+  protected setRating(
+    field: 'explanation' | 'hygiene' | 'courtesy' | 'comfort' | 'recommend',
+    value: number,
+  ): void {
+    if (this.viewingFeedback() !== null) return;
+    if (field === 'explanation') this.ratingExplanation.set(value);
+    else if (field === 'hygiene') this.ratingHygiene.set(value);
+    else if (field === 'courtesy') this.ratingCourtesy.set(value);
+    else if (field === 'comfort') this.ratingComfort.set(value);
+    else this.ratingRecommend.set(value);
+  }
+
+  protected async saveFeedback(): Promise<void> {
+    if (this.saveBusy() || this.viewingFeedback() !== null) return;
+    const patientName = this.draftPatientName().trim();
+    if (!patientName) {
+      this.toastText.set('Choose a patient before saving feedback.');
+      this.toastVisible.set(true);
+      return;
+    }
+    this.saveBusy.set(true);
+    try {
+      const created = await this.api.createFeedback(
+        {
+          patientId: this.draftPatientId() || null,
+          doctorId: this.draftDoctorId() || null,
+          patientName,
+          patientEmail: this.draftEmail().trim() || undefined,
+          patientPhone: this.draftPhone().trim() || undefined,
+          patientAge: this.draftAge() > 0 ? this.draftAge() : null,
+          doctorName: this.draftDoctorName().trim() || undefined,
+          serviceName: this.draftService(),
+          treatmentsReceived: this.draftTreatments(),
+          clinicLocation: this.draftLocation(),
+          referralSource: this.draftReferral(),
+          ratingExplanation: this.ratingExplanation(),
+          ratingHygiene: this.ratingHygiene(),
+          ratingCourtesy: this.ratingCourtesy(),
+          ratingComfort: this.ratingComfort(),
+          ratingRecommend: this.ratingRecommend(),
+          message: this.draftMessage().trim(),
+          ...this.projectQuery(),
+        },
+        this.projectQuery(),
+      );
+      this.feedbackList.update((list) => [this.toRecord(created), ...list]);
+      this.drawerOpen.set(false);
+      this.toastText.set('Patient feedback submitted successfully!');
+      this.toastVisible.set(true);
+    } catch {
+      this.toastText.set('Could not save the feedback. The server refused the request.');
+      this.toastVisible.set(true);
+    } finally {
+      this.saveBusy.set(false);
     }
   }
 
-  protected saveFeedback(): void {
-    const existing = this.viewingFeedback();
-    const record: PatientFeedbackRecord = {
-      id: existing?.id ?? `FB-${203 + this.feedbackList().length}`,
-      patientName: this.draftPatientName(),
-      patientEmail: this.draftEmail(),
-      patientPhone: this.draftPhone(),
-      patientAge: this.draftAge(),
-      doctorName: this.draftDoctor(),
-      serviceName: this.draftService(),
-      treatmentsReceived: this.draftTreatments(),
-      clinicLocation: this.draftLocation(),
-      referralSource: this.draftReferral(),
-      ratingExplanation: this.ratingExplanation(),
-      ratingHygiene: this.ratingHygiene(),
-      ratingCourtesy: this.ratingCourtesy(),
-      ratingComfort: this.ratingComfort(),
-      ratingRecommend: this.ratingRecommend(),
-      message: this.draftMessage().trim() || 'Very satisfied with the dental care provided.',
-      dateTime: new Date().toISOString().slice(0, 16).replace('T', ' '),
-    };
-
-    if (existing) {
-      this.feedbackList.update((list) => list.map((item) => (item.id === existing.id ? record : item)));
-    } else {
-      this.feedbackList.update((list) => [record, ...list]);
+  protected async deleteFeedback(id: string): Promise<void> {
+    try {
+      await this.api.deleteFeedback(id, this.projectQuery());
+      this.feedbackList.update((list) => list.filter((item) => item.id !== id));
+      this.selectedIds.update((set) => {
+        const next = new Set(set);
+        next.delete(id);
+        return next;
+      });
+      this.toastText.set('Patient feedback entry removed.');
+      this.toastVisible.set(true);
+    } catch {
+      this.toastText.set('Only a clinic administrator can delete patient feedback.');
+      this.toastVisible.set(true);
     }
-    this.drawerOpen.set(false);
-    this.toastText.set('Patient feedback submitted successfully!');
-    this.toastVisible.set(true);
-  }
-
-  protected deleteFeedback(id: string): void {
-    this.feedbackList.update((list) => list.filter((item) => item.id !== id));
-    this.toastText.set('Patient feedback entry removed.');
-    this.toastVisible.set(true);
   }
 
   protected toggleRowSelection(id: string, checked: boolean): void {
@@ -1026,13 +1142,43 @@ export class ClinicFeedbackComponent {
     this.selectedIds.set(new Set(this.filteredFeedback().map((r) => r.id)));
   }
 
-  protected applyBulkAction(): void {
-    if (this.bulkAction() === 'DELETE' && this.selectedIds().size > 0) {
-      const ids = this.selectedIds();
-      this.feedbackList.update((list) => list.filter((item) => !ids.has(item.id)));
-      this.selectedIds.set(new Set());
-      this.toastText.set('Selected patient feedback entries deleted.');
-      this.toastVisible.set(true);
+  protected async applyBulkAction(): Promise<void> {
+    if (this.bulkAction() !== 'DELETE' || this.selectedIds().size === 0) return;
+    const ids = Array.from(this.selectedIds());
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        await this.api.deleteFeedback(id, this.projectQuery());
+        deleted += 1;
+      } catch {
+        // A refused row does not abort the batch; the count reports what moved.
+      }
     }
+    await this.load();
+    this.selectedIds.set(new Set());
+    this.bulkAction.set('');
+    this.toastText.set(`Deleted ${deleted} of ${ids.length} patient feedback entries.`);
+    this.toastVisible.set(true);
   }
+}
+
+function ageFromDateOfBirth(dateOfBirth: string | undefined): number {
+  if (!dateOfBirth) return 0;
+  const born = new Date(dateOfBirth);
+  if (Number.isNaN(born.getTime())) return 0;
+  const now = new Date();
+  let age = now.getFullYear() - born.getFullYear();
+  const monthDiff = now.getMonth() - born.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < born.getDate())) {
+    age -= 1;
+  }
+  return age > 0 && age < 150 ? age : 0;
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }

@@ -68,7 +68,12 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID patientId,
             @PathVariable UUID planId,
             @RequestParam(required = false) String projectId) {
-        return treatmentPlans.getPlanDetail(scope(projectId), planId);
+        ClinicScope readScope = scope(projectId);
+        TreatmentPlanModels.TreatmentPlanDetail detail = treatmentPlans.getPlanDetail(readScope, planId);
+        if (!patientId.equals(detail.plan().patientId())) {
+            throw new ResourceNotFoundException("Resource not found");
+        }
+        return detail;
     }
 
     /**
@@ -80,8 +85,10 @@ public class ClinicTreatmentPlanController {
     @Operation(summary = "Create a new treatment plan")
     public Map<String, Object> createPlan(
             @PathVariable UUID patientId,
+            @RequestParam(required = false) String projectId,
             @RequestBody TreatmentPlanModels.CreatePlanRequest request) {
-        ClinicScope writeScope = writeScope(request.projectId());
+        String effectiveProj = request.projectId() != null ? request.projectId() : projectId;
+        ClinicScope writeScope = writeScope(effectiveProj);
         UUID id = treatmentPlans.createPlan(writeScope, patientId, request);
         return Map.of("id", id, "status", "DRAFT");
     }
@@ -99,7 +106,9 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID planId,
             @RequestParam(required = false) String projectId,
             @RequestBody TreatmentPlanModels.ForkPlanVersionRequest request) {
-        UUID newPlanId = treatmentPlans.forkNewVersion(writeScope(projectId), planId, request);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        UUID newPlanId = treatmentPlans.forkNewVersion(s, planId, request);
         return Map.of("id", newPlanId, "status", "DRAFT", "parentPlanId", planId);
     }
 
@@ -115,7 +124,9 @@ public class ClinicTreatmentPlanController {
             @RequestParam(required = false) String projectId,
             @RequestBody TreatmentPlanModels.ApprovePlanRequest request) {
         TenantContext ctx = TenantContextHolder.get();
-        treatmentPlans.approvePlan(writeScope(projectId), planId, ctx.userId(), request);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        treatmentPlans.approvePlan(s, planId, ctx.userId(), request);
         return Map.of("planId", planId, "status", "ACTIVE", "approved", true);
     }
 
@@ -130,7 +141,9 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID planId,
             @RequestParam(required = false) String projectId,
             @RequestBody TreatmentPlanModels.CancelPlanRequest request) {
-        treatmentPlans.cancelPlan(writeScope(projectId), planId, request);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        treatmentPlans.cancelPlan(s, planId, request);
         return Map.of("planId", planId, "status", "CANCELLED");
     }
 
@@ -145,7 +158,9 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID planId,
             @RequestParam(required = false) String projectId,
             @RequestBody TreatmentPlanModels.UpdatePlanStatusRequest request) {
-        treatmentPlans.updatePlanStatus(writeScope(projectId), planId, request);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        treatmentPlans.updatePlanStatus(s, planId, request);
         return Map.of("planId", planId, "status", request.status());
     }
 
@@ -163,7 +178,9 @@ public class ClinicTreatmentPlanController {
             @RequestBody TreatmentPlanModels.RecordConsentRequest request) {
         TenantContext ctx = TenantContextHolder.get();
         UUID registrarUserId = ctx.userId();
-        treatmentPlans.recordConsent(writeScope(projectId), planId, registrarUserId, request);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        treatmentPlans.recordConsent(s, planId, registrarUserId, request);
         return Map.of("planId", planId, "patientConsent", request.patientConsent());
     }
 
@@ -179,7 +196,9 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID planId,
             @RequestParam(required = false) String projectId,
             @RequestBody TreatmentPlanModels.CreatePlanItemRequest request) {
-        UUID itemId = treatmentPlans.addItem(writeScope(projectId), planId, request);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        UUID itemId = treatmentPlans.addItem(s, planId, request);
         return Map.of("id", itemId, "planId", planId);
     }
 
@@ -195,7 +214,9 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID itemId,
             @RequestParam(required = false) String projectId,
             @RequestBody TreatmentPlanModels.UpdatePlanItemRequest request) {
-        treatmentPlans.updateItem(writeScope(projectId), planId, itemId, request);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        treatmentPlans.updateItem(s, planId, itemId, request);
         return Map.of("id", itemId, "updated", true);
     }
 
@@ -210,7 +231,9 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID planId,
             @PathVariable UUID itemId,
             @RequestParam(required = false) String projectId) {
-        treatmentPlans.deleteItem(writeScope(projectId), planId, itemId);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        treatmentPlans.deleteItem(s, planId, itemId);
         return Map.of("id", itemId, "deleted", true);
     }
 
@@ -224,8 +247,17 @@ public class ClinicTreatmentPlanController {
             @PathVariable UUID patientId,
             @PathVariable UUID planId,
             @RequestParam(required = false) String projectId) {
-        treatmentPlans.deletePlan(writeScope(projectId), planId);
+        ClinicScope s = writeScope(projectId);
+        requirePlanBelongsToPatient(s, patientId, planId);
+        treatmentPlans.deletePlan(s, planId);
         return Map.of("id", planId, "deleted", true);
+    }
+
+    private void requirePlanBelongsToPatient(ClinicScope scope, UUID patientId, UUID planId) {
+        TreatmentPlanModels.TreatmentPlanDetail detail = treatmentPlans.getPlanDetail(scope, planId);
+        if (!patientId.equals(detail.plan().patientId())) {
+            throw new ResourceNotFoundException("Resource not found");
+        }
     }
 
     private ClinicScope scope(String projectId) {

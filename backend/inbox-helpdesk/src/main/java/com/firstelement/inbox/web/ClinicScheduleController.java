@@ -56,7 +56,7 @@ public class ClinicScheduleController {
             return scope;
         }
         var reachable = scope.accessibleProjectIds();
-        if (reachable.size() == 1) {
+        if (!reachable.isEmpty()) {
             return ClinicScope.forRequestedProject(guard, TenantContextHolder.get(), reachable.get(0));
         }
         throw new com.firstelement.crm.error.ResourceNotFoundException("Resource not found");
@@ -84,18 +84,26 @@ public class ClinicScheduleController {
     public Map<String, Object> createResource(
             @RequestParam(required = false) String projectId,
             @RequestBody ScheduleModels.CreateResourceRequest req) {
+        if (req == null || req.name() == null || req.name().trim().isBlank()) {
+            throw new com.firstelement.crm.error.ValidationFailedException(
+                    "Resource name is required",
+                    Map.of("field", "name"));
+        }
         ClinicScope scope = writeScope(projectId);
+        String name = req.name().trim();
         UUID id = scheduleRepository.insertResource(scope, Map.of(
-                "name", req.name(),
+                "name", name,
                 "isActive", true));
         if (req.capabilities() != null) {
             for (String cap : req.capabilities()) {
-                scheduleRepository.insertCapability(scope, Map.of(
-                        "resourceId", id,
-                        "capability", cap));
+                if (cap != null && !cap.trim().isBlank()) {
+                    scheduleRepository.insertCapability(scope, Map.of(
+                            "resourceId", id,
+                            "capability", cap.trim()));
+                }
             }
         }
-        return Map.of("id", id, "name", req.name());
+        return Map.of("id", id, "name", name);
     }
 
     @PostMapping("/resources/{id}/capabilities")
@@ -106,12 +114,17 @@ public class ClinicScheduleController {
             @PathVariable UUID id,
             @RequestParam(required = false) String projectId,
             @RequestBody Map<String, String> body) {
+        String capability = body == null ? null : body.get("capability");
+        if (capability == null || capability.trim().isBlank()) {
+            throw new com.firstelement.crm.error.ValidationFailedException(
+                    "Capability is required",
+                    Map.of("field", "capability"));
+        }
         ClinicScope scope = writeScope(projectId);
-        String capability = body.get("capability");
         UUID capId = scheduleRepository.insertCapability(scope, Map.of(
                 "resourceId", id,
-                "capability", capability));
-        return Map.of("id", capId, "capability", capability);
+                "capability", capability.trim()));
+        return Map.of("id", capId, "capability", capability.trim());
     }
 
     @PostMapping("/appointments/{id}/assign-resource")
@@ -124,8 +137,13 @@ public class ClinicScheduleController {
         ClinicScope scope = scope(projectId);
         UUID resourceId = body.get("resourceId") == null ? null : UUID.fromString(body.get("resourceId").toString());
         int bufferMinutes = body.get("bufferMinutes") == null ? 0 : Integer.parseInt(body.get("bufferMinutes").toString());
-        int updated = scheduleRepository.assignResource(scope, id, resourceId, bufferMinutes);
-        return Map.of("updated", updated, "appointmentId", id, "resourceId", resourceId != null ? resourceId : "", "bufferMinutes", bufferMinutes);
+        try {
+            int updated = scheduleRepository.assignResource(scope, id, resourceId, bufferMinutes);
+            return Map.of("updated", updated, "appointmentId", id, "resourceId", resourceId != null ? resourceId : "", "bufferMinutes", bufferMinutes);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.CONFLICT, "Conflicting booking: chair or doctor is already booked in this time slot", ex);
+        }
     }
 
     @PostMapping("/appointments")
@@ -138,7 +156,50 @@ public class ClinicScheduleController {
         ClinicScope scope = writeScope(projectId);
         TenantContext ctx = TenantContextHolder.get();
         UUID userId = ctx != null ? (ctx.userId() != null ? ctx.userId() : ctx.principalId()) : null;
-        return scheduleRepository.insertAppointment(scope, req, userId);
+        try {
+            return scheduleRepository.insertAppointment(scope, req, userId);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.CONFLICT, "Conflicting booking: doctor or resource is already booked in this time slot", ex);
+        }
+    }
+
+    @PatchMapping("/appointments/{id}")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Edit or reschedule an existing appointment")
+    public Map<String, Object> updateAppointment(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String projectId,
+            @RequestBody ScheduleModels.CreateAppointmentRequest req) {
+        ClinicScope scope = writeScope(projectId);
+        try {
+            int count = scheduleRepository.updateAppointment(scope, id, req);
+            if (count == 0) {
+                throw new com.firstelement.crm.error.ResourceNotFoundException("Resource not found");
+            }
+            return Map.of("id", id, "updated", true);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.CONFLICT, "Conflicting booking: doctor or resource is already booked in this time slot", ex);
+        }
+    }
+
+    @PostMapping("/appointments/{id}/cancel")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Cancel an appointment with reason")
+    public Map<String, Object> cancelAppointment(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String projectId,
+            @RequestBody(required = false) ScheduleModels.UpdateAppointmentStatusRequest req) {
+        ClinicScope scope = scope(projectId);
+        TenantContext ctx = TenantContextHolder.get();
+        UUID userId = ctx != null ? (ctx.userId() != null ? ctx.userId() : ctx.principalId()) : null;
+        String reason = req != null ? req.cancelledReason() : "Cancelled by clinic staff";
+        int count = scheduleRepository.updateAppointmentStatus(scope, id, "CANCELLED", reason, userId);
+        if (count == 0) {
+            throw new com.firstelement.crm.error.ResourceNotFoundException("Resource not found");
+        }
+        return Map.of("id", id, "status", "CANCELLED", "cancelled", true);
     }
 
     @PatchMapping("/appointments/{id}/status")

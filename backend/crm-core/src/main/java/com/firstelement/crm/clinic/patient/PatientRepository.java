@@ -186,6 +186,42 @@ public class PatientRepository {
             return id;
         });
     }
+
+    public boolean update(ClinicScope scope, UUID patientId, Map<String, Object> parameters) {
+        if (!scope.isProjectScoped()) {
+            throw new IllegalStateException(
+                    "A patient update must be scoped inside one clinic; name the project explicitly.");
+        }
+        return scope.read(() -> {
+            MapSqlParameterSource bound = scope.bind(parameters)
+                    .addValue("id", patientId);
+            return jdbc.update("""
+                    update "patients" p
+                       set "patientNo" = :patientNo,
+                           "displayName" = :displayName,
+                           "givenName" = :givenName,
+                           "familyName" = :familyName,
+                           "gender" = :gender,
+                           "dateOfBirth" = :dateOfBirth,
+                           "primaryPhone" = :primaryPhone,
+                           "primaryEmail" = :primaryEmail,
+                           "cnic" = :cnic,
+                           "profileImageUrl" = :profileImageUrl,
+                           "addressLine" = :addressLine,
+                           "country" = :country,
+                           "state" = :state,
+                           "city" = :city,
+                           "postalCode" = :postalCode,
+                           "isActive" = :isActive,
+                           "locale" = cast(:locale as "Locale"),
+                           "customerId" = :customerId,
+                           "updatedAt" = (current_timestamp at time zone 'utc')
+                     where %s
+                       and p."id" = :id
+                       and p."deletedAt" is null
+                    """.formatted(scope.predicate("p")), bound) > 0;
+        });
+    }
     public List<PatientModels.RelationshipRow> listRelationships(ClinicScope scope, UUID patientId) {
         return scope.read(() -> jdbc.query("""
                 select r."id", r."organizationId", r."projectId", r."patientId",
@@ -411,22 +447,42 @@ public class PatientRepository {
     }
 
     public PatientModels.MergePatientsResult mergePatients(ClinicScope scope, UUID sourceId, UUID targetId, UUID mergedBy, String reason) {
+        if (sourceId == null || targetId == null || sourceId.equals(targetId)) {
+            throw new IllegalArgumentException("Source and target patient IDs must be distinct non-null IDs");
+        }
+        findById(scope, sourceId).orElseThrow(() -> new com.firstelement.crm.error.ResourceNotFoundException("Resource not found"));
+        findById(scope, targetId).orElseThrow(() -> new com.firstelement.crm.error.ResourceNotFoundException("Resource not found"));
         return scope.read(() -> {
+            UUID orgId = scope.queryScope().organizationId();
+            UUID projId = scope.projectId() != null ? scope.projectId() : (scope.accessibleProjectIds().isEmpty() ? null : scope.accessibleProjectIds().get(0));
+            MapSqlParameterSource mergeParams = new MapSqlParameterSource()
+                    .addValue("org", orgId)
+                    .addValue("proj", projId)
+                    .addValue("targetId", targetId)
+                    .addValue("sourceId", sourceId);
+
             // 1. Move appointments
             int appts = jdbc.update("""
                     update "appointments"
                        set "patientId" = :targetId
                      where "organizationId" = :org
                        and "patientId" = :sourceId
-                    """, scope.bind().addValue("targetId", targetId).addValue("sourceId", sourceId));
+                    """, mergeParams);
 
-            // 2. Move encounters
+            // 2. Move encounters & prescriptions
             int encs = jdbc.update("""
                     update "clinical_encounters"
                        set "patientId" = :targetId
                      where "organizationId" = :org
                        and "patientId" = :sourceId
-                    """, scope.bind().addValue("targetId", targetId).addValue("sourceId", sourceId));
+                    """, mergeParams);
+
+            jdbc.update("""
+                    update "clinical_prescriptions"
+                       set "patientId" = :targetId
+                     where "organizationId" = :org
+                       and "patientId" = :sourceId
+                    """, mergeParams);
 
             // 3. Move treatment plans
             int plans = jdbc.update("""
@@ -434,22 +490,36 @@ public class PatientRepository {
                        set "patientId" = :targetId
                      where "organizationId" = :org
                        and "patientId" = :sourceId
-                    """, scope.bind().addValue("targetId", targetId).addValue("sourceId", sourceId));
+                    """, mergeParams);
 
-            // 4. Move invoices & payments
+            // 4. Move invoices, payments, refunds & ledger entries
             int invs = jdbc.update("""
                     update "clinic_invoices"
                        set "patientId" = :targetId
                      where "organizationId" = :org
                        and "patientId" = :sourceId
-                    """, scope.bind().addValue("targetId", targetId).addValue("sourceId", sourceId));
+                    """, mergeParams);
 
             jdbc.update("""
                     update "clinic_payments"
                        set "patientId" = :targetId
                      where "organizationId" = :org
                        and "patientId" = :sourceId
-                    """, scope.bind().addValue("targetId", targetId).addValue("sourceId", sourceId));
+                    """, mergeParams);
+
+            jdbc.update("""
+                    update "clinic_refunds"
+                       set "patientId" = :targetId
+                     where "organizationId" = :org
+                       and "patientId" = :sourceId
+                    """, mergeParams);
+
+            jdbc.update("""
+                    update "clinic_patient_ledger_entries"
+                       set "patientId" = :targetId
+                     where "organizationId" = :org
+                       and "patientId" = :sourceId
+                    """, mergeParams);
 
             // 5. Move relationships
             jdbc.update("""
@@ -457,15 +527,35 @@ public class PatientRepository {
                        set "patientId" = :targetId
                      where "organizationId" = :org
                        and "patientId" = :sourceId
-                    """, scope.bind().addValue("targetId", targetId).addValue("sourceId", sourceId));
+                    """, mergeParams);
 
-            // 6. Move consents
+            // 6. Move consents & disclosures
             jdbc.update("""
                     update "patient_consents"
                        set "patientId" = :targetId
                      where "organizationId" = :org
                        and "patientId" = :sourceId
-                    """, scope.bind().addValue("targetId", targetId).addValue("sourceId", sourceId));
+                    """, mergeParams);
+
+            jdbc.update("""
+                    update "patient_disclosure_logs"
+                       set "patientId" = :targetId
+                     where "organizationId" = :org
+                       and "patientId" = :sourceId
+                    """, mergeParams);
+
+            // 7. Move medical history if target has none
+            jdbc.update("""
+                    update "patient_medical_histories"
+                       set "patientId" = :targetId
+                     where "organizationId" = :org
+                       and "patientId" = :sourceId
+                       and not exists (
+                           select 1 from "patient_medical_histories" mh2
+                            where mh2."organizationId" = :org
+                              and mh2."patientId" = :targetId
+                       )
+                    """, mergeParams);
 
             // 7. Record merge snapshot in patient_merges
             UUID mergeId = UUID.randomUUID();
@@ -479,9 +569,10 @@ public class PatientRepository {
                     values
                         (:id, :org, :proj, :sourceId, :targetId,
                          :mergedBy, (now() at time zone 'utc'), cast(:snapshot as jsonb), 'MERGED', (now() at time zone 'utc'))
-                    """, scope.bind()
+                    """, new MapSqlParameterSource()
                     .addValue("id", mergeId)
-                    .addValue("proj", scope.projectId() != null ? scope.projectId() : scope.queryScope().organizationId())
+                    .addValue("org", orgId)
+                    .addValue("proj", projId)
                     .addValue("sourceId", sourceId)
                     .addValue("targetId", targetId)
                     .addValue("mergedBy", mergedBy)
@@ -496,7 +587,11 @@ public class PatientRepository {
                            "updatedAt" = (now() at time zone 'utc')
                      where "organizationId" = :org
                        and "id" = :sourceId
-                    """, scope.bind().addValue("sourceId", sourceId).addValue("mergedBy", mergedBy).addValue("reason", "Merged into " + targetId));
+                    """, new MapSqlParameterSource()
+                    .addValue("org", orgId)
+                    .addValue("sourceId", sourceId)
+                    .addValue("mergedBy", mergedBy)
+                    .addValue("reason", "Merged into " + targetId));
 
             return new PatientModels.MergePatientsResult(mergeId, sourceId, targetId, "MERGED", appts, encs, plans, invs);
         });

@@ -106,3 +106,9 @@ CREATE TABLE IF NOT EXISTS "public"."clinic_rbac_audit_log" (
 
 CREATE INDEX IF NOT EXISTS "clinic_rbac_audit_log_org_clinic_occurred_idx"
     ON "public"."clinic_rbac_audit_log" ("organizationId", "clinicId", "occurredAt" DESC);
+
+ALTER TABLE "public"."platform_operator_capabilities"
+    DROP CONSTRAINT "platform_operator_capabilities_known",
+    ADD CONSTRAINT "platform_operator_capabilities_known" CHECK ("capability" IN (
+        'READ_PLATFORM_OVERVIEW', 'CREATE_CLINIC', 'CREATE_ACCOUNT', 'GRANT_ACCESS',
+        'READ_PLATFORM_AUDIT', 'OPERATE_PLATFORM', 'REQUEST_DB_ACTION', 'MANAGE_BILLING'));

@@ -114,8 +114,13 @@ public class ClinicMediaController {
             @PathVariable("mediaId") String mediaId,
             @RequestParam(required = false) String projectId
     ) {
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
         UUID mId = RequestParams.requiredUuid(mediaId, "mediaId");
-        return mediaService.getMedia(scope(projectId), mId);
+        ClinicMediaModels.MediaRow row = mediaService.getMedia(scope(projectId), mId);
+        if (!patId.equals(row.patientId())) {
+            throw new ResourceNotFoundException("Resource not found");
+        }
+        return row;
     }
 
     /**
@@ -131,13 +136,16 @@ public class ClinicMediaController {
             @RequestParam(required = false) String projectId,
             HttpServletRequest request
     ) {
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
         UUID mId = RequestParams.requiredUuid(mediaId, "mediaId");
+        ClinicScope s = scope(projectId);
+        requireMediaBelongsToPatient(s, patId, mId);
         TenantContext ctx = TenantContextHolder.get();
         UUID userId = ctx != null ? ctx.userId() : UUID.fromString("00000000-0000-0000-0000-000000000000");
         String userName = actorName(ctx, "System User");
 
         return mediaService.createSignedDownloadUrl(
-                scope(projectId),
+                s,
                 mId,
                 userId,
                 userName,
@@ -189,13 +197,16 @@ public class ClinicMediaController {
             @RequestParam(required = false) String projectId,
             HttpServletRequest request
     ) {
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
         UUID mId = RequestParams.requiredUuid(mediaId, "mediaId");
+        ClinicScope s = writeScope(projectId);
+        requireMediaBelongsToPatient(s, patId, mId);
         TenantContext ctx = TenantContextHolder.get();
         UUID userId = ctx != null ? ctx.userId() : UUID.fromString("00000000-0000-0000-0000-000000000000");
         String userName = actorName(ctx, "System User");
 
         mediaService.toggleLegalHold(
-                writeScope(projectId),
+                s,
                 mId,
                 body.legalHold(),
                 userId,
@@ -220,13 +231,16 @@ public class ClinicMediaController {
             @RequestParam(required = false) String projectId,
             HttpServletRequest request
     ) {
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
         UUID mId = RequestParams.requiredUuid(mediaId, "mediaId");
+        ClinicScope s = writeScope(projectId);
+        requireMediaBelongsToPatient(s, patId, mId);
         TenantContext ctx = TenantContextHolder.get();
         UUID userId = ctx != null ? ctx.userId() : UUID.fromString("00000000-0000-0000-0000-000000000000");
         String userName = actorName(ctx, "System User");
 
         mediaService.deleteMedia(
-                writeScope(projectId),
+                s,
                 mId,
                 userId,
                 userName,
@@ -248,8 +262,18 @@ public class ClinicMediaController {
             @PathVariable("mediaId") String mediaId,
             @RequestParam(required = false) String projectId
     ) {
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
         UUID mId = RequestParams.requiredUuid(mediaId, "mediaId");
-        return mediaService.getAttachmentAuditTrail(scope(projectId), mId);
+        ClinicScope s = scope(projectId);
+        requireMediaBelongsToPatient(s, patId, mId);
+        return mediaService.getAttachmentAuditTrail(s, mId);
+    }
+
+    private void requireMediaBelongsToPatient(ClinicScope scope, UUID patientId, UUID mediaId) {
+        ClinicMediaModels.MediaRow row = mediaService.getMedia(scope, mediaId);
+        if (!patientId.equals(row.patientId())) {
+            throw new ResourceNotFoundException("Resource not found");
+        }
     }
 
     /**

@@ -133,7 +133,7 @@ public class TenantQueryGuard {
             events.publish(SecurityEvent.denial(SecurityEventType.AUTHORIZATION_DENIED, context,
                 "TenantScope", reason, Map.of("scope", reason, "guard", "tenant-query-guard")));
         } catch (RuntimeException e) {
-            log.error("Failed to publish AUTHORIZATION_DENIED reason={}", reason, e);
+            log.error("Failed to publish security denial event for guard=tenant-query-guard", e);
         }
     }
 }

@@ -399,7 +399,9 @@ public class ClinicAiRepository {
                            count(case when a."status"::text = 'NO_SHOW' then 1 end)::int as "noShowCount",
                            count(case when a."status"::text = 'COMPLETED' then 1 end)::int as "completedCount"
                       from "public"."patients" p
-                      left join "public"."appointments" a on a."customerId" = p."customerId" and a."organizationId" = p."organizationId"
+                      left join "public"."appointments" a
+                        on (a."patientId" = p."id" or (a."patientId" is null and a."customerId" is not null and a."customerId" = p."customerId"))
+                       and a."organizationId" = p."organizationId"
                      where p."deletedAt" is null
                        and\s""" + scope.predicate("p") + """
                      group by p."id", p."displayName", p."givenName", p."familyName", p."primaryPhone"

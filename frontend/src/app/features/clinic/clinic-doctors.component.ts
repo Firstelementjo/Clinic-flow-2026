@@ -52,11 +52,27 @@ type Toast = { readonly message: string; readonly error: boolean };
   template: `
     <div class="tl-page" data-testid="clinic-doctors">
       <div class="tl-page-top">
-        <nav class="tl-breadcrumbs" aria-label="Breadcrumb">
-          <a routerLink="/app/dashboard">{{ 'clinicAdmin.nav.home' | t }}</a>
-          <span aria-hidden="true">&gt;&gt;</span>
-          <span class="active">{{ 'clinicAdmin.doctors.breadcrumb' | t }}</span>
-        </nav>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <nav class="tl-breadcrumbs" aria-label="Breadcrumb">
+            <a routerLink="/app/dashboard">{{ 'clinicAdmin.nav.home' | t }}</a>
+            <span aria-hidden="true">&gt;&gt;</span>
+            <span class="active">{{ 'clinicAdmin.doctors.breadcrumb' | t }}</span>
+          </nav>
+          <div class="tl-info-wrap">
+            <button
+              type="button"
+              class="tl-info-trigger"
+              [class.is-active]="showDoctorsInfo()"
+              (click)="showDoctorsInfo.set(!showDoctorsInfo())"
+              title="Doctors management info"
+            >?</button>
+            @if (showDoctorsInfo()) {
+              <div class="tl-info-popover">
+                {{ 'clinicAdmin.doctors.emptyBody' | t }}
+              </div>
+            }
+          </div>
+        </div>
         <a
           class="tl-btn tl-btn-dark"
           routerLink="/app/clinic/appointments"
@@ -168,7 +184,9 @@ type Toast = { readonly message: string; readonly error: boolean };
                       </div>
                       <div class="tl-profile-info">
                         <span class="tl-profile-name">{{ row.name || '—' }}</span>
-                        <span class="tl-profile-sub">{{ row.email || '—' }}</span>
+                        @if (row.email) {
+                          <span class="tl-profile-sub">{{ row.email }}</span>
+                        }
                       </div>
                     </div>
                   </td>
@@ -514,6 +532,7 @@ export class ClinicDoctorsComponent implements OnInit {
 
   protected readonly canManage = computed(() => this.sessions.can()(PERMISSIONS.doctorManage));
 
+  protected readonly showDoctorsInfo = signal(false);
   protected readonly rows = signal<readonly ClinicDoctorProfile[]>([]);
   protected readonly clinics = signal<readonly ClinicLocation[]>([]);
   protected readonly services = signal<readonly ClinicProcedure[]>([]);

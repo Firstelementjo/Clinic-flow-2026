@@ -71,8 +71,14 @@ public class ClinicEncounterController {
             @PathVariable("encounterId") String encounterId,
             @RequestParam(required = false) String projectId) {
         TenantContext caller = TenantContextHolder.get();
-        return encounterService.getEncounterDetail(
-                scope(projectId), RequestParams.requiredUuid(encounterId, "encounterId"), caller);
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
+        UUID encId = RequestParams.requiredUuid(encounterId, "encounterId");
+        EncounterModels.EncounterDetail detail = encounterService.getEncounterDetail(
+                scope(projectId), encId, caller);
+        if (!patId.equals(detail.encounter().patientId())) {
+            throw new ResourceNotFoundException("Resource not found");
+        }
+        return detail;
     }
 
     /**
@@ -99,9 +105,11 @@ public class ClinicEncounterController {
             description = "Clinicians only (CLN-07). Validates FDI notation (CLN-03) and updates linked treatment item (CLN-05).")
     public Map<String, Object> createEncounter(
             @PathVariable("patientId") String patientId,
+            @RequestParam(required = false) String projectId,
             @RequestBody EncounterModels.CreateEncounterRequest request) {
         TenantContext caller = TenantContextHolder.get();
-        ClinicScope writeScope = writeScope(request.projectId());
+        String effectiveProj = request.projectId() != null ? request.projectId() : projectId;
+        ClinicScope writeScope = writeScope(effectiveProj);
         UUID id = encounterService.createEncounter(
                 writeScope, RequestParams.requiredUuid(patientId, "patientId"), request, caller);
         return Map.of("id", id, "created", true);
@@ -120,8 +128,16 @@ public class ClinicEncounterController {
             @RequestParam(required = false) String projectId,
             @RequestBody EncounterModels.UpdateDiagnosisRequest request) {
         TenantContext caller = TenantContextHolder.get();
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
         UUID encId = RequestParams.requiredUuid(encounterId, "encounterId");
-        encounterService.updateDiagnosis(writeScope(projectId), encId, request, caller);
+        ClinicScope s = writeScope(projectId);
+        requireEncounterBelongsToPatient(s, patId, encId, caller);
+        try {
+            encounterService.updateDiagnosis(s, encId, request, caller);
+        } catch (IllegalStateException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.CONFLICT, ex.getMessage(), ex);
+        }
         return Map.of("id", encId, "updated", true);
     }
 
@@ -141,7 +157,9 @@ public class ClinicEncounterController {
         TenantContext caller = TenantContextHolder.get();
         UUID encId = RequestParams.requiredUuid(encounterId, "encounterId");
         UUID patId = RequestParams.requiredUuid(patientId, "patientId");
-        UUID rxId = encounterService.addPrescription(writeScope(projectId), encId, patId, request, caller);
+        ClinicScope s = writeScope(projectId);
+        requireEncounterBelongsToPatient(s, patId, encId, caller);
+        UUID rxId = encounterService.addPrescription(s, encId, patId, request, caller);
         return Map.of("id", rxId, "created", true);
     }
 
@@ -157,8 +175,12 @@ public class ClinicEncounterController {
             @PathVariable("prescriptionId") String prescriptionId,
             @RequestParam(required = false) String projectId) {
         TenantContext caller = TenantContextHolder.get();
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
+        UUID encId = RequestParams.requiredUuid(encounterId, "encounterId");
         UUID rxId = RequestParams.requiredUuid(prescriptionId, "prescriptionId");
-        encounterService.deletePrescription(writeScope(projectId), rxId, caller);
+        ClinicScope s = writeScope(projectId);
+        requireEncounterBelongsToPatient(s, patId, encId, caller);
+        encounterService.deletePrescription(s, rxId, caller);
         return Map.of("id", rxId, "deleted", true);
     }
 
@@ -186,6 +208,10 @@ public class ClinicEncounterController {
             @PathVariable("patientId") String patientId,
             @PathVariable("encounterId") String encounterId,
             @RequestParam(required = false) String projectId) {
+        TenantContext caller = TenantContextHolder.get();
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
+        UUID encId = RequestParams.requiredUuid(encounterId, "encounterId");
+        requireEncounterBelongsToPatient(scope(projectId), patId, encId, caller);
         return signEncounter(encounterId, projectId);
     }
 
@@ -216,6 +242,10 @@ public class ClinicEncounterController {
             @PathVariable("encounterId") String encounterId,
             @RequestParam(required = false) String projectId,
             @RequestBody EncounterModels.CreateAmendmentRequest request) {
+        TenantContext caller = TenantContextHolder.get();
+        UUID patId = RequestParams.requiredUuid(patientId, "patientId");
+        UUID encId = RequestParams.requiredUuid(encounterId, "encounterId");
+        requireEncounterBelongsToPatient(scope(projectId), patId, encId, caller);
         return addAmendment(encounterId, projectId, request);
     }
 
@@ -412,6 +442,62 @@ public class ClinicEncounterController {
                 writeScope(request.projectId()), request, caller);
     }
 
+    // ------------------------------------------------------------------
+    // Dental Labs (Prosthetic & Lab Orders)
+    // ------------------------------------------------------------------
+
+    @GetMapping("/lab-orders")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "List dental lab orders")
+    public List<EncounterModels.LabOrderRow> listLabOrders(
+            @RequestParam(required = false) String patientId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String projectId) {
+        return encounterService.listLabOrders(
+                scope(projectId),
+                RequestParams.optionalUuid(patientId, "patientId"),
+                status);
+    }
+
+    @PostMapping("/lab-orders")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Create a dental lab order")
+    public EncounterModels.LabOrderRow createLabOrder(
+            @RequestBody EncounterModels.CreateLabOrderRequest request,
+            @RequestParam(required = false) String projectId) {
+        TenantContext caller = TenantContextHolder.get();
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return encounterService.createLabOrder(writeScope(effectiveProject), request, caller);
+    }
+
+    @PatchMapping("/lab-orders/{orderId}/status")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Update dental lab order status")
+    public EncounterModels.LabOrderRow updateLabOrderStatus(
+            @PathVariable("orderId") UUID orderId,
+            @RequestBody EncounterModels.UpdateLabOrderStatusRequest request,
+            @RequestParam(required = false) String projectId) {
+        return encounterService.updateLabOrderStatus(writeScope(projectId), orderId, request);
+    }
+
+    @DeleteMapping("/lab-orders/{orderId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Delete a dental lab order")
+    public boolean deleteLabOrder(
+            @PathVariable("orderId") UUID orderId,
+            @RequestParam(required = false) String projectId) {
+        return encounterService.deleteLabOrder(writeScope(projectId), orderId);
+    }
+
+    private void requireEncounterBelongsToPatient(
+            ClinicScope scope, UUID patientId, UUID encounterId, TenantContext caller) {
+        EncounterModels.EncounterDetail detail = encounterService.getEncounterDetail(scope, encounterId, caller);
+        if (!patientId.equals(detail.encounter().patientId())) {
+            throw new ResourceNotFoundException("Resource not found");
+        }
+    }
+
     private ClinicScope scope(String projectId) {
         return ClinicScope.forRequestedProject(
                 guard, TenantContextHolder.get(), RequestParams.optionalUuid(projectId, "projectId"));
@@ -423,7 +509,7 @@ public class ClinicEncounterController {
             return scope;
         }
         var reachable = scope.accessibleProjectIds();
-        if (!reachable.isEmpty()) {
+        if (reachable.size() == 1) {
             return ClinicScope.forRequestedProject(guard, TenantContextHolder.get(), reachable.get(0));
         }
         throw new ResourceNotFoundException("Resource not found");

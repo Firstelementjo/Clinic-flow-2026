@@ -24,14 +24,35 @@ body {
   color: var(--ink);
   font-family: var(--fe-font-body);
   font-size: var(--fe-text-base);
-  line-height: 1.5;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[lang="ar"],
+[dir="rtl"],
+:lang(ar) {
+  font-family: 'IBM Plex Sans Arabic', 'Plus Jakarta Sans', system-ui, sans-serif;
+  letter-spacing: 0 !important;
+  line-height: 1.5;
 }
 
 h1,
 h2,
 h3,
-h4,
+h4 {
+  margin: 0;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+[lang="ar"] h1, [lang="ar"] h2, [lang="ar"] h3, [lang="ar"] h4,
+[dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3, [dir="rtl"] h4 {
+  letter-spacing: 0 !important;
+  line-height: 1.5 !important;
+}
+
 p,
 figure {
   margin: 0;
@@ -45,6 +66,46 @@ textarea {
   color: inherit;
 }
 
+button,
+[role="button"],
+a,
+.tab-btn,
+.fe-btn,
+.tl-btn,
+.quick-action-btn,
+.agenda-open-btn,
+.card-open-btn,
+.tl-filter-btn,
+.tl-info-trigger {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent !important;
+}
+
+button:focus,
+[role="button"]:focus,
+a:focus,
+.tab-btn:focus,
+.fe-btn:focus,
+.tl-btn:focus,
+.tl-filter-btn:focus,
+.tl-info-trigger:focus {
+  outline: none !important;
+}
+
+button:focus:not(:focus-visible),
+[role="button"]:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+.tab-btn:focus:not(:focus-visible),
+.fe-btn:focus:not(:focus-visible),
+.tl-btn:focus:not(:focus-visible),
+.tl-filter-btn:focus:not(:focus-visible),
+.tl-info-trigger:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* Visible focus on every interactive element, never removed. */
 :focus-visible {
   outline: 2px solid var(--fe-focus);
@@ -52,7 +113,11 @@ textarea {
 }
 
 /* Operational figures compare by position, so they are always tabular. */
-.fe-num,
+.fe-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
 .fe-mono {
   font-family: var(--fe-font-mono);
   font-variant-numeric: tabular-nums;

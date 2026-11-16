@@ -59,7 +59,7 @@ public class ClinicMediaService {
             throw new IllegalArgumentException("Upload file content cannot be empty");
         }
         if (request.content().length > ClinicMediaModels.MAX_FILE_BYTES) {
-            throw new IllegalArgumentException("File size exceeds maximum allowed limit (25MB)");
+            throw new IllegalArgumentException("File size exceeds maximum allowed limit (200MB)");
         }
 
         String contentType = request.contentType() != null ? request.contentType().toLowerCase() : "application/octet-stream";

@@ -80,7 +80,7 @@ public class ClinicAiController {
     }
 
     @PostMapping("/governance/kill-switch")
-    @RequirePermission(Permission.APPOINTMENT_READ)
+    @RequirePermission(Permission.DOCTOR_READ_MANAGEMENT)
     @Operation(summary = "Toggle emergency AI kill switch",
             description = "Immediately halts or resumes all clinic AI assistant proposal generation.")
     public ClinicAiModels.ClinicAiGovernanceRow toggleKillSwitch(
@@ -89,7 +89,7 @@ public class ClinicAiController {
         TenantContext caller = TenantContextHolder.get();
         return aiService.toggleKillSwitch(
                 scope(projectId),
-                request.killSwitchActive(),
+                request.isActive(),
                 request.reason(),
                 caller.userId(),
                 actorName(caller),

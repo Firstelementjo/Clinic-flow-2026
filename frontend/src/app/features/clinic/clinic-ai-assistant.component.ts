@@ -41,18 +41,29 @@ interface ChatMessage {
             <h1 class="tl-ai-title">
               {{ isArabic() ? 'مركز إدارة موظف الاستقبال الذكي' : 'AI Clinic Receptionist Console' }}
             </h1>
+            <div class="tl-info-wrap">
+              <button
+                type="button"
+                class="tl-info-trigger"
+                [class.is-active]="showAiInfo()"
+                (click)="showAiInfo.set(!showAiInfo())"
+                title="AI receptionist info"
+              >?</button>
+              @if (showAiInfo()) {
+                <div class="tl-info-popover">
+                  {{
+                    isArabic()
+                      ? 'إدارة وضبط الوكيل الآلي للرد على استفسارات المرضى، توفير معلومات الفروع والأسعار، وجدولة المواعيد'
+                      : 'Configure and monitor the 24/7 autonomous receptionist for patient inquiries, branch info, pricing, and scheduling'
+                  }}
+                </div>
+              }
+            </div>
             <span class="tl-ai-status-badge">
               <span class="tl-pulse-dot" aria-hidden="true"></span>
               {{ isArabic() ? 'متصل وجاهز للرد 24/7' : 'Online & Active 24/7' }}
             </span>
           </div>
-          <p class="tl-ai-subtitle">
-            {{
-              isArabic()
-                ? 'إدارة وضبط الوكيل الآلي للرد على استفسارات المرضى، توفير معلومات الفروع والأسعار، وجدولة المواعيد'
-                : 'Configure and monitor the 24/7 autonomous receptionist for patient inquiries, branch info, pricing, and scheduling'
-            }}
-          </p>
         </div>
 
         <div class="tl-ai-header-actions">
@@ -1387,6 +1398,7 @@ export class ClinicAiAssistantComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly projectContext = inject(ProjectContextService);
 
+  protected readonly showAiInfo = signal(false);
   protected readonly loading = signal(false);
   protected readonly error = signal(false);
   protected readonly isSaving = signal(false);

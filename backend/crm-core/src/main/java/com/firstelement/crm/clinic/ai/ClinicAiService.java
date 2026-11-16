@@ -581,8 +581,11 @@ public class ClinicAiService {
 
         String msgLower = message.toLowerCase(Locale.ROOT);
 
+        // 0. Emergency Kill Switch Enforcement
+        assertAiEnabled(scope);
+
         // 1. Strict Medical & Clinical Safety Guardrail
-        if (msgLower.matches(".*(وجع|ألم|أسناني بتوجعني|ضرس|مسكن|بروفين|بندول|تورم|انتفاخ|التهاب|دم|نزيف|حرارة|صديد|علاج|دواء|مضاد|pain|ache|hurt|swelling|bleeding|ibuprofen|antibiotic|paracetamol|medicine).*")) {
+        if (msgLower.matches(".*(وجع|ألم|أسناني بتوجعني|ضرس|مسكن|بروفين|بندول|تورم|انتفاخ|التهاب|دم|نزيف|حرارة|صديد|علاج|دواء|مضاد|مضاعفات|pain|ache|hurt|swelling|bleeding|fever|infection|complication|pus|ibuprofen|antibiotic|paracetamol|medicine).*")) {
             return new ClinicAiModels.TestChatResponse(
                     "سلامتك وما تشوف شر! بصفتي المساعد الإداري للعيادة، لا يمكنني تقديم استشارات طبية أو تشخيص للأعراض أو وصف أدوية حرصاً على سلامتك. أفضل وأسلم إجراء هو فحص الحالة سريرياً من قبل الطبيب في العيادة لتحديد السبب والعلاج المناسب بدقة. هل تحب أساعدك في حجز أقرب موعد كشف متاح مع الطبيب المختص؟",
                     "clinical_safety_guardrail",

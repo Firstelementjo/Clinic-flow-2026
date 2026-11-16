@@ -11,17 +11,55 @@
     </h1>
   </div>
 
-  <!-- Some cards are behind permissions the caller does not hold. The server
-       decided that, and the screen says so rather than looking broken. -->
+  <!-- Some cards are behind permissions the caller does not hold. -->
   @if (withheld()) {
-    <p class="tl-withheld" data-testid="dashboard-withheld">
-      {{ 'dashboard.withheld' | t }}
-    </p>
+    <div class="tl-withheld-wrap" data-testid="dashboard-withheld">
+      <span class="fe-badge fe-badge--warn">Notice</span>
+      <div class="tl-info-wrap">
+        <button
+          type="button"
+          class="tl-info-trigger"
+          [class.is-active]="showWithheldInfo()"
+          (click)="toggleWithheldInfo()"
+          title="Access details"
+        >?</button>
+        @if (showWithheldInfo()) {
+          <div class="tl-info-popover">
+            {{ 'dashboard.withheld' | t }}
+          </div>
+        }
+      </div>
+    </div>
   }
 
-  <!-- Performance Header with Date Filter -->
+  <!-- Performance Header with Date Filter & On-Demand Info -->
   <div class="tl-performance-bar">
-    <h2 class="tl-section-title">{{ 'dashboard.performance.title' | t }}</h2>
+    <div class="tl-section-title-wrap">
+      <h2 class="tl-section-title">{{ 'dashboard.performance.title' | t }}</h2>
+      <div class="tl-info-wrap">
+        <button
+          type="button"
+          class="tl-info-trigger"
+          [class.is-active]="showPerformanceInfo()"
+          (click)="togglePerformanceInfo()"
+          title="Performance timeframe details"
+        >?</button>
+        @if (showPerformanceInfo()) {
+          <div class="tl-info-popover">
+            @if (loading()) {
+              <span>{{ 'dashboard.performance.loading' | t }}</span>
+            } @else if (performanceError(); as error) {
+              <span class="is-error" role="alert" data-testid="dashboard-error">{{ error }}</span>
+              @if (performanceRequestId(); as requestId) {
+                <span class="tl-request-id">{{ 'state.requestId' | t }}: {{ requestId }}</span>
+              }
+            } @else {
+              <span>{{ windowLabel() }}</span>
+            }
+          </div>
+        }
+      </div>
+    </div>
     <div class="tl-date-filter">
       <label class="tl-date-label" for="dashboard-select-date">
         {{ 'dashboard.performance.date' | t }}
@@ -42,20 +80,6 @@
         {{ 'dashboard.performance.submit' | t }}
       </button>
     </div>
-  </div>
-
-  <!-- The window the figures below were computed for. -->
-  <div class="tl-window-caption">
-    @if (loading()) {
-      <span>{{ 'dashboard.performance.loading' | t }}</span>
-    } @else if (performanceError(); as error) {
-      <span class="is-error" role="alert" data-testid="dashboard-error">{{ error }}</span>
-      @if (performanceRequestId(); as requestId) {
-        <span class="tl-request-id">{{ 'state.requestId' | t }}: {{ requestId }}</span>
-      }
-    } @else {
-      <span>{{ windowLabel() }}</span>
-    }
   </div>
 
   <!-- 2-Column Dashboard Grid -->
@@ -153,6 +177,20 @@
         <div class="tl-chart-header">
           <div class="tl-chart-header-left">
             <h3 class="tl-chart-title">{{ 'dashboard.chart.title' | t }}</h3>
+            <div class="tl-info-wrap">
+              <button
+                type="button"
+                class="tl-info-trigger"
+                [class.is-active]="showChartInfo()"
+                (click)="toggleChartInfo()"
+                title="Revenue chart details"
+              >?</button>
+              @if (showChartInfo()) {
+                <div class="tl-info-popover">
+                  <span>Aggregated invoiced clinic revenue for the selected timeframe.</span>
+                </div>
+              }
+            </div>
             @if (hoveredPoint(); as hp) {
               <div class="tl-chart-hover-pill">
                 <span class="tl-hover-point-label">{{ hp.label }}:</span>
@@ -287,7 +325,23 @@
     <div class="tl-layout-side">
       <!-- Visited Patient by Age Card -->
       <div class="tl-card tl-side-card">
-        <h3 class="tl-card-header-title">{{ 'dashboard.age.title' | t }}</h3>
+        <div class="tl-side-card-header">
+          <h3 class="tl-card-header-title">{{ 'dashboard.age.title' | t }}</h3>
+          <div class="tl-info-wrap tl-info-wrap--end">
+            <button
+              type="button"
+              class="tl-info-trigger"
+              [class.is-active]="showAgeInfo()"
+              (click)="toggleAgeInfo()"
+              title="Age distribution info"
+            >?</button>
+            @if (showAgeInfo()) {
+              <div class="tl-info-popover is-end">
+                <span>Distribution of attended patients categorized across age brackets (0-25, 26-50, 50+).</span>
+              </div>
+            }
+          </div>
+        </div>
         <div class="tl-age-row">
           <!-- 0-25 age -->
           <div class="tl-age-col">
@@ -335,10 +389,26 @@
 
       <!-- Upcoming Appointment Card -->
       <div class="tl-card tl-side-card">
-        <h3 class="tl-card-header-title">{{ 'dashboard.upcoming.title' | t }}</h3>
+        <div class="tl-side-card-header">
+          <h3 class="tl-card-header-title">{{ 'dashboard.upcoming.title' | t }}</h3>
+          <div class="tl-info-wrap tl-info-wrap--end">
+            <button
+              type="button"
+              class="tl-info-trigger"
+              [class.is-active]="showUpcomingInfo()"
+              (click)="toggleUpcomingInfo()"
+              title="Upcoming appointments info"
+            >?</button>
+            @if (showUpcomingInfo()) {
+              <div class="tl-info-popover is-end">
+                <span>{{ 'dashboard.upcoming.empty' | t }}</span>
+              </div>
+            }
+          </div>
+        </div>
         @if (upcomingAppointments().length === 0) {
           <div class="tl-no-data" data-testid="dashboard-upcoming-empty">
-            <p>{{ 'dashboard.upcoming.empty' | t }}</p>
+            <span class="tl-empty-dash">—</span>
           </div>
         } @else {
           <div class="tl-upcoming-items">

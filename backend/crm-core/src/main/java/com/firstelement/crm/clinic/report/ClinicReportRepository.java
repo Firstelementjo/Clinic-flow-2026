@@ -37,7 +37,7 @@ public class ClinicReportRepository {
                            coalesce(sum(ci."paidAmount") filter (where ci."status" != 'CANCELLED'), 0.000) as total_collected,
                            coalesce(sum(ci."discountAmount") filter (where ci."status" != 'CANCELLED'), 0.000) as total_discount,
                            coalesce(sum(ci."balanceDue") filter (where ci."status" != 'CANCELLED'), 0.000) as total_balance_due,
-                           count(ci.id) as invoice_count,
+                           count(ci.id) filter (where ci."status" != 'CANCELLED') as invoice_count,
                            coalesce(p.pmt_count, 0) as payment_count
                       from "clinic_invoices" ci
                       left join (
@@ -77,7 +77,9 @@ public class ClinicReportRepository {
             return jdbc.query("""
                     select d.id as "doctorId", d.name as "doctorName", d.specialty,
                            coalesce(appts.appt_count, 0) as appointment_count,
-                           coalesce(encs.enc_count, 0) as encounter_count
+                           coalesce(encs.enc_count, 0) as encounter_count,
+                           coalesce(rev.total_invoiced, 0.000) as total_invoiced,
+                           coalesce(rev.total_collected, 0.000) as total_collected
                       from "doctors" d
                       left join (
                           select a."doctorId", count(a.id) as appt_count
@@ -93,10 +95,22 @@ public class ClinicReportRepository {
                              and ce."visitDate" >= :start and ce."visitDate" <= :end
                            group by ce."doctorId"
                       ) encs on encs."doctorId" = d.id
+                      left join (
+                          select ce2."doctorId",
+                                 coalesce(sum(ci."totalAmount") filter (where ci."status" != 'CANCELLED'), 0.000) as total_invoiced,
+                                 coalesce(sum(ci."paidAmount") filter (where ci."status" != 'CANCELLED'), 0.000) as total_collected
+                            from "clinical_encounters" ce2
+                            join "clinic_invoices" ci
+                              on ci."encounterId" = ce2."id"
+                             and ci."organizationId" = ce2."organizationId"
+                           where %s
+                             and ci."issuedAt" >= :start and ci."issuedAt" <= :end
+                           group by ce2."doctorId"
+                      ) rev on rev."doctorId" = d.id
                      where %s
                        and d."isActive" = true
                      order by appt_count desc, enc_count desc
-                    """.formatted(scope.predicate("a"), scope.predicate("ce"), scope.predicate("d")),
+                    """.formatted(scope.predicate("a"), scope.predicate("ce"), scope.predicate("ce2"), scope.predicate("d")),
                     params,
                     (rs, rowNum) -> new ClinicReportModels.DoctorProductivityRow(
                             (UUID) rs.getObject("doctorId"),
@@ -104,8 +118,8 @@ public class ClinicReportRepository {
                             rs.getString("specialty"),
                             rs.getInt("appointment_count"),
                             rs.getInt("encounter_count"),
-                            BigDecimal.ZERO,
-                            BigDecimal.ZERO
+                            rs.getBigDecimal("total_invoiced"),
+                            rs.getBigDecimal("total_collected")
                     ));
         });
     }
@@ -203,12 +217,11 @@ public class ClinicReportRepository {
                                  extract(year from age(cast(:onDate as date), p."dateOfBirth"))::int as years
                             from "patients" p
                             join "appointments" a
-                              on a."customerId" = p."customerId"
+                              on (a."patientId" = p."id" or (a."patientId" is null and a."customerId" is not null and a."customerId" = p."customerId"))
                              and a."organizationId" = p."organizationId"
                            where %s
                              and %s
                              and p."deletedAt" is null
-                             and p."customerId" is not null
                              and p."dateOfBirth" is not null
                              and a."appointmentDate" >= :start and a."appointmentDate" <= :end
                       ) v

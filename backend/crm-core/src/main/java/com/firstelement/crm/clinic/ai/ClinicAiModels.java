@@ -79,9 +79,21 @@ public final class ClinicAiModels {
     ) {}
 
     public record ToggleKillSwitchRequest(
-            boolean killSwitchActive,
+            Boolean killSwitchActive,
+            Boolean engaged,
             String reason
-    ) {}
+    ) {
+        public ToggleKillSwitchRequest(boolean killSwitchActive, String reason) {
+            this(killSwitchActive, killSwitchActive, reason);
+        }
+
+        public boolean isActive() {
+            if (killSwitchActive != null) {
+                return killSwitchActive;
+            }
+            return engaged != null && engaged;
+        }
+    }
 
     public record ReviewProposalRequest(
             String reviewDecision,

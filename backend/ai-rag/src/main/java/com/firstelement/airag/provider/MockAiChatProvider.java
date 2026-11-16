@@ -122,7 +122,7 @@ public class MockAiChatProvider implements AiChatProvider {
         String model = options == null || options.getModel() == null ? "mock-deterministic-v1"
             : options.getModel();
 
-        log.debug("mock provider answered model={} inputTokens={} outputTokens={} toolCalls={}", model,
+        log.debug("mock provider answered model={} promptSize={} completionSize={} toolCalls={}", model,
             inputTokens, outputTokens, toolCalls.size());
 
         // The builder is used rather than the protected constructor so the tool calls and the token

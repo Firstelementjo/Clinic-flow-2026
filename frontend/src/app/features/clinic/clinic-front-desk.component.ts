@@ -46,11 +46,27 @@ type Toast = { readonly message: string; readonly error: boolean };
   template: `
     <div class="tl-page" data-testid="clinic-front-desk">
       <div class="tl-page-top">
-        <nav class="tl-breadcrumbs" aria-label="Breadcrumb">
-          <a [routerLink]="isPlatformAdmin() ? '/app/admin/dashboard' : '/app/dashboard'">{{ 'clinicAdmin.nav.home' | t }}</a>
-          <span aria-hidden="true">&gt;&gt;</span>
-          <span class="active">{{ 'clinicAdmin.frontDesk.breadcrumb' | t }}</span>
-        </nav>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <nav class="tl-breadcrumbs" aria-label="Breadcrumb">
+            <a [routerLink]="isPlatformAdmin() ? '/app/admin/dashboard' : '/app/dashboard'">{{ 'clinicAdmin.nav.home' | t }}</a>
+            <span aria-hidden="true">&gt;&gt;</span>
+            <span class="active">{{ 'clinicAdmin.frontDesk.breadcrumb' | t }}</span>
+          </nav>
+          <div class="tl-info-wrap">
+            <button
+              type="button"
+              class="tl-info-trigger"
+              [class.is-active]="showFrontDeskInfo()"
+              (click)="showFrontDeskInfo.set(!showFrontDeskInfo())"
+              title="Front desk info"
+            >?</button>
+            @if (showFrontDeskInfo()) {
+              <div class="tl-info-popover">
+                {{ 'clinicAdmin.frontDesk.emptyBody' | t }}
+              </div>
+            }
+          </div>
+        </div>
         @if (!isPlatformAdmin()) {
           <a
             class="tl-btn tl-btn-dark"
@@ -534,6 +550,7 @@ export class ClinicFrontDeskComponent implements OnInit {
 
   protected readonly canManage = computed(() => this.sessions.can()(PERMISSIONS.frontDeskManage));
 
+  protected readonly showFrontDeskInfo = signal(false);
   protected readonly rows = signal<readonly ClinicFrontDeskOfficer[]>([]);
   protected readonly clinics = signal<readonly ClinicLocation[]>([]);
   protected readonly quota = signal<{ activeUsersCount: number; activeFdoCount: number; effectiveMaxUsers: number } | null>(null);

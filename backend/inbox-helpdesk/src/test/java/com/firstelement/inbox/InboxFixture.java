@@ -84,6 +84,12 @@ public class InboxFixture {
         // composite tenant foreign keys Phase 35 added are ON DELETE SET NULL (column) -- deleting
         // a doctor first would silently null every appointment's doctorId instead of refusing,
         // which would leave a clinic assertion quietly running against unassigned rows.
+        // clinical_encounters / clinical_prescriptions reference doctors with ON DELETE RESTRICT.
+        // A clinic suite that records an encounter would otherwise make "delete from doctors"
+        // below fail for every suite that runs after it. TRUNCATE (not DELETE) because the
+        // clinical tables carry append-only row triggers; disposable test containers only.
+        jdbc.getJdbcOperations().execute(
+            "truncate table clinical_prescriptions, clinical_encounters cascade");
         jdbc.update("delete from appointments", new MapSqlParameterSource());
         jdbc.update("delete from procedures", new MapSqlParameterSource());
         jdbc.update("delete from doctors", new MapSqlParameterSource());

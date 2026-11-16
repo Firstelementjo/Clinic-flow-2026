@@ -383,8 +383,8 @@ export const clinicStrings = {
   },
   'calendar.more': { ar: 'تحميل المزيد', en: 'Load more' },
   'calendar.noMore': {
-    ar: 'آخر صفحة. الخادم لم يُرسل مؤشّر صفحة تالية.',
-    en: 'That is the last page. The server sent no next-page cursor.',
+    ar: 'تم عرض جميع المواعيد',
+    en: 'All appointments loaded',
   },
   'calendar.open': { ar: 'فتح الموعد', en: 'Open the appointment' },
   'calendar.noGrid': {
@@ -880,6 +880,14 @@ export const clinicStrings = {
   // -- reports -------------------------------------------------------------
   'reports.title': { ar: 'تقارير العيادة ومؤشرات الأداء', en: 'Clinic Reports & Analytics' },
   'reports.description': {
+    ar: 'متابعة الإيرادات والتحصيل حسب العملة، وإنتاجية الكادر الطبي، ومعدلات إلغاء المواعيد.',
+    en: 'Track revenue, collections, clinician productivity, and appointment cancellation rates.',
+  },
+  'reports.subtitle': {
+    ar: 'متابعة الإيرادات والتحصيل حسب العملة، وإنتاجية الكادر الطبي، ومعدلات إلغاء المواعيد.',
+    en: 'Track revenue, collections, clinician productivity, and appointment cancellation rates.',
+  },
+  'clinic.reports.subtitle': {
     ar: 'متابعة الإيرادات والتحصيل حسب العملة، وإنتاجية الكادر الطبي، ومعدلات إلغاء المواعيد.',
     en: 'Track revenue, collections, clinician productivity, and appointment cancellation rates.',
   },

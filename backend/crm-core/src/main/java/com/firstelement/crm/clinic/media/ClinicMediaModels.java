@@ -45,11 +45,19 @@ public final class ClinicMediaModels {
             "image/tiff",
             "application/pdf",
             "application/dicom",
-            "image/dicom-rle"
+            "image/dicom-rle",
+            "application/octet-stream",
+            "model/stl",
+            "application/sla",
+            "application/vnd.ms-pki.stl",
+            "model/obj",
+            "model/ply",
+            "model/gltf-binary",
+            "model/gltf+json"
     );
 
-    /** Max file size: 25 megabytes */
-    public static final long MAX_FILE_BYTES = 25 * 1024 * 1024;
+    /** Max file size: 200 megabytes */
+    public static final long MAX_FILE_BYTES = 200L * 1024 * 1024;
 
     /** Access audit actions */
     public static final String ACTION_VIEW = "VIEW";

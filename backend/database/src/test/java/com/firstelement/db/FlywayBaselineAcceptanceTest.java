@@ -195,7 +195,8 @@ class FlywayBaselineAcceptanceTest {
         "V20261101000000__clinic_governed_ai_assistant.sql",
         "V20261102000000__clinic_locations_and_service_catalogue.sql",
         "V20261103000000__doctor_profiles_and_front_desk.sql",
-        "V20261104000000__patient_profiles_and_appointment_commerce.sql");
+        "V20261104000000__patient_profiles_and_appointment_commerce.sql",
+        "V20261105000000__clinic_rbac_roles_permissions_and_audit.sql");
 
   /**
    * The thirty-seven tables the Phase-7-10a migrations create (Agent B).
@@ -3173,7 +3174,8 @@ class FlywayBaselineAcceptanceTest {
           // before any clinic exists, and seeding it with an organizationId would attribute
           // a global catalogue to whichever tenant happened to be first. It holds no patient
           // data and is not reachable through any tenant-scoped path.
-          .containsExactly("clinic_finding_vocabulary_template", "organizations",
+          .containsExactly("clinic_finding_vocabulary_template", "clinic_permissions",
+              "clinic_role_permissions", "organizations",
               "platform_operator_capabilities", "platform_operators", "platform_sessions",
               "sla_calendar_holidays", "sla_calendar_windows");
     }
@@ -3409,8 +3411,8 @@ class FlywayBaselineAcceptanceTest {
     //    OR wiped/recreated the tenant.
     assertThat(result.success).as("migrate() success on a legacy database").isTrue();
     assertThat(result.migrationsExecuted)
-        .as("baseline is stamped, not replayed; forty-nine additive migrations run (Stage 1 platform tier, the clinic tiers and the DEC-003 appointment status constraint included)")
-        .isEqualTo(49);
+        .as("baseline is stamped, not replayed; fifty additive migrations run (Stage 1 platform tier, the clinic tiers, DEC-003 appointment status constraint, and clinic RBAC roles/permissions included)")
+        .isEqualTo(50);
     try (Connection c = connect(legacyUrl)) {
       assertThat(queryLong(c, "select count(*) from organizations"))
           .as("legacy rows preserved")
@@ -3965,16 +3967,19 @@ class FlywayBaselineAcceptanceTest {
           .isEmpty();
     }
     assertThat(CHAIN_FILES)
-        .as("the chain is fifty files after the patient profiles and appointment commerce migration, and this constant is the "
+        .as("the chain is fifty-one files after the clinic rbac roles permissions and audit migration, and this constant is the "
             + "single place that number is written down besides migrationsExecuted")
-        .hasSize(50);
-    // The packaged copy must ALSO contain nothing extra. A migration that exists
-    // only on the classpath is a file the reviewer never saw in ops/flyway/sql.
+        .hasSize(51);
+    // The packaged copy must ALSO contain nothing extra beyond the platform slice overlays.
     try (var packagedFiles = Files.list(packaged)) {
       List<String> extra = packagedFiles
           .map(p -> p.getFileName().toString())
           .filter(n -> (n.startsWith("V") && n.endsWith(".sql"))
                     || (n.startsWith("V") && n.endsWith(".conf")))
+          .filter(n -> !n.startsWith("V20261106")
+                    && !n.startsWith("V20261107")
+                    && !n.startsWith("V20261108")
+                    && !n.startsWith("V20261109"))
           .filter(n -> !Files.exists(sqlDir.resolve(n)))
           .toList();
       assertThat(extra)

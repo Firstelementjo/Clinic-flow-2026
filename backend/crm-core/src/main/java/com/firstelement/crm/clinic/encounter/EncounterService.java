@@ -291,6 +291,11 @@ public class EncounterService {
         EncounterModels.EncounterHeader encounter = repository.findEncounter(scope, encounterId, false)
                 .orElseThrow(() -> new ResourceNotFoundException("Clinical encounter not found"));
 
+        if (encounter.isSigned()) {
+            throw new IllegalStateException(
+                    "Signed encounters are immutable and cannot have prescriptions added.");
+        }
+
         UUID doctorId = request.doctorId() != null ? request.doctorId() : encounter.doctorId();
 
         return repository.insertPrescription(
@@ -311,6 +316,14 @@ public class EncounterService {
     @Transactional
     public void deletePrescription(ClinicScope scope, UUID prescriptionId, TenantContext caller) {
         assertClinicianOrAdmin(caller);
+        UUID encounterId = repository.findPrescriptionEncounterId(scope, prescriptionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Prescription not found"));
+        EncounterModels.EncounterHeader encounter = repository.findEncounter(scope, encounterId, false)
+                .orElseThrow(() -> new ResourceNotFoundException("Clinical encounter not found"));
+        if (encounter.isSigned()) {
+            throw new IllegalStateException(
+                    "Signed encounters are immutable and cannot have prescriptions deleted.");
+        }
         boolean ok = repository.deletePrescription(scope, prescriptionId);
         if (!ok) {
             throw new ResourceNotFoundException("Prescription not found");
@@ -424,6 +437,12 @@ public class EncounterService {
     @Transactional
     public void deletePrescriptionSheet(ClinicScope scope, UUID encounterId, TenantContext caller) {
         assertClinicianOrAdmin(caller);
+        EncounterModels.EncounterHeader encounter = repository.findEncounter(scope, encounterId, false)
+                .orElseThrow(() -> new ResourceNotFoundException("Clinical encounter not found"));
+        if (encounter.isSigned()) {
+            throw new IllegalStateException(
+                    "Signed encounters are immutable and cannot have prescription sheets deleted.");
+        }
         repository.deletePrescriptionSheet(scope, encounterId);
     }
 
@@ -502,6 +521,44 @@ public class EncounterService {
             TenantContext caller) {
         assertClinicianOrAdmin(caller);
         return repository.upsertLetterheadSettings(scope, request);
+    }
+
+    public List<EncounterModels.LabOrderRow> listLabOrders(
+            ClinicScope scope, UUID patientId, String status) {
+        return repository.listLabOrders(scope, patientId, status);
+    }
+
+    @Transactional
+    public EncounterModels.LabOrderRow createLabOrder(
+            ClinicScope scope, EncounterModels.CreateLabOrderRequest request, TenantContext caller) {
+        if (request.patientId() == null) {
+            throw new IllegalArgumentException("patientId is required");
+        }
+        if (request.labName() == null || request.labName().trim().isBlank()) {
+            throw new IllegalArgumentException("labName is required");
+        }
+        if (request.workType() == null || request.workType().trim().isBlank()) {
+            throw new IllegalArgumentException("workType is required");
+        }
+        validateToothFdi(request.toothFdi());
+        if (request.teethFdi() != null) {
+            request.teethFdi().forEach(EncounterService::validateToothFdi);
+        }
+        return repository.createLabOrder(scope, request);
+    }
+
+    @Transactional
+    public EncounterModels.LabOrderRow updateLabOrderStatus(
+            ClinicScope scope, UUID orderId, EncounterModels.UpdateLabOrderStatusRequest request) {
+        if (request.status() == null || request.status().trim().isBlank()) {
+            throw new IllegalArgumentException("status is required");
+        }
+        return repository.updateLabOrderStatus(scope, orderId, request.status(), request.notes());
+    }
+
+    @Transactional
+    public boolean deleteLabOrder(ClinicScope scope, UUID orderId) {
+        return repository.deleteLabOrder(scope, orderId);
     }
 
     private static void validateToothFdi(Integer fdi) {

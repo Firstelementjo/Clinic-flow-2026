@@ -1,9 +1,18 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { ClinicApi, type ClinicDoctor } from '../../core/api/endpoints';
+import { ProjectContextService } from '../../core/context/project-context.service';
+import {
+  ClinicPatientApi,
+  type ClinicLabOrder,
+  type ClinicPatient,
+} from './clinic-patient.api';
 
 export interface LabOrderRecord {
   readonly id: string;
+  readonly patientId?: string;
+  readonly doctorId?: string | null;
   readonly doctorName: string;
   readonly patientName: string;
   readonly caseType: string;
@@ -226,12 +235,14 @@ const LL_TEETH: readonly number[] = [31, 32, 33, 34, 35, 36, 37, 38];
                     <span>Select Doctor *</span>
                     <select
                       class="tl-input"
-                      [value]="draftDoctor()"
-                      (change)="draftDoctor.set($any($event.target).value)"
+                      [value]="draftDoctorId()"
+                      [disabled]="editingOrderId() !== null"
+                      (change)="draftDoctorId.set($any($event.target).value)"
                     >
-                      <option value="Dr. Eman Khan">Dr. Eman Khan</option>
-                      <option value="Dr. Bilal Ahmed">Dr. Bilal Ahmed</option>
-                      <option value="Dr. Sara Malik">Dr. Sara Malik</option>
+                      <option value="" disabled>Select doctor</option>
+                      @for (doctor of doctors(); track doctor.id) {
+                        <option [value]="doctor.id">{{ doctor.name }}</option>
+                      }
                     </select>
                   </label>
 
@@ -239,14 +250,14 @@ const LL_TEETH: readonly number[] = [31, 32, 33, 34, 35, 36, 37, 38];
                     <span>Select Patient *</span>
                     <select
                       class="tl-input"
-                      [value]="draftPatient()"
-                      (change)="draftPatient.set($any($event.target).value)"
+                      [value]="draftPatientId()"
+                      [disabled]="editingOrderId() !== null"
+                      (change)="draftPatientId.set($any($event.target).value)"
                     >
-                      <option value="Mr. Awais">Mr. Awais</option>
-                      <option value="Mrs. Sana">Mrs. Sana</option>
-                      <option value="Ali Raza">Ali Raza</option>
-                      <option value="Zainab Tariq">Zainab Tariq</option>
-                      <option value="Hassan Mahmood">Hassan Mahmood</option>
+                      <option value="" disabled>Select patient</option>
+                      @for (patient of patients(); track patient.id) {
+                        <option [value]="patient.id">{{ patient.displayName }}</option>
+                      }
                     </select>
                   </label>
 
@@ -255,6 +266,7 @@ const LL_TEETH: readonly number[] = [31, 32, 33, 34, 35, 36, 37, 38];
                     <select
                       class="tl-input"
                       [value]="draftCaseType()"
+                      [disabled]="editingOrderId() !== null"
                       (change)="draftCaseType.set($any($event.target).value)"
                     >
                       <option value="Zirconia Crown (Monolithic)">Zirconia Crown (Monolithic)</option>
@@ -291,6 +303,7 @@ const LL_TEETH: readonly number[] = [31, 32, 33, 34, 35, 36, 37, 38];
                     <select
                       class="tl-input"
                       [value]="draftImpressionType()"
+                      [disabled]="editingOrderId() !== null"
                       (change)="draftImpressionType.set($any($event.target).value)"
                     >
                       <option value="Digital Intraoral Scan (STL)">Digital Intraoral Scan (STL)</option>
@@ -305,6 +318,7 @@ const LL_TEETH: readonly number[] = [31, 32, 33, 34, 35, 36, 37, 38];
                     <select
                       class="tl-input"
                       [value]="draftShade()"
+                      [disabled]="editingOrderId() !== null"
                       (change)="draftShade.set($any($event.target).value)"
                     >
                       <option value="A1">A1</option>
@@ -638,11 +652,17 @@ const LL_TEETH: readonly number[] = [31, 32, 33, 34, 35, 36, 37, 38];
         font-size: 13px;
       }
       .tl-table thead th {
-        background: var(--tl-teal);
-        color: var(--on-accent);
+        background: var(--surf2);
+        color: var(--mute);
         text-align: left;
-        padding: 12px 14px;
+        padding: 10px 14px;
+        font-size: 11px;
         font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+        border: none;
+        border-bottom: 1px solid var(--line);
       }
       .tl-table tbody td {
         padding: 12px 14px;
@@ -961,62 +981,21 @@ const LL_TEETH: readonly number[] = [31, 32, 33, 34, 35, 36, 37, 38];
     `,
   ],
 })
-export class ClinicLabComponent {
+export class ClinicLabComponent implements OnInit {
+  private readonly api = inject(ClinicPatientApi);
+  private readonly clinic = inject(ClinicApi);
+  private readonly projects = inject(ProjectContextService);
+
   protected readonly urTeethList = UR_TEETH;
   protected readonly ulTeethList = UL_TEETH;
   protected readonly lrTeethList = LR_TEETH;
   protected readonly llTeethList = LL_TEETH;
 
-  protected readonly orders = signal<readonly LabOrderRecord[]>([
-    {
-      id: 'LAB-1041',
-      doctorName: 'Dr. Eman Khan',
-      patientName: 'Mr. Awais',
-      caseType: 'Zirconia Crown (Monolithic)',
-      impressionType: 'Digital Intraoral Scan (STL)',
-      shade: 'A2',
-      status: 'In Production',
-      createdAt: '2026-04-08 11:20 AM',
-      urTeeth: [16, 15],
-      ulTeeth: [],
-      lrTeeth: [],
-      llTeeth: [36],
-      rxNotes: 'Chamfer margin, light occlusal contact on #16, glazed zirconia.',
-      files: ['Upper_Arch_Awais.stl', 'Lower_Arch_Awais.stl'],
-    },
-    {
-      id: 'LAB-1042',
-      doctorName: 'Dr. Eman Khan',
-      patientName: 'Mrs. Sana',
-      caseType: 'E-Max Porcelain Veneer',
-      impressionType: 'PVS Elastomeric Putty/Wash',
-      shade: 'B1',
-      status: 'Sent to Lab',
-      createdAt: '2026-04-09 02:45 PM',
-      urTeeth: [13, 12, 11],
-      ulTeeth: [21, 22, 23],
-      lrTeeth: [],
-      llTeeth: [],
-      rxNotes: 'Natural incisal translucency, medium texture.',
-      files: ['Sana_SmileDesign_Photos.zip'],
-    },
-    {
-      id: 'LAB-1043',
-      doctorName: 'Dr. Bilal Ahmed',
-      patientName: 'Ali Raza',
-      caseType: 'Custom Implant Abutment + Crown',
-      impressionType: 'Digital Intraoral Scan (STL)',
-      shade: 'A3',
-      status: 'Completed',
-      createdAt: '2026-04-05 09:15 AM',
-      urTeeth: [],
-      ulTeeth: [],
-      lrTeeth: [46],
-      llTeeth: [],
-      rxNotes: 'Screw-retained titanium base abutment with occlusal access channel.',
-      files: ['ScanBody_46.stl'],
-    },
-  ]);
+  protected readonly orders = signal<readonly LabOrderRecord[]>([]);
+  protected readonly doctors = signal<readonly ClinicDoctor[]>([]);
+  protected readonly patients = signal<readonly ClinicPatient[]>([]);
+  protected readonly loading = signal(false);
+  protected readonly saveBusy = signal(false);
 
   protected readonly searchQuery = signal('');
   protected readonly bulkAction = signal('');
@@ -1027,8 +1006,8 @@ export class ClinicLabComponent {
   protected readonly editingOrderId = signal<string | null>(null);
 
   // Drawer form signals
-  protected readonly draftDoctor = signal('Dr. Eman Khan');
-  protected readonly draftPatient = signal('Mr. Awais');
+  protected readonly draftDoctorId = signal('');
+  protected readonly draftPatientId = signal('');
   protected readonly draftCaseType = signal('Zirconia Crown (Monolithic)');
   protected readonly draftStatus = signal<LabOrderRecord['status']>('Sent to Lab');
   protected readonly draftImpressionType = signal('Digital Intraoral Scan (STL)');
@@ -1059,10 +1038,75 @@ export class ClinicLabComponent {
     return rows.length > 0 && rows.every((r) => this.selectedIds().has(r.id));
   });
 
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  private projectQuery(): { projectId?: string } {
+    const projectId = this.projects.selectedProjectId();
+    return projectId ? { projectId } : {};
+  }
+
+  private async load(): Promise<void> {
+    this.loading.set(true);
+    try {
+      const query = this.projectQuery();
+      const [orders, doctors, patients] = await Promise.all([
+        this.api.labOrders(query),
+        this.clinic.doctors(query),
+        this.api.patients(query),
+      ]);
+      this.orders.set(orders.map((row) => this.toRecord(row)));
+      this.doctors.set(doctors.items ?? []);
+      this.patients.set(patients);
+    } catch {
+      this.bannerMessage.set('Could not load the lab pipeline. Check the clinic connection.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private toRecord(row: ClinicLabOrder): LabOrderRecord {
+    const teeth = row.teethFdi && row.teethFdi.length > 0
+      ? row.teethFdi
+      : row.toothFdi != null
+        ? [row.toothFdi]
+        : [];
+    const urTeeth: number[] = [];
+    const ulTeeth: number[] = [];
+    const lrTeeth: number[] = [];
+    const llTeeth: number[] = [];
+    for (const tooth of teeth) {
+      const quadrant = Math.floor(tooth / 10);
+      if (quadrant === 1) urTeeth.push(tooth);
+      else if (quadrant === 2) ulTeeth.push(tooth);
+      else if (quadrant === 3) llTeeth.push(tooth);
+      else if (quadrant === 4) lrTeeth.push(tooth);
+    }
+    return {
+      id: row.id,
+      patientId: row.patientId,
+      doctorId: row.doctorId ?? null,
+      doctorName: row.doctorName ?? '—',
+      patientName: row.patientName ?? '—',
+      caseType: row.workType,
+      impressionType: row.impressionType ?? '',
+      shade: row.shade ?? '',
+      status: LAB_STATUS_LABEL[row.status] ?? 'Sent to Lab',
+      createdAt: formatTimestamp(row.createdAt ?? row.sentDate),
+      urTeeth,
+      ulTeeth,
+      lrTeeth,
+      llTeeth,
+      rxNotes: row.notes ?? '',
+      files: row.files ?? [],
+    };
+  }
+
   protected openCreateDrawer(): void {
     this.editingOrderId.set(null);
-    this.draftDoctor.set('Dr. Eman Khan');
-    this.draftPatient.set('Mr. Awais');
+    this.draftDoctorId.set('');
+    this.draftPatientId.set('');
     this.draftCaseType.set('Zirconia Crown (Monolithic)');
     this.draftStatus.set('Sent to Lab');
     this.draftImpressionType.set('Digital Intraoral Scan (STL)');
@@ -1078,8 +1122,8 @@ export class ClinicLabComponent {
 
   protected viewOrder(row: LabOrderRecord): void {
     this.editingOrderId.set(row.id);
-    this.draftDoctor.set(row.doctorName);
-    this.draftPatient.set(row.patientName);
+    this.draftDoctorId.set(row.doctorId ?? '');
+    this.draftPatientId.set(row.patientId ?? '');
     this.draftCaseType.set(row.caseType);
     this.draftStatus.set(row.status);
     this.draftImpressionType.set(row.impressionType);
@@ -1098,6 +1142,7 @@ export class ClinicLabComponent {
   }
 
   protected toggleTooth(quadrant: 'UR' | 'UL' | 'LR' | 'LL', tooth: number): void {
+    if (this.editingOrderId() !== null) return;
     const target =
       quadrant === 'UR'
         ? this.selectedUrTeeth
@@ -1122,6 +1167,7 @@ export class ClinicLabComponent {
   }
 
   protected onFileSelected(label: string, event: Event): void {
+    if (this.editingOrderId() !== null) return;
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []).map((f) => f.name);
     if (files.length > 0) {
@@ -1133,45 +1179,80 @@ export class ClinicLabComponent {
 
   protected removeDraftFile(file: string, event: Event): void {
     event.stopPropagation();
+    if (this.editingOrderId() !== null) return;
     this.draftFiles.update((prev) => prev.filter((f) => f !== file));
   }
 
-  protected saveLabReport(): void {
+  protected async saveLabReport(): Promise<void> {
+    if (this.saveBusy()) return;
     const editingId = this.editingOrderId();
-    const record: LabOrderRecord = {
-      id: editingId ?? `LAB-${1044 + this.orders().length}`,
-      doctorName: this.draftDoctor(),
-      patientName: this.draftPatient(),
-      caseType: this.draftCaseType(),
-      impressionType: this.draftImpressionType(),
-      shade: this.draftShade(),
-      status: this.draftStatus(),
-      createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      urTeeth: Array.from(this.selectedUrTeeth()),
-      ulTeeth: Array.from(this.selectedUlTeeth()),
-      lrTeeth: Array.from(this.selectedLrTeeth()),
-      llTeeth: Array.from(this.selectedLlTeeth()),
-      rxNotes: this.draftRxNotes(),
-      files: this.draftFiles(),
-    };
-
     if (editingId) {
-      this.orders.update((list) => list.map((item) => (item.id === editingId ? record : item)));
-      this.bannerMessage.set(`Lab report ${editingId} updated successfully!`);
-    } else {
-      this.orders.update((list) => [record, ...list]);
-      this.bannerMessage.set(`Lab report ${record.id} created and sent to lab!`);
+      await this.applyStatus(editingId, this.draftStatus());
+      this.drawerOpen.set(false);
+      return;
     }
-    this.drawerOpen.set(false);
+
+    const patientId = this.draftPatientId();
+    if (!patientId) {
+      this.bannerMessage.set('Choose a patient before saving the lab report.');
+      return;
+    }
+    const teeth = [
+      ...Array.from(this.selectedUrTeeth()).sort((a, b) => a - b),
+      ...Array.from(this.selectedUlTeeth()).sort((a, b) => a - b),
+      ...Array.from(this.selectedLrTeeth()).sort((a, b) => a - b),
+      ...Array.from(this.selectedLlTeeth()).sort((a, b) => a - b),
+    ];
+    this.saveBusy.set(true);
+    try {
+      const created = await this.api.createLabOrder(
+        {
+          patientId,
+          doctorId: this.draftDoctorId() || null,
+          labName: DEFAULT_LAB_NAME,
+          workType: this.draftCaseType(),
+          impressionType: this.draftImpressionType(),
+          shade: this.draftShade(),
+          teethFdi: teeth,
+          toothFdi: teeth.length > 0 ? teeth[0] : null,
+          files: this.draftFiles(),
+          notes: this.draftRxNotes(),
+          ...this.projectQuery(),
+        },
+        this.projectQuery(),
+      );
+      let record = this.toRecord(created);
+      if (this.draftStatus() !== 'Sent to Lab') {
+        const moved = await this.api.updateLabOrderStatus(
+          created.id,
+          LAB_STATUS_WIRE[this.draftStatus()],
+          this.projectQuery(),
+        );
+        record = this.toRecord(moved);
+      }
+      this.orders.update((list) => [record, ...list]);
+      this.bannerMessage.set(`Lab report ${shortRef(record.id)} created and sent to the lab.`);
+      this.drawerOpen.set(false);
+    } catch {
+      this.bannerMessage.set('Could not save the lab report. The server refused the request.');
+    } finally {
+      this.saveBusy.set(false);
+    }
   }
 
-  protected deleteOrder(id: string): void {
-    this.orders.update((list) => list.filter((item) => item.id !== id));
-    this.bannerMessage.set(`Lab report ${id} deleted.`);
+  protected async deleteOrder(id: string): Promise<void> {
+    this.selectedIds.set(new Set());
+    try {
+      await this.api.deleteLabOrder(id, this.projectQuery());
+      this.orders.update((list) => list.filter((item) => item.id !== id));
+      this.bannerMessage.set(`Lab report ${shortRef(id)} deleted.`);
+    } catch {
+      this.bannerMessage.set('Could not delete the lab report.');
+    }
   }
 
   protected printOrder(row: LabOrderRecord): void {
-    this.bannerMessage.set(`Preparing printable Lab Rx sheet for ${row.id} (${row.patientName})...`);
+    this.bannerMessage.set(`Preparing printable Lab Rx sheet for ${shortRef(row.id)} (${row.patientName})...`);
     if (typeof window !== 'undefined' && typeof window.print === 'function') {
       window.print();
     }
@@ -1192,40 +1273,55 @@ export class ClinicLabComponent {
     this.selectedIds.set(new Set(this.filteredOrders().map((r) => r.id)));
   }
 
-  protected updateOrderStatus(id: string, newStatus: LabOrderRecord['status']): void {
-    this.orders.update((list) =>
-      list.map((r) => (r.id === id ? { ...r, status: newStatus } : r)),
-    );
-    this.bannerMessage.set(`Lab report ${id} status updated to "${newStatus}".`);
+  protected async updateOrderStatus(
+    id: string,
+    newStatus: LabOrderRecord['status'],
+  ): Promise<void> {
+    await this.applyStatus(id, newStatus);
   }
 
-  protected applyBulkAction(): void {
+  private async applyStatus(
+    id: string,
+    newStatus: LabOrderRecord['status'],
+  ): Promise<void> {
+    const current = this.orders().find((row) => row.id === id);
+    if (current?.status === newStatus) return;
+    try {
+      const updated = await this.api.updateLabOrderStatus(
+        id,
+        LAB_STATUS_WIRE[newStatus],
+        this.projectQuery(),
+      );
+      this.orders.update((list) =>
+        list.map((row) => (row.id === id ? this.toRecord(updated) : row)),
+      );
+      this.bannerMessage.set(`Lab report ${shortRef(id)} moved to "${newStatus}".`);
+    } catch {
+      this.bannerMessage.set(`Could not move ${shortRef(id)} to "${newStatus}".`);
+    }
+  }
+
+  protected async applyBulkAction(): Promise<void> {
     const action = this.bulkAction();
-    const ids = this.selectedIds();
-    if (!action || ids.size === 0) return;
+    const ids = Array.from(this.selectedIds());
+    if (!action || ids.length === 0) return;
     if (action === 'DELETE') {
-      this.orders.update((list) => list.filter((r) => !ids.has(r.id)));
-      this.bannerMessage.set(`Deleted ${ids.size} lab report(s).`);
-    } else if (action === 'SENT') {
-      this.orders.update((list) =>
-        list.map((r) => (ids.has(r.id) ? { ...r, status: 'Sent to Lab' } : r)),
-      );
-      this.bannerMessage.set(`Marked ${ids.size} lab report(s) as Sent to Lab.`);
-    } else if (action === 'PRODUCTION') {
-      this.orders.update((list) =>
-        list.map((r) => (ids.has(r.id) ? { ...r, status: 'In Production' } : r)),
-      );
-      this.bannerMessage.set(`Marked ${ids.size} lab report(s) as In Production.`);
-    } else if (action === 'QC') {
-      this.orders.update((list) =>
-        list.map((r) => (ids.has(r.id) ? { ...r, status: 'Quality Check' } : r)),
-      );
-      this.bannerMessage.set(`Marked ${ids.size} lab report(s) as Quality Check.`);
-    } else if (action === 'COMPLETED') {
-      this.orders.update((list) =>
-        list.map((r) => (ids.has(r.id) ? { ...r, status: 'Completed' } : r)),
-      );
-      this.bannerMessage.set(`Marked ${ids.size} lab report(s) as Completed.`);
+      for (const id of ids) {
+        try {
+          await this.api.deleteLabOrder(id, this.projectQuery());
+        } catch {
+          // Keep going: one refused row must not abort the rest of the batch.
+        }
+      }
+      await this.load();
+      this.bannerMessage.set(`Deleted ${ids.length} lab report(s).`);
+    } else {
+      const status = BULK_STATUS[action];
+      if (status) {
+        for (const id of ids) {
+          await this.applyStatus(id, status);
+        }
+      }
     }
     this.selectedIds.set(new Set());
   }
@@ -1250,4 +1346,39 @@ export class ClinicLabComponent {
     }
     this.bannerMessage.set(`Exported ${rows.length} lab report(s) to CSV.`);
   }
+}
+
+const DEFAULT_LAB_NAME = 'Partner Dental Lab';
+
+const LAB_STATUS_LABEL: Record<string, LabOrderRecord['status']> = {
+  SENT_TO_LAB: 'Sent to Lab',
+  IN_PRODUCTION: 'In Production',
+  QUALITY_CHECK: 'Quality Check',
+  COMPLETED: 'Completed',
+};
+
+const LAB_STATUS_WIRE: Record<LabOrderRecord['status'], string> = {
+  'Sent to Lab': 'SENT_TO_LAB',
+  'In Production': 'IN_PRODUCTION',
+  'Quality Check': 'QUALITY_CHECK',
+  Completed: 'COMPLETED',
+};
+
+const BULK_STATUS: Record<string, LabOrderRecord['status'] | undefined> = {
+  SENT: 'Sent to Lab',
+  PRODUCTION: 'In Production',
+  QC: 'Quality Check',
+  COMPLETED: 'Completed',
+};
+
+function shortRef(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }

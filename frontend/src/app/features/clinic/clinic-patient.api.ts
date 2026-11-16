@@ -6,7 +6,7 @@
  * `ClinicApi` in `core/api/endpoints.ts` is generated-model-typed and covers the seven
  * routes the committed OpenAPI document declares under `/api/v1/clinic`. The six routes
  * below exist in the backend (`ClinicPatientController`) and are **absent from the
- * committed document** — verified against `tests/contracts/openapi.json`, which lists
+ * committed document** â€” verified against `tests/contracts/openapi.json`, which lists
  * exactly seven clinic paths and none of these. `core/api` is not this phase's
  * ownership, and the endpoint layer is the right home for them the moment the contract
  * is re-promoted, so they are declared here, feature-scoped, and typed against the
@@ -31,7 +31,7 @@
  * ## The vocabulary route is deliberately not called
  *
  * `GET /api/v1/clinic/odontogram/vocabulary` exists, but its javadoc says it "copies
- * the published template on first call" — it is a GET that **seeds a table**. A read
+ * the published template on first call" â€” it is a GET that **seeds a table**. A read
  * screen that triggers a write on page load is a decision this product does not get to
  * make by accident, so the odontogram screen renders the finding's own `code`, `scope`,
  * `state` and `source` exactly as the server sent them and does not translate them
@@ -61,7 +61,7 @@ export interface ClinicPatient {
   readonly isActive?: boolean;
   readonly locale?: string;
   readonly createdAt?: string;
-  /** An identifier linking to the CRM record — not a licence to read that record. */
+  /** An identifier linking to the CRM record â€” not a licence to read that record. */
   readonly customerId?: string;
   readonly deleted?: boolean;
 }
@@ -222,7 +222,7 @@ export class ClinicPatientApi {
     return this.api.get('/api/v1/clinic/patients', query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}` — absent and unauthorized are one answer. */
+  /** `GET /api/v1/clinic/patients/{patientId}` â€” absent and unauthorized are one answer. */
   patient(patientId: string, query: ClinicPatientQuery = {}): Promise<ClinicPatient> {
     return this.api.get(
       `/api/v1/clinic/patients/${encodeURIComponent(patientId)}`,
@@ -230,7 +230,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/odontogram` — newest observation first. */
+  /** `GET /api/v1/clinic/patients/{patientId}/odontogram` â€” newest observation first. */
   odontogram(
     patientId: string,
     query: ClinicPatientQuery = {},
@@ -245,7 +245,7 @@ export class ClinicPatientApi {
    * `GET /api/v1/clinic/patients/{patientId}/odontogram/tooth/{toothFdi}`
    *
    * One tooth's history, oldest first. A number the server does not recognise matches no
-   * rows rather than being refused — which is why this screen only ever requests a tooth
+   * rows rather than being refused â€” which is why this screen only ever requests a tooth
    * number the server itself published on a finding.
    */
   toothHistory(
@@ -261,7 +261,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/odontogram/findings` — record a finding. */
+  /** `POST /api/v1/clinic/patients/{patientId}/odontogram/findings` â€” record a finding. */
   recordFinding(
     patientId: string,
     payload: RecordFindingPayload,
@@ -274,7 +274,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/odontogram/findings/{findingId}/correct` — supersede finding. */
+  /** `POST /api/v1/clinic/patients/{patientId}/odontogram/findings/{findingId}/correct` â€” supersede finding. */
   correctFinding(
     patientId: string,
     findingId: string,
@@ -288,7 +288,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/periodontal/exams` — list periodontal exams. */
+  /** `GET /api/v1/clinic/patients/{patientId}/periodontal/exams` â€” list periodontal exams. */
   periodontalExams(
     patientId: string,
     query: ClinicPatientQuery = {},
@@ -299,7 +299,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/periodontal/exams/{examId}` — periodontal exam detail. */
+  /** `GET /api/v1/clinic/patients/{patientId}/periodontal/exams/{examId}` â€” periodontal exam detail. */
   periodontalExam(
     patientId: string,
     examId: string,
@@ -311,7 +311,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/periodontal/exams` — record periodontal exam session. */
+  /** `POST /api/v1/clinic/patients/{patientId}/periodontal/exams` â€” record periodontal exam session. */
   createPeriodontalExam(
     patientId: string,
     payload: CreatePeriodontalExamPayload,
@@ -324,7 +324,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/periodontal/latest` — latest measurements per tooth. */
+  /** `GET /api/v1/clinic/patients/{patientId}/periodontal/latest` â€” latest measurements per tooth. */
   latestPeriodontalChart(
     patientId: string,
     query: ClinicPatientQuery = {},
@@ -336,7 +336,7 @@ export class ClinicPatientApi {
   }
 
   /**
-   * `GET /api/v1/clinic/availability` — bookable slots for one dentist on one date.
+   * `GET /api/v1/clinic/availability` â€” bookable slots for one dentist on one date.
    *
    * `doctorId` and `date` are required. `durationMinutes` and `bufferMinutes` are
    * sent because the selected service owns them: the server's 30/0 defaults are the
@@ -356,12 +356,12 @@ export class ClinicPatientApi {
 
   // ---- Treatment Plans (TRT-01 to TRT-05) -----------------------------------
 
-  /** `GET /api/v1/clinic/patients/{patientId}/treatment-plans` — list patient plans with financial totals. */
+  /** `GET /api/v1/clinic/patients/{patientId}/treatment-plans` â€” list patient plans with financial totals. */
   treatmentPlans(patientId: string, query: ClinicPatientQuery = {}): Promise<ClinicTreatmentPlanHeader[]> {
     return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/treatment-plans`, query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}` — plan detail with ordered items. */
+  /** `GET /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}` â€” plan detail with ordered items. */
   treatmentPlan(patientId: string, planId: string, query: ClinicPatientQuery = {}): Promise<ClinicTreatmentPlanDetail> {
     return this.api.get(
       `/api/v1/clinic/patients/${encodeURIComponent(patientId)}/treatment-plans/${encodeURIComponent(planId)}`,
@@ -369,7 +369,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans` — create a plan in DRAFT status. */
+  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans` â€” create a plan in DRAFT status. */
   createTreatmentPlan(
     patientId: string,
     payload: CreateTreatmentPlanPayload,
@@ -377,7 +377,7 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/treatment-plans`, payload);
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/fork` — fork new version (Slice S5). */
+  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/fork` â€” fork new version (Slice S5). */
   forkTreatmentPlan(
     patientId: string,
     planId: string,
@@ -391,7 +391,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/approve` — approve and activate plan with consent. */
+  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/approve` â€” approve and activate plan with consent. */
   approveTreatmentPlan(
     patientId: string,
     planId: string,
@@ -405,7 +405,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/cancel` — cancel plan with reason. */
+  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/cancel` â€” cancel plan with reason. */
   cancelTreatmentPlan(
     patientId: string,
     planId: string,
@@ -419,7 +419,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `PATCH /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/status` — change plan status. */
+  /** `PATCH /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/status` â€” change plan status. */
   updateTreatmentPlanStatus(
     patientId: string,
     planId: string,
@@ -433,7 +433,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/consent` — record patient consent (TRT-04). */
+  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/consent` â€” record patient consent (TRT-04). */
   recordTreatmentPlanConsent(
     patientId: string,
     planId: string,
@@ -447,7 +447,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/items` — add procedure step. */
+  /** `POST /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/items` â€” add procedure step. */
   addTreatmentPlanItem(
     patientId: string,
     planId: string,
@@ -461,7 +461,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `PATCH /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/items/{itemId}` — update item. */
+  /** `PATCH /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/items/{itemId}` â€” update item. */
   updateTreatmentPlanItem(
     patientId: string,
     planId: string,
@@ -476,7 +476,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `DELETE /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/items/{itemId}` — remove item. */
+  /** `DELETE /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}/items/{itemId}` â€” remove item. */
   deleteTreatmentPlanItem(
     patientId: string,
     planId: string,
@@ -489,7 +489,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `DELETE /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}` — remove plan. */
+  /** `DELETE /api/v1/clinic/patients/{patientId}/treatment-plans/{planId}` â€” remove plan. */
   deleteTreatmentPlan(
     patientId: string,
     planId: string,
@@ -501,7 +501,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/encounters` — list patient encounters (CLN-01). */
+  /** `GET /api/v1/clinic/patients/{patientId}/encounters` â€” list patient encounters (CLN-01). */
   listEncounters(
     patientId: string,
     query: ClinicPatientQuery = {},
@@ -509,7 +509,7 @@ export class ClinicPatientApi {
     return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/encounters`, query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/encounters/{encounterId}` — encounter detail with prescriptions. */
+  /** `GET /api/v1/clinic/patients/{patientId}/encounters/{encounterId}` â€” encounter detail with prescriptions. */
   getEncounterDetail(
     patientId: string,
     encounterId: string,
@@ -521,7 +521,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/encounters/{encounterId}` — direct encounter lookup. */
+  /** `GET /api/v1/clinic/encounters/{encounterId}` â€” direct encounter lookup. */
   getEncounterById(
     encounterId: string,
     query: ClinicPatientQuery = {},
@@ -529,7 +529,7 @@ export class ClinicPatientApi {
     return this.api.get(`/api/v1/clinic/encounters/${encodeURIComponent(encounterId)}`, query);
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/encounters` — record a new visit (CLN-01 to CLN-05). */
+  /** `POST /api/v1/clinic/patients/{patientId}/encounters` â€” record a new visit (CLN-01 to CLN-05). */
   createEncounter(
     patientId: string,
     payload: CreateEncounterPayload,
@@ -538,7 +538,7 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/encounters`, payload, query);
   }
 
-  /** `PATCH /api/v1/clinic/patients/{patientId}/encounters/{encounterId}/diagnosis` — update diagnosis and findings (CLN-02). */
+  /** `PATCH /api/v1/clinic/patients/{patientId}/encounters/{encounterId}/diagnosis` â€” update diagnosis and findings (CLN-02). */
   updateDiagnosis(
     patientId: string,
     encounterId: string,
@@ -552,7 +552,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/encounters/{encounterId}/prescriptions` — issue prescription (CLN-06). */
+  /** `POST /api/v1/clinic/patients/{patientId}/encounters/{encounterId}/prescriptions` â€” issue prescription (CLN-06). */
   addPrescription(
     patientId: string,
     encounterId: string,
@@ -579,12 +579,12 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/prescriptions` — list all grouped clinic prescription sheets. */
+  /** `GET /api/v1/clinic/prescriptions` â€” list all grouped clinic prescription sheets. */
   listClinicPrescriptions(query: ClinicPatientQuery = {}): Promise<ClinicPrescriptionSheet[]> {
     return this.api.get('/api/v1/clinic/prescriptions', query);
   }
 
-  /** `GET /api/v1/clinic/prescriptions/{id}` — get a single prescription sheet by ID. */
+  /** `GET /api/v1/clinic/prescriptions/{id}` â€” get a single prescription sheet by ID. */
   getClinicPrescription(
     id: string,
     query: ClinicPatientQuery = {},
@@ -592,7 +592,7 @@ export class ClinicPatientApi {
     return this.api.get(`/api/v1/clinic/prescriptions/${encodeURIComponent(id)}`, query);
   }
 
-  /** `POST /api/v1/clinic/prescriptions` — create a standalone multi-item prescription. */
+  /** `POST /api/v1/clinic/prescriptions` â€” create a standalone multi-item prescription. */
   createStandalonePrescription(
     payload: CreateStandalonePrescriptionPayload,
     query: ClinicPatientQuery = {},
@@ -600,7 +600,7 @@ export class ClinicPatientApi {
     return this.api.post('/api/v1/clinic/prescriptions', payload, query);
   }
 
-  /** `DELETE /api/v1/clinic/prescriptions/{id}` — delete a prescription sheet. */
+  /** `DELETE /api/v1/clinic/prescriptions/{id}` â€” delete a prescription sheet. */
   deletePrescriptionSheet(
     id: string,
     query: ClinicPatientQuery = {},
@@ -608,12 +608,12 @@ export class ClinicPatientApi {
     return this.api.delete(`/api/v1/clinic/prescriptions/${encodeURIComponent(id)}`, query);
   }
 
-  /** `GET /api/v1/clinic/settings/letterhead` — get customizable clinic letterhead settings. */
+  /** `GET /api/v1/clinic/settings/letterhead` â€” get customizable clinic letterhead settings. */
   getLetterheadSettings(query: ClinicPatientQuery = {}): Promise<ClinicLetterheadSettings> {
     return this.api.get('/api/v1/clinic/settings/letterhead', query);
   }
 
-  /** `PUT /api/v1/clinic/settings/letterhead` — update customizable clinic letterhead settings. */
+  /** `PUT /api/v1/clinic/settings/letterhead` â€” update customizable clinic letterhead settings. */
   updateLetterheadSettings(
     payload: UpdateLetterheadPayload,
     query: ClinicPatientQuery = {},
@@ -621,12 +621,12 @@ export class ClinicPatientApi {
     return this.api.put('/api/v1/clinic/settings/letterhead', payload, query);
   }
 
-  /** `GET /api/v1/clinic/settings/medications` — list saved medication presets. */
+  /** `GET /api/v1/clinic/settings/medications` â€” list saved medication presets. */
   listMedicationPresets(query: ClinicPatientQuery = {}): Promise<ClinicMedicationPreset[]> {
     return this.api.get('/api/v1/clinic/settings/medications', query);
   }
 
-  /** `POST /api/v1/clinic/settings/medications` — create a medication preset. */
+  /** `POST /api/v1/clinic/settings/medications` â€” create a medication preset. */
   createMedicationPreset(
     payload: CreateMedicationPresetPayload,
     query: ClinicPatientQuery = {},
@@ -634,7 +634,7 @@ export class ClinicPatientApi {
     return this.api.post('/api/v1/clinic/settings/medications', payload, query);
   }
 
-  /** `DELETE /api/v1/clinic/settings/medications/{id}` — delete a medication preset. */
+  /** `DELETE /api/v1/clinic/settings/medications/{id}` â€” delete a medication preset. */
   deleteMedicationPreset(
     id: string,
     query: ClinicPatientQuery = {},
@@ -642,12 +642,12 @@ export class ClinicPatientApi {
     return this.api.delete(`/api/v1/clinic/settings/medications/${encodeURIComponent(id)}`, query);
   }
 
-  /** `GET /api/v1/clinic/settings/diagnoses` — list quick diagnosis shortcuts. */
+  /** `GET /api/v1/clinic/settings/diagnoses` â€” list quick diagnosis shortcuts. */
   listDiagnosisPresets(query: ClinicPatientQuery = {}): Promise<ClinicDiagnosisPreset[]> {
     return this.api.get('/api/v1/clinic/settings/diagnoses', query);
   }
 
-  /** `POST /api/v1/clinic/settings/diagnoses` — create a diagnosis shortcut. */
+  /** `POST /api/v1/clinic/settings/diagnoses` â€” create a diagnosis shortcut. */
   createDiagnosisPreset(
     payload: CreateDiagnosisPresetPayload,
     query: ClinicPatientQuery = {},
@@ -655,7 +655,7 @@ export class ClinicPatientApi {
     return this.api.post('/api/v1/clinic/settings/diagnoses', payload, query);
   }
 
-  /** `DELETE /api/v1/clinic/settings/diagnoses/{id}` — delete a diagnosis shortcut. */
+  /** `DELETE /api/v1/clinic/settings/diagnoses/{id}` â€” delete a diagnosis shortcut. */
   deleteDiagnosisPreset(
     id: string,
     query: ClinicPatientQuery = {},
@@ -663,7 +663,7 @@ export class ClinicPatientApi {
     return this.api.delete(`/api/v1/clinic/settings/diagnoses/${encodeURIComponent(id)}`, query);
   }
 
-  /** `POST /api/v1/clinic/encounters/{encounterId}/sign` — digitally sign an encounter note (Slice S3). */
+  /** `POST /api/v1/clinic/encounters/{encounterId}/sign` â€” digitally sign an encounter note (Slice S3). */
   signEncounter(
     encounterId: string,
     query: ClinicPatientQuery = {},
@@ -671,7 +671,7 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/encounters/${encodeURIComponent(encounterId)}/sign`, {}, query);
   }
 
-  /** `POST /api/v1/clinic/encounters/{encounterId}/amendments` — append immutable amendment to signed note (Slice S3). */
+  /** `POST /api/v1/clinic/encounters/{encounterId}/amendments` â€” append immutable amendment to signed note (Slice S3). */
   addAmendment(
     encounterId: string,
     payload: CreateAmendmentPayload,
@@ -680,7 +680,7 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/encounters/${encodeURIComponent(encounterId)}/amendments`, payload, query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/medical-history` — fetch patient medical history and alerts (Slice S3). */
+  /** `GET /api/v1/clinic/patients/{patientId}/medical-history` â€” fetch patient medical history and alerts (Slice S3). */
   medicalHistory(
     patientId: string,
     query: ClinicPatientQuery = {},
@@ -688,7 +688,7 @@ export class ClinicPatientApi {
     return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/medical-history`, query);
   }
 
-  /** `PUT /api/v1/clinic/patients/{patientId}/medical-history` — save or update patient medical history (Slice S3). */
+  /** `PUT /api/v1/clinic/patients/{patientId}/medical-history` â€” save or update patient medical history (Slice S3). */
   saveMedicalHistory(
     patientId: string,
     payload: SaveMedicalHistoryPayload,
@@ -699,27 +699,27 @@ export class ClinicPatientApi {
 
   // ---- Invoices & Payments (BIL-01 to BIL-09) -------------------------------
 
-  /** `GET /api/v1/clinic/invoices` — list clinic invoices with optional status filter. */
+  /** `GET /api/v1/clinic/invoices` â€” list clinic invoices with optional status filter. */
   invoices(query: ClinicPatientQuery & { status?: string } = {}): Promise<ClinicInvoiceHeader[]> {
     return this.api.get('/api/v1/clinic/invoices', query);
   }
 
-  /** `GET /api/v1/clinic/invoices/{invoiceId}` — get full invoice detail with items & payments. */
+  /** `GET /api/v1/clinic/invoices/{invoiceId}` â€” get full invoice detail with items & payments. */
   invoice(invoiceId: string, query: ClinicPatientQuery = {}): Promise<ClinicInvoiceDetail> {
     return this.api.get(`/api/v1/clinic/invoices/${encodeURIComponent(invoiceId)}`, query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/invoices` — list all invoices for a patient. */
+  /** `GET /api/v1/clinic/patients/{patientId}/invoices` â€” list all invoices for a patient. */
   patientInvoices(patientId: string, query: ClinicPatientQuery = {}): Promise<ClinicInvoiceHeader[]> {
     return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/invoices`, query);
   }
 
-  /** `POST /api/v1/clinic/invoices` — issue a new invoice with line items (BIL-01). */
+  /** `POST /api/v1/clinic/invoices` â€” issue a new invoice with line items (BIL-01). */
   createInvoice(payload: CreateInvoicePayload, query: ClinicPatientQuery = {}): Promise<ClinicInvoiceHeader> {
     return this.api.post('/api/v1/clinic/invoices', payload, query);
   }
 
-  /** `POST /api/v1/clinic/invoices/{invoiceId}/discount` — apply a discount with mandatory reason (BIL-04). */
+  /** `POST /api/v1/clinic/invoices/{invoiceId}/discount` â€” apply a discount with mandatory reason (BIL-04). */
   applyDiscount(
     invoiceId: string,
     payload: ApplyDiscountPayload,
@@ -728,7 +728,7 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/invoices/${encodeURIComponent(invoiceId)}/discount`, payload, query);
   }
 
-  /** `POST /api/v1/clinic/invoices/{invoiceId}/cancel` — cancel an invoice with mandatory reason (BIL-05). */
+  /** `POST /api/v1/clinic/invoices/{invoiceId}/cancel` â€” cancel an invoice with mandatory reason (BIL-05). */
   cancelInvoice(
     invoiceId: string,
     payload: CancelInvoicePayload,
@@ -737,12 +737,12 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/invoices/${encodeURIComponent(invoiceId)}/cancel`, payload, query);
   }
 
-  /** `GET /api/v1/clinic/payments` — list all payments across clinic (BIL-02). */
+  /** `GET /api/v1/clinic/payments` â€” list all payments across clinic (BIL-02). */
   payments(query: ClinicPatientQuery = {}): Promise<ClinicPaymentRow[]> {
     return this.api.get('/api/v1/clinic/payments', query);
   }
 
-  /** `POST /api/v1/clinic/invoices/{invoiceId}/payments` — record a payment and receive receipt (BIL-02, BIL-06). */
+  /** `POST /api/v1/clinic/invoices/{invoiceId}/payments` â€” record a payment and receive receipt (BIL-02, BIL-06). */
   recordPayment(
     invoiceId: string,
     payload: RecordPaymentPayload,
@@ -751,12 +751,12 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/invoices/${encodeURIComponent(invoiceId)}/payments`, payload, query);
   }
 
-  /** `GET /api/v1/clinic/payments/{paymentId}/receipt` — fetch payment receipt for printing/PDF (BIL-06). */
+  /** `GET /api/v1/clinic/payments/{paymentId}/receipt` â€” fetch payment receipt for printing/PDF (BIL-06). */
   paymentReceipt(paymentId: string, query: ClinicPatientQuery = {}): Promise<ClinicPaymentReceipt> {
     return this.api.get(`/api/v1/clinic/payments/${encodeURIComponent(paymentId)}/receipt`, query);
   }
 
-  /** `POST /api/v1/clinic/invoices/from-plan` — generate invoice from approved treatment plan items. */
+  /** `POST /api/v1/clinic/invoices/from-plan` â€” generate invoice from approved treatment plan items. */
   generateInvoiceFromPlan(
     payload: GenerateInvoiceFromPlanPayload,
     query: ClinicPatientQuery = {},
@@ -764,7 +764,7 @@ export class ClinicPatientApi {
     return this.api.post('/api/v1/clinic/invoices/from-plan', payload, query);
   }
 
-  /** `POST /api/v1/clinic/invoices/{invoiceId}/refunds` — issue refund or payment reversal. */
+  /** `POST /api/v1/clinic/invoices/{invoiceId}/refunds` â€” issue refund or payment reversal. */
   recordRefund(
     invoiceId: string,
     payload: RecordRefundPayload,
@@ -773,83 +773,83 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/invoices/${encodeURIComponent(invoiceId)}/refunds`, payload, query);
   }
 
-  /** `GET /api/v1/clinic/invoices/{invoiceId}/refunds` — list refunds for an invoice. */
+  /** `GET /api/v1/clinic/invoices/{invoiceId}/refunds` â€” list refunds for an invoice. */
   invoiceRefunds(invoiceId: string, query: ClinicPatientQuery = {}): Promise<ClinicRefundRow[]> {
     return this.api.get(`/api/v1/clinic/invoices/${encodeURIComponent(invoiceId)}/refunds`, query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/ledger` — get append-only chronological ledger entries. */
+  /** `GET /api/v1/clinic/patients/{patientId}/ledger` â€” get append-only chronological ledger entries. */
   patientLedger(patientId: string, query: ClinicPatientQuery = {}): Promise<PatientLedgerEntryRow[]> {
     return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/ledger`, query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/statement` — consolidated statement of account. */
+  /** `GET /api/v1/clinic/patients/{patientId}/statement` â€” consolidated statement of account. */
   patientStatement(patientId: string, query: ClinicPatientQuery = {}): Promise<PatientStatement> {
     return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/statement`, query);
   }
 
   // ---- Reports & Policies (RPT-01 to RPT-05, USR-09) -----------------------
 
-  /** `GET /api/v1/clinic/reports` — aggregated clinical & financial metrics. */
+  /** `GET /api/v1/clinic/reports` â€” aggregated clinical & financial metrics. */
   reports(
     query: ClinicPatientQuery & { window?: string; start?: string; end?: string } = {},
   ): Promise<ClinicReportView> {
     return this.api.get('/api/v1/clinic/reports', query);
   }
 
-  /** `GET /api/v1/clinic/settings/policies` — read clinic policies (USR-09, BIL-07). */
+  /** `GET /api/v1/clinic/settings/policies` â€” read clinic policies (USR-09, BIL-07). */
   policies(query: ClinicPatientQuery = {}): Promise<ClinicPolicyRow> {
     return this.api.get('/api/v1/clinic/settings/policies', query);
   }
 
-  /** `PUT /api/v1/clinic/settings/policies` — update clinic policies. */
+  /** `PUT /api/v1/clinic/settings/policies` â€” update clinic policies. */
   updatePolicies(payload: UpdatePolicyPayload, query: ClinicPatientQuery = {}): Promise<ClinicPolicyRow> {
     return this.api.put('/api/v1/clinic/settings/policies', payload, query);
   }
 
   // ---- AI Assistant & Patient Management (CLN-09, PAT-04) ------------------
 
-  /** `GET /api/v1/clinic/ai/runs` — list operational AI runs for clinic. */
+  /** `GET /api/v1/clinic/ai/runs` â€” list operational AI runs for clinic. */
   aiRuns(query: ClinicPatientQuery & { status?: string; limit?: number } = {}): Promise<ClinicAiRun[]> {
     return this.api.get('/api/v1/clinic/ai/runs', query);
   }
 
-  /** `GET /api/v1/clinic/ai/overview` — get AI assistant metrics and CLN-09 compliance confirmation. */
+  /** `GET /api/v1/clinic/ai/overview` â€” get AI assistant metrics and CLN-09 compliance confirmation. */
   aiOverview(query: ClinicPatientQuery = {}): Promise<ClinicAiOverview> {
     return this.api.get('/api/v1/clinic/ai/overview', query);
   }
 
-  /** `GET /api/v1/clinic/ai/governance` — get AI assistant governance and emergency kill switch status. */
+  /** `GET /api/v1/clinic/ai/governance` â€” get AI assistant governance and emergency kill switch status. */
   aiGovernance(query: ClinicPatientQuery = {}): Promise<ClinicAiGovernanceRow> {
     return this.api.get('/api/v1/clinic/ai/governance', query);
   }
 
-  /** `POST /api/v1/clinic/ai/governance/kill-switch` — toggle emergency kill switch. */
+  /** `POST /api/v1/clinic/ai/governance/kill-switch` â€” toggle emergency kill switch. */
   toggleAiKillSwitch(payload: ToggleKillSwitchPayload, query: ClinicPatientQuery = {}): Promise<ClinicAiGovernanceRow> {
     return this.api.post('/api/v1/clinic/ai/governance/kill-switch', payload, query);
   }
 
-  /** `GET /api/v1/clinic/ai/agent-config` — get receptionist agent profile & channels */
+  /** `GET /api/v1/clinic/ai/agent-config` â€” get receptionist agent profile & channels */
   getAgentConfig(query: ClinicPatientQuery = {}): Promise<ClinicAgentConfig> {
     return this.api.get('/api/v1/clinic/ai/agent-config', query);
   }
 
-  /** `PUT /api/v1/clinic/ai/agent-config` — update receptionist agent profile */
+  /** `PUT /api/v1/clinic/ai/agent-config` â€” update receptionist agent profile */
   updateAgentConfig(config: ClinicAgentConfig, query: ClinicPatientQuery = {}): Promise<ClinicAgentConfig> {
     return this.api.put('/api/v1/clinic/ai/agent-config', config, query);
   }
 
-  /** `GET /api/v1/clinic/ai/agent-metrics` — get receptionist agent KPIs */
+  /** `GET /api/v1/clinic/ai/agent-metrics` â€” get receptionist agent KPIs */
   getAgentMetrics(query: ClinicPatientQuery = {}): Promise<ClinicAgentMetrics> {
     return this.api.get('/api/v1/clinic/ai/agent-metrics', query);
   }
 
-  /** `POST /api/v1/clinic/ai/test-chat` — test conversation with receptionist agent */
+  /** `POST /api/v1/clinic/ai/test-chat` â€” test conversation with receptionist agent */
   testAgentChat(message: string, query: ClinicPatientQuery = {}): Promise<ClinicTestChatResponse> {
     return this.api.post('/api/v1/clinic/ai/test-chat', { message }, query);
   }
 
-  /** `GET /api/v1/clinic/ai/proposals` — list governed AI proposals. */
+  /** `GET /api/v1/clinic/ai/proposals` â€” list governed AI proposals. */
   aiProposals(
     query: ClinicPatientQuery & {
       patientId?: string;
@@ -861,7 +861,7 @@ export class ClinicPatientApi {
     return this.api.get('/api/v1/clinic/ai/proposals', query);
   }
 
-  /** `POST /api/v1/clinic/ai/proposals/{proposalId}/review` — human review of AI proposal. */
+  /** `POST /api/v1/clinic/ai/proposals/{proposalId}/review` â€” human review of AI proposal. */
   reviewAiProposal(
     proposalId: string,
     payload: ReviewProposalPayload,
@@ -870,32 +870,32 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/ai/proposals/${encodeURIComponent(proposalId)}/review`, payload, query);
   }
 
-  /** `POST /api/v1/clinic/ai/proposals/visit-summary` — generate clinical visit summary draft. */
+  /** `POST /api/v1/clinic/ai/proposals/visit-summary` â€” generate clinical visit summary draft. */
   generateVisitSummaryDraft(payload: VisitSummaryDraftPayload, query: ClinicPatientQuery = {}): Promise<ClinicAiProposalRow> {
     return this.api.post('/api/v1/clinic/ai/proposals/visit-summary', payload, query);
   }
 
-  /** `POST /api/v1/clinic/ai/proposals/recall-prioritization` — generate recall/no-show prioritization proposal. */
+  /** `POST /api/v1/clinic/ai/proposals/recall-prioritization` â€” generate recall/no-show prioritization proposal. */
   generateRecallPrioritization(payload: RecallPrioritizationPayload, query: ClinicPatientQuery = {}): Promise<ClinicAiProposalRow> {
     return this.api.post('/api/v1/clinic/ai/proposals/recall-prioritization', payload, query);
   }
 
-  /** `POST /api/v1/clinic/ai/proposals/missing-fields` — audit missing fields in chart. */
+  /** `POST /api/v1/clinic/ai/proposals/missing-fields` â€” audit missing fields in chart. */
   auditMissingFields(payload: MissingFieldsAuditPayload, query: ClinicPatientQuery = {}): Promise<ClinicAiProposalRow> {
     return this.api.post('/api/v1/clinic/ai/proposals/missing-fields', payload, query);
   }
 
-  /** `POST /api/v1/clinic/ai/proposals/payment-matching` — propose FIFO payment matching. */
+  /** `POST /api/v1/clinic/ai/proposals/payment-matching` â€” propose FIFO payment matching. */
   proposePaymentMatching(payload: PaymentMatchProposalPayload, query: ClinicPatientQuery = {}): Promise<ClinicAiProposalRow> {
     return this.api.post('/api/v1/clinic/ai/proposals/payment-matching', payload, query);
   }
 
-  /** `POST /api/v1/clinic/ai/proposals/patient-message` — draft patient communication message. */
+  /** `POST /api/v1/clinic/ai/proposals/patient-message` â€” draft patient communication message. */
   draftPatientMessage(payload: PatientMessageDraftPayload, query: ClinicPatientQuery = {}): Promise<ClinicAiProposalRow> {
     return this.api.post('/api/v1/clinic/ai/proposals/patient-message', payload, query);
   }
 
-  /** `GET /api/v1/clinic/patients/duplicates` — check potential duplicate records (PAT-04). */
+  /** `GET /api/v1/clinic/patients/duplicates` â€” check potential duplicate records (PAT-04). */
   duplicateCandidates(
     params: {
       givenName?: string;
@@ -909,7 +909,7 @@ export class ClinicPatientApi {
     return this.api.get('/api/v1/clinic/patients/duplicates', params as unknown as QueryParams);
   }
 
-  /** `POST /api/v1/clinic/patients` — register a new patient in the clinic. */
+  /** `POST /api/v1/clinic/patients` â€” register a new patient in the clinic. */
   createPatient(payload: CreatePatientPayload, query: ClinicPatientQuery = {}): Promise<ClinicPatient> {
     return this.api.post('/api/v1/clinic/patients', payload, query);
   }
@@ -993,7 +993,7 @@ export class ClinicPatientApi {
     return this.api.patch(`/api/v1/clinic/schedules/appointments/${encodeURIComponent(appointmentId)}/status`, payload, query);
   }
 
-  /** `PATCH /api/v1/clinic/schedules/appointments/{id}/payment` — a separate decision from status. */
+  /** `PATCH /api/v1/clinic/schedules/appointments/{id}/payment` â€” a separate decision from status. */
   updateAppointmentPayment(
     appointmentId: string,
     paymentStatus: string,
@@ -1044,7 +1044,7 @@ export class ClinicPatientApi {
 
   // ---- Clinical Media, Radiographs & Documents (Slice S7) ------------------
 
-  /** `GET /api/v1/clinic/patients/{patientId}/media` — list clinical radiographs, photos, and documents. */
+  /** `GET /api/v1/clinic/patients/{patientId}/media` â€” list clinical radiographs, photos, and documents. */
   patientMedia(
     patientId: string,
     query: ClinicPatientQuery & { category?: string; toothFdi?: number; legalHoldOnly?: boolean } = {},
@@ -1052,7 +1052,7 @@ export class ClinicPatientApi {
     return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/media`, query);
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/media` — upload and encrypt clinical media. */
+  /** `POST /api/v1/clinic/patients/{patientId}/media` â€” upload and encrypt clinical media. */
   uploadMedia(
     patientId: string,
     payload: UploadMediaPayload,
@@ -1079,7 +1079,7 @@ export class ClinicPatientApi {
     return this.api.post(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/media`, formData, query);
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/media/{mediaId}/download-url` — mint short-lived signed URL. */
+  /** `GET /api/v1/clinic/patients/{patientId}/media/{mediaId}/download-url` â€” mint short-lived signed URL. */
   mediaDownloadUrl(
     patientId: string,
     mediaId: string,
@@ -1091,7 +1091,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `POST /api/v1/clinic/patients/{patientId}/media/{mediaId}/legal-hold` — toggle legal hold (DEC-007). */
+  /** `POST /api/v1/clinic/patients/{patientId}/media/{mediaId}/legal-hold` â€” toggle legal hold (DEC-007). */
   toggleLegalHold(
     patientId: string,
     mediaId: string,
@@ -1106,7 +1106,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `DELETE /api/v1/clinic/patients/{patientId}/media/{mediaId}` — soft-delete media (refused if hold active). */
+  /** `DELETE /api/v1/clinic/patients/{patientId}/media/{mediaId}` â€” soft-delete media (refused if hold active). */
   deleteMedia(
     patientId: string,
     mediaId: string,
@@ -1119,7 +1119,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/media/{mediaId}/audit` — get media access audit trail. */
+  /** `GET /api/v1/clinic/patients/{patientId}/media/{mediaId}/audit` â€” get media access audit trail. */
   mediaAudit(
     patientId: string,
     mediaId: string,
@@ -1131,7 +1131,7 @@ export class ClinicPatientApi {
     );
   }
 
-  /** `GET /api/v1/clinic/patients/{patientId}/media-audit` — get audit trail for all patient media. */
+  /** `GET /api/v1/clinic/patients/{patientId}/media-audit` â€” get audit trail for all patient media. */
   patientMediaAudit(
     patientId: string,
     query: ClinicPatientQuery = {},
@@ -1282,6 +1282,151 @@ export class ClinicPatientApi {
       ...(to ? { to } : {}),
     };
     return this.api.post('/api/v1/clinic/reports/export', {}, params);
+  }
+
+  // ---- Phase 4 --- Lab pipeline ----------------------------------------
+
+  /** `GET /api/v1/clinic/lab-orders` — the prosthetic pipeline, newest first. */
+  labOrders(
+    query: ClinicPatientQuery & { patientId?: string; status?: string } = {},
+  ): Promise<ClinicLabOrder[]> {
+    return this.api.get('/api/v1/clinic/lab-orders', query);
+  }
+
+  /** `POST /api/v1/clinic/lab-orders` — send a case to the lab. */
+  createLabOrder(
+    payload: CreateLabOrderPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<ClinicLabOrder> {
+    return this.api.post('/api/v1/clinic/lab-orders', payload, query);
+  }
+
+  /** `PATCH /api/v1/clinic/lab-orders/{orderId}/status` — move the case. */
+  updateLabOrderStatus(
+    orderId: string,
+    status: string,
+    query: ClinicPatientQuery = {},
+  ): Promise<ClinicLabOrder> {
+    return this.api.patch(
+      `/api/v1/clinic/lab-orders/${encodeURIComponent(orderId)}/status`,
+      { status },
+      query,
+    );
+  }
+
+  /** `DELETE /api/v1/clinic/lab-orders/{orderId}` — ADMIN only on the server. */
+  deleteLabOrder(orderId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(
+      `/api/v1/clinic/lab-orders/${encodeURIComponent(orderId)}`,
+      query,
+    );
+  }
+
+  // ---- Phase 4 --- Clear Aligner Lab ------------------------------------
+
+  /** `GET /api/v1/clinic/aligner-cases`. */
+  alignerCases(
+    query: ClinicPatientQuery & { status?: string } = {},
+  ): Promise<ClinicAlignerCase[]> {
+    return this.api.get('/api/v1/clinic/aligner-cases', query);
+  }
+
+  /** `POST /api/v1/clinic/aligner-cases`. */
+  createAlignerCase(
+    payload: CreateAlignerCasePayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<ClinicAlignerCase> {
+    return this.api.post('/api/v1/clinic/aligner-cases', payload, query);
+  }
+
+  /** `PATCH /api/v1/clinic/aligner-cases/{caseId}/status`. */
+  updateAlignerCaseStatus(
+    caseId: string,
+    status: string,
+    query: ClinicPatientQuery = {},
+  ): Promise<ClinicAlignerCase> {
+    return this.api.patch(
+      `/api/v1/clinic/aligner-cases/${encodeURIComponent(caseId)}/status`,
+      { status },
+      query,
+    );
+  }
+
+  /** `DELETE /api/v1/clinic/aligner-cases/{caseId}` — ADMIN only on the server. */
+  deleteAlignerCase(caseId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(
+      `/api/v1/clinic/aligner-cases/${encodeURIComponent(caseId)}`,
+      query,
+    );
+  }
+
+  // ---- Phase 4 --- Patient Feedback -------------------------------------
+
+  /** `GET /api/v1/clinic/feedback`, filtered by `q`, `doctorId` and `minRating`. */
+  feedbackList(
+    query: ClinicPatientQuery & { doctorId?: string; minRating?: number } = {},
+  ): Promise<ClinicFeedback[]> {
+    return this.api.get('/api/v1/clinic/feedback', query);
+  }
+
+  /** `POST /api/v1/clinic/feedback`. */
+  createFeedback(
+    payload: CreateFeedbackPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<ClinicFeedback> {
+    return this.api.post('/api/v1/clinic/feedback', payload, query);
+  }
+
+  /** `DELETE /api/v1/clinic/feedback/{feedbackId}` — ADMIN only on the server. */
+  deleteFeedback(feedbackId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(
+      `/api/v1/clinic/feedback/${encodeURIComponent(feedbackId)}`,
+      query,
+    );
+  }
+
+  // ---- Phase 4 --- Doctor commission and payouts -------------------------
+
+  /** `GET /api/v1/clinic/doctor-commission` — ADMIN-only earnings window. */
+  doctorCommission(
+    from?: string,
+    to?: string,
+    query: ClinicPatientQuery = {},
+  ): Promise<DoctorCommission[]> {
+    const params: QueryParams = {
+      ...query,
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    };
+    return this.api.get('/api/v1/clinic/doctor-commission', params);
+  }
+
+  /** `GET /api/v1/clinic/doctor-payouts`. */
+  doctorPayouts(
+    query: ClinicPatientQuery & { doctorId?: string; status?: string } = {},
+  ): Promise<DoctorPayout[]> {
+    return this.api.get('/api/v1/clinic/doctor-payouts', query);
+  }
+
+  /** `POST /api/v1/clinic/doctor-payouts` — server computes the amount. */
+  createDoctorPayout(
+    payload: CreateDoctorPayoutPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<DoctorPayout> {
+    return this.api.post('/api/v1/clinic/doctor-payouts', payload, query);
+  }
+
+  /** `PATCH /api/v1/clinic/doctor-payouts/{payoutId}/status`. */
+  updateDoctorPayoutStatus(
+    payoutId: string,
+    status: string,
+    query: ClinicPatientQuery = {},
+  ): Promise<DoctorPayout> {
+    return this.api.patch(
+      `/api/v1/clinic/doctor-payouts/${encodeURIComponent(payoutId)}/status`,
+      { status },
+      query,
+    );
   }
 }
 
@@ -2180,8 +2325,8 @@ export interface PatientMessageDraftPayload {
  * The wire shape is `PatientModels.DuplicateCandidate`: `patientId`, `patientNo`,
  * `displayName`, `score`, `matchedOn`.
  *
- * The score is a weighted point total, not a percentage — a shared phone number is
- * worth 60 points and a shared surname 10 — so it is printed as the server computed
+ * The score is a weighted point total, not a percentage â€” a shared phone number is
+ * worth 60 points and a shared surname 10 â€” so it is printed as the server computed
  * it and never turned into a probability. `matchedOn` is the list of fields that
  * matched, joined with `+`, and it is a wire value: it is printed, not interpreted.
  */
@@ -2575,8 +2720,179 @@ export interface CreateDiagnosisPresetPayload {
   readonly projectId?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 4: lab pipeline, aligner pipeline, feedback and doctor earnings
+// ---------------------------------------------------------------------------
 
+/** `EncounterModels.LabOrderRow`, including the Phase 40 impression/teeth/files. */
+export interface ClinicLabOrder {
+  readonly id: string;
+  readonly organizationId?: string;
+  readonly projectId?: string;
+  readonly patientId: string;
+  readonly patientName?: string;
+  readonly doctorId?: string | null;
+  readonly doctorName?: string | null;
+  readonly labName: string;
+  readonly workType: string;
+  readonly impressionType?: string | null;
+  readonly shade?: string | null;
+  readonly toothFdi?: number | null;
+  readonly teethFdi?: readonly number[];
+  readonly files?: readonly string[];
+  readonly status: string;
+  readonly sentDate?: string;
+  readonly dueDate?: string | null;
+  readonly receivedDate?: string | null;
+  readonly cost?: number;
+  readonly currency?: string;
+  readonly notes?: string | null;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
 
+export interface CreateLabOrderPayload {
+  readonly patientId: string;
+  readonly doctorId?: string | null;
+  readonly labName: string;
+  readonly workType: string;
+  readonly impressionType?: string;
+  readonly shade?: string;
+  readonly toothFdi?: number | null;
+  readonly teethFdi?: readonly number[];
+  readonly files?: readonly string[];
+  readonly dueDate?: string | null;
+  readonly cost?: number;
+  readonly currency?: string;
+  readonly notes?: string;
+  readonly projectId?: string;
+}
 
+/** `ClinicOperationsModels.AlignerCaseRow`. */
+export interface ClinicAlignerCase {
+  readonly id: string;
+  readonly organizationId?: string;
+  readonly projectId?: string;
+  readonly patientId: string;
+  readonly patientName?: string;
+  readonly doctorId?: string | null;
+  readonly doctorName?: string | null;
+  readonly caseType: string;
+  readonly impressionType?: string | null;
+  readonly shade?: string | null;
+  readonly status: string;
+  readonly upperSteps: number;
+  readonly lowerSteps: number;
+  readonly teethSummary?: string | null;
+  readonly iprSummary?: string | null;
+  readonly attachmentsCount: number;
+  readonly rxNotes?: string | null;
+  readonly files?: readonly string[];
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
 
+export interface CreateAlignerCasePayload {
+  readonly patientId: string;
+  readonly doctorId?: string | null;
+  readonly caseType: string;
+  readonly impressionType?: string;
+  readonly shade?: string;
+  readonly upperSteps?: number;
+  readonly lowerSteps?: number;
+  readonly teethSummary?: string;
+  readonly iprSummary?: string;
+  readonly attachmentsCount?: number;
+  readonly rxNotes?: string;
+  readonly files?: readonly string[];
+  readonly projectId?: string;
+}
 
+/** `ClinicOperationsModels.FeedbackRow`. */
+export interface ClinicFeedback {
+  readonly id: string;
+  readonly organizationId?: string;
+  readonly projectId?: string;
+  readonly patientId?: string | null;
+  readonly patientName: string;
+  readonly patientEmail?: string | null;
+  readonly patientPhone?: string | null;
+  readonly patientAge?: number | null;
+  readonly doctorId?: string | null;
+  readonly doctorName?: string | null;
+  readonly serviceName?: string | null;
+  readonly treatmentsReceived?: string | null;
+  readonly clinicLocation?: string | null;
+  readonly referralSource?: string | null;
+  readonly ratingExplanation: number;
+  readonly ratingHygiene: number;
+  readonly ratingCourtesy: number;
+  readonly ratingComfort: number;
+  readonly ratingRecommend: number;
+  readonly message?: string | null;
+  readonly submittedAt?: string;
+  readonly createdAt?: string;
+}
+
+export interface CreateFeedbackPayload {
+  readonly patientId?: string | null;
+  readonly doctorId?: string | null;
+  readonly patientName: string;
+  readonly patientEmail?: string;
+  readonly patientPhone?: string;
+  readonly patientAge?: number | null;
+  readonly doctorName?: string;
+  readonly serviceName?: string;
+  readonly treatmentsReceived?: string;
+  readonly clinicLocation?: string;
+  readonly referralSource?: string;
+  readonly ratingExplanation?: number;
+  readonly ratingHygiene?: number;
+  readonly ratingCourtesy?: number;
+  readonly ratingComfort?: number;
+  readonly ratingRecommend?: number;
+  readonly message?: string;
+  readonly projectId?: string;
+}
+
+/** `ClinicOperationsModels.DoctorCommissionRow`. */
+export interface DoctorCommission {
+  readonly doctorId: string;
+  readonly doctorName: string;
+  readonly specialty?: string | null;
+  readonly commissionRate: number;
+  readonly appointmentCount: number;
+  readonly grossRevenue: number;
+  readonly commissionAmount: number;
+  readonly paidAmount: number;
+  readonly balanceDue: number;
+  readonly currency?: string;
+}
+
+/** `ClinicOperationsModels.DoctorPayoutRow`. */
+export interface DoctorPayout {
+  readonly id: string;
+  readonly organizationId?: string;
+  readonly projectId?: string;
+  readonly doctorId: string;
+  readonly doctorName?: string;
+  readonly periodStart: string;
+  readonly periodEnd: string;
+  readonly grossAmount: number;
+  readonly commissionRate: number;
+  readonly commissionAmount: number;
+  readonly currency?: string;
+  readonly status: string;
+  readonly paidAt?: string | null;
+  readonly notes?: string | null;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+export interface CreateDoctorPayoutPayload {
+  readonly doctorId: string;
+  readonly periodStart: string;
+  readonly periodEnd: string;
+  readonly notes?: string;
+  readonly projectId?: string;
+}

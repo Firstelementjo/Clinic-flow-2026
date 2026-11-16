@@ -129,8 +129,6 @@ public class SecurityConfiguration {
         //
         // Scoped to the webhook prefix on purpose. A broader pattern would open the API.
         "/webhooks/**",
-        // Public clinic-admin single-use invite redemption
-        "/api/v1/invites/**",
         // NOTE: /api/v1/platform/** is deliberately absent, and an earlier draft of this file listed
         // its two login steps here. That listing is dead and was removed.
         //
@@ -143,6 +141,11 @@ public class SecurityConfiguration {
         //
         // When the console is disabled there is no platform chain and no handler, so these paths fall
         // to the unmapped matcher and answer the stable 404. Absent, not open.
+    };
+
+    /** Single-use clinic admin invitation redemption endpoints (token-authenticated). */
+    private static final String[] INVITE_PUBLIC_PATHS = {
+        "/api/v1/invites/**",
     };
 
     /**
@@ -162,7 +165,6 @@ public class SecurityConfiguration {
      */
     private static final String[] CSRF_EXEMPT_PATHS = {
         "/webhooks/**",
-        "/api/v1/invites/**",
     };
 
     /** Read-only OpenAPI. Still authenticated: the contract is not public information. */
@@ -207,6 +209,7 @@ public class SecurityConfiguration {
                 // CSRF_EXEMPT_PATHS. This is not a relaxation: the CsrfFilter would otherwise
                 // reject every real provider POST before the signature verifier ever ran.
                 csrf.ignoringRequestMatchers(CSRF_EXEMPT_PATHS);
+                csrf.ignoringRequestMatchers(INVITE_PUBLIC_PATHS);
                 if (!security.isCsrfRequiredOnLogin()) {
                     log.warn("firstelement.security.csrf-required-on-login=false: login is no longer "
                         + "CSRF-protected and login-CSRF becomes possible.");
@@ -240,6 +243,7 @@ public class SecurityConfiguration {
             .authorizeHttpRequests(requests -> requests
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR, jakarta.servlet.DispatcherType.ASYNC).permitAll()
                 .requestMatchers(PUBLIC_PATHS).permitAll()
+                .requestMatchers(INVITE_PUBLIC_PATHS).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(AUTHENTICATED_PATHS).authenticated()
                 // A path no controller declares cannot succeed for anyone, so it answers

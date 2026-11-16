@@ -53,8 +53,24 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
         <span class="active">Reports</span>
       </div>
 
-      <div class="tl-toolbar" style="margin-bottom: 0;">
-        <h1 class="tl-greeting" style="font-size: 20px; font-weight: 700; margin: 0;">Commission/Revenue</h1>
+      <div class="tl-toolbar" style="margin-bottom: 0; position: relative; z-index: 50;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h1 class="tl-greeting" style="font-size: 20px; font-weight: 700; margin: 0;">Commission/Revenue</h1>
+          <div class="tl-info-wrap">
+            <button
+              type="button"
+              class="tl-info-trigger"
+              [class.is-active]="showReportsInfo()"
+              (click)="toggleReportsInfo()"
+              title="Reports details"
+            >?</button>
+            @if (showReportsInfo()) {
+              <div class="tl-info-popover">
+                {{ 'clinic.reports.description' | t }}
+              </div>
+            }
+          </div>
+        </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <input
             type="date"
@@ -714,7 +730,7 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
       height: 46px;
       background: var(--surf);
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 2px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -741,7 +757,7 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
     .tl-stat-icon {
       width: 26px;
       height: 26px;
-      border-radius: 6px;
+      border-radius: 2px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -795,8 +811,8 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
       gap: 6px;
       margin-block-end: 0;
     }
-    .window-switcher { display: flex; gap: 2px; background: var(--surf2); padding: 2px; border-radius: 4px; }
-    .window-btn { border: none; background: none; padding: 3px 7px; border-radius: 3px; font-size: 0.75rem; cursor: pointer; color: var(--mute); font-weight: 500; }
+    .window-switcher { display: flex; gap: 2px; background: var(--surf2); padding: 2px; border-radius: 2px; }
+    .window-btn { border: none; background: none; padding: 3px 7px; border-radius: 2px; font-size: 0.75rem; cursor: pointer; color: var(--mute); font-weight: 500; }
     .window-btn.active { background: var(--surf); color: var(--tl-teal, var(--pri)); font-weight: 700; box-shadow: var(--shadow); }
     .report-panel {
       flex: 1;
@@ -812,12 +828,39 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
       overflow-y: auto;
       overflow-x: auto;
       background: var(--surf);
-      border-radius: var(--fe-radius);
+      border-radius: 4px;
       border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
     }
     .fe-table { width: 100%; border-collapse: collapse; text-align: start; }
-    .fe-table th, .fe-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 0.8rem; }
-    .fe-table th { background: var(--surf2); font-weight: 600; color: var(--mute); position: sticky; top: 0; z-index: 2; }
+    .fe-table th {
+      background: var(--surf2);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--mute);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .fe-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      vertical-align: middle;
+      line-height: 1.4;
+    }
+    .fe-table tbody tr {
+      transition: background-color 0.15s ease;
+    }
+    .fe-table tbody tr:hover {
+      background: var(--surf2);
+    }
     .header-actions { display: flex; gap: var(--fe-space-2); align-items: center; }
     .break-glass-banner {
       background: var(--bad-soft);
@@ -946,6 +989,11 @@ export class ClinicReportsComponent implements OnInit {
   readonly reportDate = signal<string>('2026-10-20');
   readonly loading = signal<boolean>(false);
   readonly error = signal<boolean>(false);
+
+  readonly showReportsInfo = signal<boolean>(false);
+  toggleReportsInfo(): void {
+    this.showReportsInfo.update((v) => !v);
+  }
 
   // Data signals
   readonly productivityRows = signal<AppointmentProductivityRow[]>([]);

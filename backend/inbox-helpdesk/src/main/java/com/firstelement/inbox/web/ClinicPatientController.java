@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -168,10 +169,14 @@ public class ClinicPatientController {
             gender = gender.toUpperCase(java.util.Locale.ROOT);
         }
 
-        // Only givenName is strictly required to register a patient.
-        // familyName, phone, gender, and dateOfBirth are optional so the patient can be registered quickly
-        // and return to fill details later.
         requireField(givenName, "givenName");
+        requireField(familyName, "familyName");
+        requireField(gender, "gender");
+        requireField(phone, "phone");
+        if (payload.dateOfBirth() == null) {
+            throw new com.firstelement.crm.error.ValidationFailedException(
+                    "dateOfBirth is required", java.util.Map.of("field", "dateOfBirth"));
+        }
 
         if (gender != null && !gender.isEmpty() && !java.util.Set.of("MALE", "FEMALE", "OTHER").contains(gender)) {
             throw new com.firstelement.crm.error.ValidationFailedException(
@@ -273,6 +278,72 @@ public class ClinicPatientController {
     }
 
     /**
+     * {@code PUT /api/v1/clinic/patients/{patientId}}
+     *
+     * <p>Updates an existing patient file in the current clinic scope.
+     */
+    @PutMapping("/patients/{patientId}")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Update a patient",
+        description = "Updates an existing patient file in the current clinic scope.")
+    public PatientModels.PatientRow updatePatient(
+            @PathVariable UUID patientId,
+            @RequestBody CreatePatientPayload payload,
+            @RequestParam(required = false) String projectId) {
+        ClinicScope scope = writeScope(projectId);
+        PatientModels.PatientRow existing = patients.find(scope, patientId)
+                .orElseThrow(ResourceNotFound::new);
+
+        String givenName = trim(payload.givenName()) != null ? trim(payload.givenName()) : existing.givenName();
+        String familyName = trim(payload.familyName()) != null ? trim(payload.familyName()) : existing.familyName();
+        String phone = trim(payload.phone()) != null ? trim(payload.phone()) : existing.primaryPhone();
+        String gender = trim(payload.gender()) != null
+                ? trim(payload.gender()).toUpperCase(java.util.Locale.ROOT)
+                : existing.gender();
+        LocalDate dob = payload.dateOfBirth() != null ? payload.dateOfBirth() : existing.dateOfBirth();
+
+        if (gender != null && !gender.isEmpty() && !java.util.Set.of("MALE", "FEMALE", "OTHER").contains(gender)) {
+            throw new com.firstelement.crm.error.ValidationFailedException(
+                    "gender must be one of MALE, FEMALE",
+                    java.util.Map.of("field", "gender"));
+        }
+        if (dob != null && dob.isAfter(LocalDate.now())) {
+            throw new com.firstelement.crm.error.ValidationFailedException(
+                    "dateOfBirth cannot be in the future",
+                    java.util.Map.of("field", "dateOfBirth"));
+        }
+
+        String displayName = trim(payload.displayName());
+        if (displayName == null) {
+            displayName = ((givenName == null ? "" : givenName) + " " + (familyName == null ? "" : familyName)).trim();
+            if (displayName.isEmpty()) {
+                displayName = existing.displayName();
+            }
+        }
+
+        return patients.update(scope, patientId, new PatientModels.CreatePatientCommand(
+                trim(payload.patientNo()) != null ? trim(payload.patientNo()) : existing.patientNo(),
+                displayName,
+                givenName,
+                familyName,
+                gender,
+                dob,
+                phone,
+                trim(payload.email()) != null ? trim(payload.email()) : existing.primaryEmail(),
+                trim(payload.cnic()) != null ? trim(payload.cnic()) : existing.cnic(),
+                trim(payload.profileImageUrl()) != null ? trim(payload.profileImageUrl()) : existing.profileImageUrl(),
+                trim(payload.addressLine()) != null ? trim(payload.addressLine()) : existing.addressLine(),
+                trim(payload.country()) != null ? trim(payload.country()) : existing.country(),
+                trim(payload.state()) != null ? trim(payload.state()) : existing.state(),
+                trim(payload.city()) != null ? trim(payload.city()) : existing.city(),
+                trim(payload.postalCode()) != null ? trim(payload.postalCode()) : existing.postalCode(),
+                payload.isActive() != null ? payload.isActive() : existing.isActive(),
+                payload.locale() != null ? payload.locale() : existing.locale(),
+                payload.customerId() != null ? payload.customerId() : existing.customerId(),
+                null));
+    }
+
+    /**
      * {@code GET /api/v1/clinic/patients/{patientId}/odontogram}
      *
      * <p>Newest observation first, each flagged with whether it still stands. The flag is computed
@@ -349,8 +420,8 @@ public class ClinicPatientController {
                 req.surfaces(),
                 req.code(),
                 req.attributesJson(),
-                req.state() == null ? "NORMAL" : req.state(),
-                req.source() == null ? "CLINICIAN" : req.source(),
+                req.state() == null ? "EXISTING" : req.state(),
+                req.source() == null ? "CLINICAL" : req.source(),
                 req.plannedProcedureId(),
                 userId,
                 java.time.LocalDateTime.now(),
@@ -642,7 +713,7 @@ public class ClinicPatientController {
             return scope;
         }
         var reachable = scope.accessibleProjectIds();
-        if (reachable.size() == 1) {
+        if (!reachable.isEmpty()) {
             return ClinicScope.forRequestedProject(guard, TenantContextHolder.get(), reachable.get(0));
         }
         throw new ResourceNotFound();

@@ -613,12 +613,14 @@ public class ScheduleRepository {
                 var snapshots = jdbc.query("""
                         select p."displayName", p."primaryPhone", p."primaryEmail"
                           from "patients" p
-                         where %s
+                         where p."organizationId" = :org
                            and p."id" = :patientId
                            and p."deletedAt" is null
                          limit 1
-                        """.formatted(scope.predicate("p")),
-                        scope.bind().addValue("patientId", patientId),
+                        """,
+                        new MapSqlParameterSource()
+                                .addValue("org", scope.queryScope().organizationId())
+                                .addValue("patientId", patientId),
                         (rs, n) -> new Object[] {
                             rs.getString("displayName"),
                             rs.getString("primaryPhone"),
@@ -652,11 +654,13 @@ public class ScheduleRepository {
                         select p."name", p."durationMinutes", p."bufferMinutes",
                                p."price", p."clinicId"
                           from "procedures" p
-                         where %s
+                         where p."organizationId" = :org
                            and p."id" = :procedureId
                          limit 1
-                        """.formatted(scope.predicate("p")),
-                        scope.bind().addValue("procedureId", procedureId),
+                        """,
+                        new MapSqlParameterSource()
+                                .addValue("org", scope.queryScope().organizationId())
+                                .addValue("procedureId", procedureId),
                         (rs, n) -> new ProcedureSnapshot(
                             rs.getString("name"),
                             rs.getInt("durationMinutes"),
@@ -695,11 +699,13 @@ public class ScheduleRepository {
                 var names = jdbc.query("""
                         select d."name"
                           from "doctors" d
-                         where %s
+                         where d."organizationId" = :org
                            and d."id" = :doctorId
                          limit 1
-                        """.formatted(scope.predicate("d")),
-                        scope.bind().addValue("doctorId", req.doctorId()),
+                        """,
+                        new MapSqlParameterSource()
+                                .addValue("org", scope.queryScope().organizationId())
+                                .addValue("doctorId", req.doctorId()),
                         (rs, n) -> rs.getString("name"));
                 if (names.isEmpty()) {
                     throw new com.firstelement.crm.error.ValidationFailedException(
@@ -713,10 +719,12 @@ public class ScheduleRepository {
                 Integer clinics = jdbc.queryForObject("""
                         select count(*)
                           from "clinic_locations" l
-                         where %s
+                         where l."organizationId" = :org
                            and l."id" = :clinicId
-                        """.formatted(scope.predicate("l")),
-                        scope.bind().addValue("clinicId", clinicId),
+                        """,
+                        new MapSqlParameterSource()
+                                .addValue("org", scope.queryScope().organizationId())
+                                .addValue("clinicId", clinicId),
                         Integer.class);
                 if (clinics == null || clinics == 0) {
                     throw new com.firstelement.crm.error.ValidationFailedException(
@@ -843,6 +851,33 @@ public class ScheduleRepository {
                            "cancelledReason" = case when :status in ('CANCELLED', 'NO_SHOW') then coalesce(:cancelledReason, a."cancelledReason", 'Cancelled') else null end,
                            "cancelledBy" = case when :status in ('CANCELLED', 'NO_SHOW') then coalesce(:cancelledBy, a."cancelledBy") else null end,
                            "cancelledAt" = case when :status in ('CANCELLED', 'NO_SHOW') then coalesce(a."cancelledAt", (current_timestamp at time zone 'utc')) else null end,
+                           "updatedAt" = (current_timestamp at time zone 'utc')
+                     where %s
+                       and a."id" = :id
+                    """.formatted(scope.predicate("a")), bound);
+        });
+    }
+
+    public int updateAppointment(
+            ClinicScope scope, UUID appointmentId, ScheduleModels.CreateAppointmentRequest req) {
+        return scope.read(() -> {
+            MapSqlParameterSource bound = scope.bind()
+                    .addValue("id", appointmentId)
+                    .addValue("doctorId", req.doctorId())
+                    .addValue("resourceId", req.resourceId())
+                    .addValue("appointmentDate", req.appointmentDate())
+                    .addValue("durationMinutes", req.durationMinutes())
+                    .addValue("bufferMinutes", req.bufferMinutes())
+                    .addValue("notes", trimToNull(req.notes()));
+
+            return jdbc.update("""
+                    update "appointments" a
+                       set "doctorId" = coalesce(:doctorId, a."doctorId"),
+                           "resourceId" = coalesce(:resourceId, a."resourceId"),
+                           "appointmentDate" = coalesce(:appointmentDate, a."appointmentDate"),
+                           "durationMinutes" = coalesce(:durationMinutes, a."durationMinutes"),
+                           "bufferMinutes" = coalesce(:bufferMinutes, a."bufferMinutes"),
+                           "notes" = coalesce(:notes, a."notes"),
                            "updatedAt" = (current_timestamp at time zone 'utc')
                      where %s
                        and a."id" = :id

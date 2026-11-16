@@ -807,24 +807,27 @@ import { clinicStrings } from './clinic.strings';
     </div>
   `,
   styles: [`
-    .fe-page { padding: 12px 18px; max-width: 1400px; margin: 0 auto; }
-    .header-actions { display: flex; gap: 0.5rem; align-items: center; }
-    .filter-tabs { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--line); padding-bottom: 0.4rem; }
-    .tab-btn { background: none; border: none; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem; font-weight: 500; border-radius: 0.375rem; color: var(--mute); }
-    .tab-btn.active { background: var(--pri-soft); color: var(--pri); font-weight: 600; }
-    .table-container { overflow-x: auto; background: var(--surf); border-radius: 0.5rem; border: 1px solid var(--line); }
+    .fe-page { padding: 12px 18px; max-width: 1500px; margin: 0 auto; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .filter-tabs { display: flex; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+    .tab-btn { background: var(--surf2); border: 1px solid var(--line); padding: 6px 14px; cursor: pointer; font-size: 12.5px; font-weight: 600; border-radius: 2px; color: var(--mute); transition: all 0.15s ease; }
+    .tab-btn:hover { background: var(--surf3); color: var(--ink); }
+    .tab-btn.active { background: var(--pri); color: #fff; border-color: var(--pri); font-weight: 600; }
+    .table-container { overflow-x: auto; background: var(--surf); border-radius: 3px; border: 1px solid var(--line); box-shadow: var(--shadow-panel); }
     .fe-table { width: 100%; border-collapse: collapse; text-align: start; }
-    .fe-table th, .fe-table td { padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 0.8rem; }
-    .fe-table th { background: var(--surf2); font-weight: 600; color: var(--mute); }
-    .patient-link { color: var(--pri); text-decoration: none; font-weight: 500; }
+    .fe-table th { background: var(--surf2); font-weight: 700; color: var(--mute); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .fe-table td { padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink); vertical-align: middle; }
+    .fe-table tbody tr:hover td { background: var(--surf2); }
+    .patient-link { color: var(--pri); text-decoration: none; font-weight: 600; }
     .patient-link:hover { text-decoration: underline; }
-    .badge-currency { background: var(--surf2); padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; }
+    .badge-currency { background: var(--surf2); border: 1px solid var(--line); padding: 2px 6px; border-radius: 2px; font-size: 11px; font-weight: 700; font-family: var(--fe-font-mono); }
     .text-success { color: var(--ok); }
     .text-danger { color: var(--bad); }
     .text-warning { color: var(--warn); }
-    .action-buttons { display: flex; gap: 0.25rem; align-items: center; }
+    .action-buttons { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .fe-btn { border-radius: 2px !important; }
     .modal-backdrop { position: fixed; inset: 0; background: var(--scrim); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
-    .modal-dialog { background: var(--surf); border-radius: 12px; border: 1px solid var(--line); width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-panel); display: flex; flex-direction: column; }
+    .modal-dialog { background: var(--surf); border-radius: 4px; border: 1px solid var(--line); width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-panel); display: flex; flex-direction: column; }
     .modal-dialog.modal-lg { max-width: 900px; }
     .modal-dialog.modal-xl { max-width: 1000px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem; border-bottom: 1px solid var(--line); }
@@ -842,7 +845,7 @@ import { clinicStrings } from './clinic.strings';
       padding: 0 12px;
       line-height: normal;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 2px;
       font-size: 13.5px;
       background: var(--surf);
       color: var(--ink);

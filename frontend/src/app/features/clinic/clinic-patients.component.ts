@@ -856,23 +856,28 @@ export class ClinicPatientsComponent implements OnInit {
     this.saveFailed.set(false);
     this.createRequestId.set(null);
     try {
-      await this.api.createPatient({
-        givenName: value.givenName.trim(),
-        familyName: value.familyName.trim() === '' ? undefined : value.familyName.trim(),
-        gender: value.gender === '' ? undefined : value.gender,
-        dateOfBirth: value.dateOfBirth === '' ? undefined : value.dateOfBirth,
-        phone: value.phone.trim(),
-        email: value.email.trim() === '' ? undefined : value.email.trim(),
-        cnic: value.cnic.trim() === '' ? undefined : value.cnic.trim(),
-        profileImageUrl:
-          value.profileImageUrl === '' ? undefined : value.profileImageUrl,
-        addressLine: value.addressLine.trim() === '' ? undefined : value.addressLine.trim(),
-        country: value.country.trim() === '' ? undefined : value.country.trim(),
-        state: value.state.trim() === '' ? undefined : value.state.trim(),
-        city: value.city.trim() === '' ? undefined : value.city.trim(),
-        postalCode: value.postalCode.trim() === '' ? undefined : value.postalCode.trim(),
-        isActive: value.isActive,
-      });
+      await this.api.createPatient(
+        {
+          givenName: value.givenName.trim(),
+          familyName: value.familyName.trim() === '' ? undefined : value.familyName.trim(),
+          gender: value.gender === '' ? undefined : value.gender,
+          dateOfBirth: value.dateOfBirth === '' ? undefined : value.dateOfBirth,
+          phone: value.phone.trim(),
+          email: value.email.trim() === '' ? undefined : value.email.trim(),
+          cnic: value.cnic.trim() === '' ? undefined : value.cnic.trim(),
+          profileImageUrl:
+            value.profileImageUrl === '' ? undefined : value.profileImageUrl,
+          addressLine: value.addressLine.trim() === '' ? undefined : value.addressLine.trim(),
+          country: value.country.trim() === '' ? undefined : value.country.trim(),
+          state: value.state.trim() === '' ? undefined : value.state.trim(),
+          city: value.city.trim() === '' ? undefined : value.city.trim(),
+          postalCode: value.postalCode.trim() === '' ? undefined : value.postalCode.trim(),
+          isActive: value.isActive,
+        },
+        {
+          projectId: this.projects.selectedProjectId() ?? undefined,
+        },
+      );
       this.closeCreateDrawer();
       await this.load();
     } catch (cause) {

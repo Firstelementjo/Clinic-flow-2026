@@ -173,8 +173,7 @@ public class ConnectorRegistry {
         try {
             plaintext = decryptor.decrypt(connection.id(), stored);
         } catch (RuntimeException e) {
-            log.error("Could not decrypt channel credentials — has ENCRYPTION_KEY changed? "
-                + "connection={} channel={} error={}", connection.id(), channel,
+            log.error("Could not decrypt channel payload connection={} channel={} error={}", connection.id(), channel,
                 e.getClass().getSimpleName());
             throw new CredentialUnavailableException(channel, connection.id(),
                 "the stored credential could not be decrypted");

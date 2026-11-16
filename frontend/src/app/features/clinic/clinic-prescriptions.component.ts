@@ -12,6 +12,7 @@ import { ClinicApi, type ClinicDoctor } from '../../core/api/endpoints';
 import { ClinicRbacService } from '../../core/auth/clinic-rbac';
 import { ProjectContextService } from '../../core/context/project-context.service';
 import { FormatService } from '../../core/format/format.service';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { IconComponent } from '../../ui/icon.component';
 import {
   ClinicPatientApi,
@@ -43,11 +44,27 @@ interface DraftMedicationRow {
       <!-- Top Page Header -->
       <header class="rx-page-header no-print">
         <div class="rx-header-titles">
-          <div class="rx-eyebrow">CLINICAL CARE · الرعاية السريرية</div>
-          <h1 class="rx-title">Prescriptions · الوصفات الطبية</h1>
-          <p class="rx-subtitle">
-            إصدار وإدارة الوصفات الدوائية للمرضى مع نموذج الطباعة الرسمي والصفحة المروسة الخاصة بالعيادة.
-          </p>
+          <div class="rx-eyebrow">{{ isAr() ? 'الرعاية السريرية' : 'CLINICAL CARE' }}</div>
+          <div class="rx-title-row">
+            <h1 class="rx-title">{{ isAr() ? 'الوصفات الطبية' : 'Prescriptions' }}</h1>
+            <div class="tl-info-wrap">
+              <button
+                type="button"
+                class="tl-info-trigger"
+                [class.is-active]="showDescInfo()"
+                (click)="toggleDescInfo()"
+                title="Prescription details"
+              >?</button>
+              @if (showDescInfo()) {
+                <div class="tl-info-popover">
+                  {{ isAr()
+                    ? 'إصدار وإدارة الوصفات الدوائية للمرضى مع نموذج الطباعة الرسمي والصفحة المروّسة الخاصة بالعيادة.'
+                    : 'Issue and manage patient electronic prescriptions with official clinic letterhead and print-ready templates.'
+                  }}
+                </div>
+              }
+            </div>
+          </div>
         </div>
 
         <div class="rx-header-actions">
@@ -59,7 +76,7 @@ interface DraftMedicationRow {
               (click)="openPresetsCatalogModal()"
             >
               <fe-icon name="knowledge" [size]="16" />
-              <span>دليل الأدوية والاختصارات (Medications & Presets)</span>
+              <span>{{ isAr() ? 'دليل الأدوية والاختصارات' : 'Medications & Presets' }}</span>
             </button>
           }
           @if (canCustomizeLetterhead()) {
@@ -70,7 +87,7 @@ interface DraftMedicationRow {
               (click)="openLetterheadModal()"
             >
               <fe-icon name="settings" [size]="16" />
-              <span>تخصيص الورقة المروسة (Letterhead)</span>
+              <span>{{ isAr() ? 'تخصيص الورقة المروّسة' : 'Letterhead Settings' }}</span>
             </button>
           }
           @if (canWritePrescription()) {
@@ -80,7 +97,7 @@ interface DraftMedicationRow {
               data-testid="new-prescription-btn"
               (click)="openNewPrescriptionModal()"
             >
-              <span>+ New Prescription · وصفة جديدة</span>
+              <span>{{ isAr() ? '+ وصفة جديدة' : '+ New Prescription' }}</span>
             </button>
           }
         </div>
@@ -107,7 +124,7 @@ interface DraftMedicationRow {
             <input
               type="search"
               class="rx-input rx-search-input"
-              placeholder="بحث برقم الوصفة (RX)، اسم المريض، التشخيص، أو اسم الدواء..."
+              [placeholder]="isAr() ? 'بحث برقم الوصفة (RX)، اسم المريض، التشخيص، أو اسم الدواء...' : 'Search by Rx #, patient name, diagnosis, or medicine...'"
               [ngModel]="searchQuery()"
               (ngModelChange)="searchQuery.set($event)"
               data-testid="prescriptions-search-input"
@@ -121,14 +138,14 @@ interface DraftMedicationRow {
               (ngModelChange)="selectedDoctorFilter.set($event)"
               data-testid="prescriptions-doctor-filter"
             >
-              <option value="">كل الأطباء (All Dentists)</option>
+              <option value="">{{ isAr() ? 'كل الأطباء' : 'All Dentists' }}</option>
               @for (doc of doctors(); track doc.id) {
                 <option [value]="doc.id">{{ doc.name }}</option>
               }
             </select>
 
             <button type="button" class="fe-btn fe-btn--ghost fe-btn--sm" (click)="reloadAll()">
-              تحديث
+              {{ isAr() ? 'تحديث' : 'Refresh' }}
             </button>
           </div>
         </div>
@@ -139,18 +156,18 @@ interface DraftMedicationRow {
         <div class="rx-card-head">
           <div class="rx-card-title-wrap">
             <span class="rx-pill-icon">℞</span>
-            <h2 class="rx-card-title">Prescriptions · سجل الوصفات الصادرة</h2>
+            <h2 class="rx-card-title">{{ isAr() ? 'سجل الوصفات الصادرة' : 'Issued Prescriptions' }}</h2>
             <span class="rx-count-badge">{{ filteredSheets().length }}</span>
           </div>
         </div>
 
         @if (loading()) {
-          <div class="rx-empty-state">جاري تحميل سجل الوصفات الطبية...</div>
+          <div class="rx-empty-state">{{ isAr() ? 'جاري تحميل سجل الوصفات الطبية...' : 'Loading prescriptions log...' }}</div>
         } @else if (filteredSheets().length === 0) {
           <div class="rx-empty-state">
             <div class="rx-empty-icon">℞</div>
-            <h3>لا توجد وصفات طبية مسجلة حالياً</h3>
-            <p>اضغط على زر «+ New Prescription» لإصدار وصفة طبية جديدة للمريض وطباعتها.</p>
+            <h3>{{ isAr() ? 'لا توجد وصفات طبية مسجلة حالياً' : 'No prescriptions recorded yet' }}</h3>
+            <p>{{ isAr() ? 'اضغط على زر «+ وصفة جديدة» لإصدار وصفة طبية جديدة للمريض وطباعتها.' : 'Click "+ New Prescription" to issue a new prescription for a patient and print it.' }}</p>
           </div>
         } @else {
           <div class="rx-table-wrap">
@@ -158,12 +175,12 @@ interface DraftMedicationRow {
               <thead>
                 <tr>
                   <th>RX #</th>
-                  <th>PATIENT · المريض</th>
-                  <th>DENTIST · الطبيب</th>
-                  <th>DIAGNOSIS · التشخيص</th>
-                  <th>MEDICINES · الأدوية</th>
-                  <th>DATE · التاريخ</th>
-                  <th class="rx-col-actions">ACTIONS · إجراءات</th>
+                  <th>{{ isAr() ? 'المريض' : 'PATIENT' }}</th>
+                  <th>{{ isAr() ? 'الطبيب' : 'DENTIST' }}</th>
+                  <th>{{ isAr() ? 'التشخيص' : 'DIAGNOSIS' }}</th>
+                  <th>{{ isAr() ? 'الأدوية' : 'MEDICINES' }}</th>
+                  <th>{{ isAr() ? 'التاريخ' : 'DATE' }}</th>
+                  <th class="rx-col-actions">{{ isAr() ? 'إجراءات' : 'ACTIONS' }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,7 +231,7 @@ interface DraftMedicationRow {
                         <button
                           type="button"
                           class="rx-action-btn rx-action-btn--view"
-                          title="معاينة وطباعة الوصفة (View & Print)"
+                          [title]="isAr() ? 'معاينة وطباعة الوصفة' : 'View & Print Prescription'"
                           data-testid="view-prescription-btn"
                           (click)="openPreviewSheet(sheet)"
                         >
@@ -227,7 +244,7 @@ interface DraftMedicationRow {
                           <button
                             type="button"
                             class="rx-action-btn rx-action-btn--delete"
-                            title="حذف الوصفة (Delete)"
+                            [title]="isAr() ? 'حذف الوصفة' : 'Delete Prescription'"
                             data-testid="delete-prescription-btn"
                             (click)="promptDeleteSheet(sheet)"
                           >
@@ -259,8 +276,8 @@ interface DraftMedicationRow {
           >
             <div class="rx-modal-header">
               <div>
-                <h2 class="rx-modal-title">New Prescription · إصدار وصفة طبية جديدة</h2>
-                <p class="rx-modal-sub">اختر المريض والطبيب وأضف الأدوية والجرعات المعتمدة للوصفة.</p>
+                <h2 class="rx-modal-title">{{ isAr() ? 'إصدار وصفة طبية جديدة' : 'New Prescription' }}</h2>
+                <p class="rx-modal-sub">{{ isAr() ? 'اختر المريض والطبيب وأضف الأدوية والجرعات المعتمدة للوصفة.' : 'Select patient, dentist, diagnosis, and approved medications for the prescription.' }}</p>
               </div>
               <button type="button" class="rx-modal-close" (click)="closeNewPrescriptionModal()">&times;</button>
             </div>
@@ -271,19 +288,19 @@ interface DraftMedicationRow {
                 <div class="rx-panel">
                   <div class="rx-panel-head">
                     <span class="rx-panel-badge">1</span>
-                    <h3 class="rx-panel-title">Details · بيانات المريض والتشخيص</h3>
+                    <h3 class="rx-panel-title">{{ isAr() ? 'بيانات المريض والتشخيص' : 'Patient & Diagnosis Details' }}</h3>
                   </div>
 
                   <div class="rx-form-stack">
                     <div class="rx-field">
-                      <label class="rx-label">Patient · المريض *</label>
+                      <label class="rx-label">{{ isAr() ? 'المريض *' : 'Patient *' }}</label>
                       <select
                         class="rx-select"
                         [(ngModel)]="newRxPatientId"
                         data-testid="new-rx-patient-select"
                         required
                       >
-                        <option value="">— اختر المريض —</option>
+                        <option value="">{{ isAr() ? '— اختر المريض —' : '— Select Patient —' }}</option>
                         @for (p of patients(); track p.id) {
                           <option [value]="p.id">
                             {{ p.displayName }} {{ p.patientNo ? '(' + p.patientNo + ')' : '' }}
@@ -293,14 +310,14 @@ interface DraftMedicationRow {
                     </div>
 
                     <div class="rx-field">
-                      <label class="rx-label">Dentist · الطبيب المعالج *</label>
+                      <label class="rx-label">{{ isAr() ? 'الطبيب المعالج *' : 'Dentist *' }}</label>
                       <select
                         class="rx-select"
                         [(ngModel)]="newRxDoctorId"
                         data-testid="new-rx-doctor-select"
                         required
                       >
-                        <option value="">— اختر الطبيب —</option>
+                        <option value="">{{ isAr() ? '— اختر الطبيب —' : '— Select Dentist —' }}</option>
                         @for (d of doctors(); track d.id) {
                           <option [value]="d.id">{{ d.name }} — {{ d.specialty }}</option>
                         }
@@ -308,7 +325,7 @@ interface DraftMedicationRow {
                     </div>
 
                     <div class="rx-field">
-                      <label class="rx-label">Date · تاريخ الوصفة *</label>
+                      <label class="rx-label">{{ isAr() ? 'تاريخ الوصفة *' : 'Date *' }}</label>
                       <input
                         type="date"
                         class="rx-input"
@@ -319,9 +336,9 @@ interface DraftMedicationRow {
 
                     <div class="rx-field">
                       <div class="rx-label-row">
-                        <label class="rx-label">Diagnosis · التشخيص الطبي *</label>
+                        <label class="rx-label">{{ isAr() ? 'التشخيص الطبي *' : 'Diagnosis *' }}</label>
                         <button type="button" class="rx-mini-link" (click)="openPresetsCatalogWithTab('diagnoses')">
-                          + إدارة اختصارات التشخيص
+                          {{ isAr() ? '+ إدارة اختصارات التشخيص' : '+ Manage Presets' }}
                         </button>
                       </div>
                       <input
@@ -329,7 +346,7 @@ interface DraftMedicationRow {
                         class="rx-input"
                         list="dental-diagnoses-list"
                         [(ngModel)]="newRxDiagnosis"
-                        placeholder="مثال: Pulpitis / Post-extraction care / التهاب عصب"
+                        [placeholder]="isAr() ? 'مثال: Pulpitis / Post-extraction care / التهاب عصب' : 'e.g., Pulpitis, Post-extraction care, Gingivitis'"
                         data-testid="new-rx-diagnosis-input"
                       />
                       <datalist id="dental-diagnoses-list">
@@ -340,12 +357,12 @@ interface DraftMedicationRow {
                     </div>
 
                     <div class="rx-field">
-                      <label class="rx-label">Notes · ملاحظات إضافية</label>
+                      <label class="rx-label">{{ isAr() ? 'ملاحظات إضافية' : 'Notes & Instructions' }}</label>
                       <textarea
                         rows="3"
                         class="rx-textarea"
                         [(ngModel)]="newRxNotes"
-                        placeholder="ملاحظات أو توصيات خاصة للمريض أو الصيدلي..."
+                        [placeholder]="isAr() ? 'ملاحظات أو توصيات خاصة للمريض أو الصيدلي...' : 'Special notes or instructions for patient or pharmacist...'"
                         data-testid="new-rx-notes-input"
                       ></textarea>
                     </div>
@@ -357,7 +374,7 @@ interface DraftMedicationRow {
                   <div class="rx-panel-head rx-panel-head--between">
                     <div class="rx-panel-head-left">
                       <span class="rx-panel-badge">℞</span>
-                      <h3 class="rx-panel-title">Medicines · الأدوية والجرعات</h3>
+                      <h3 class="rx-panel-title">{{ isAr() ? 'الأدوية والجرعات' : 'Medicines & Dosage' }}</h3>
                     </div>
                     <div class="rx-panel-head-actions">
                       <button
@@ -366,7 +383,7 @@ interface DraftMedicationRow {
                         data-testid="quick-add-med-btn"
                         (click)="openQuickAddMedModal()"
                       >
-                        + دواء جديد للاختصارات
+                        {{ isAr() ? '+ دواء جديد للاختصارات' : '+ New Preset' }}
                       </button>
                       <button
                         type="button"
@@ -374,7 +391,7 @@ interface DraftMedicationRow {
                         data-testid="add-medicine-row-btn"
                         (click)="addDraftMedicationRow()"
                       >
-                        + سطر دواء
+                        {{ isAr() ? '+ سطر دواء' : '+ Add Row' }}
                       </button>
                     </div>
                   </div>
@@ -387,12 +404,12 @@ interface DraftMedicationRow {
 
                   <div class="rx-med-rows">
                     <div class="rx-med-rows-header">
-                      <span>Medicine · الدواء</span>
-                      <span>Dosage · الجرعة</span>
-                      <span>Frequency · التكرار</span>
-                      <span>Duration · المدة</span>
-                      <span>Instructions · تعليمات</span>
-                      <span>Del</span>
+                      <span>{{ isAr() ? 'الدواء' : 'Medicine' }}</span>
+                      <span>{{ isAr() ? 'الجرعة' : 'Dosage' }}</span>
+                      <span>{{ isAr() ? 'التكرار' : 'Frequency' }}</span>
+                      <span>{{ isAr() ? 'المدة' : 'Duration' }}</span>
+                      <span>{{ isAr() ? 'تعليمات' : 'Instructions' }}</span>
+                      <span>{{ isAr() ? 'حذف' : 'Del' }}</span>
                     </div>
 
                     @for (row of draftMedications(); track row.id; let i = $index) {
@@ -403,37 +420,37 @@ interface DraftMedicationRow {
                           list="common-dental-meds"
                           [(ngModel)]="row.medicationName"
                           (ngModelChange)="onMedicationNameChanged(row)"
-                          placeholder="Medicine name"
+                          [placeholder]="isAr() ? 'اسم الدواء' : 'Medicine name'"
                           [attr.data-testid]="'med-name-' + i"
                         />
                         <input
                           type="text"
                           class="rx-input rx-input--sm"
                           [(ngModel)]="row.dosage"
-                          placeholder="1 tablet"
+                          [placeholder]="isAr() ? '1 قرص' : '1 tablet'"
                         />
                         <input
                           type="text"
                           class="rx-input rx-input--sm"
                           [(ngModel)]="row.frequency"
-                          placeholder="Twice a day"
+                          [placeholder]="isAr() ? 'مرتين يومياً' : 'Twice a day'"
                         />
                         <input
                           type="text"
                           class="rx-input rx-input--sm"
                           [(ngModel)]="row.duration"
-                          placeholder="5 days"
+                          [placeholder]="isAr() ? '5 أيام' : '5 days'"
                         />
                         <input
                           type="text"
                           class="rx-input rx-input--sm"
                           [(ngModel)]="row.instructions"
-                          placeholder="After meals / بعد الأكل"
+                          [placeholder]="isAr() ? 'بعد الأكل...' : 'After meals...'"
                         />
                         <button
                           type="button"
                           class="rx-del-row-btn"
-                          title="حذف الدواء"
+                          [title]="isAr() ? 'حذف الدواء' : 'Delete medicine'"
                           [disabled]="draftMedications().length <= 1"
                           (click)="removeDraftMedicationRow(i)"
                         >
@@ -445,13 +462,13 @@ interface DraftMedicationRow {
 
                   <div class="rx-med-quick-presets">
                     <div class="rx-presets-header">
-                      <span class="rx-presets-label">اختصارات الأدوية السريعة (بنقرة واحدة):</span>
+                      <span class="rx-presets-label">{{ isAr() ? 'اختصارات الأدوية السريعة (بنقرة واحدة):' : 'Quick Presets (1-click):' }}</span>
                       <button
                         type="button"
                         class="rx-mini-link"
                         (click)="openQuickAddMedModal()"
                       >
-                        + دواء جديد للاختصارات
+                        {{ isAr() ? '+ دواء جديد للاختصارات' : '+ New Preset' }}
                       </button>
                     </div>
                     <div class="rx-presets-chips-wrap">
@@ -472,7 +489,7 @@ interface DraftMedicationRow {
 
             <div class="rx-modal-footer">
               <button type="button" class="fe-btn fe-btn--ghost" (click)="closeNewPrescriptionModal()">
-                إلغاء (Cancel)
+                {{ isAr() ? 'إلغاء' : 'Cancel' }}
               </button>
               <button
                 type="button"
@@ -481,7 +498,7 @@ interface DraftMedicationRow {
                 [disabled]="saving()"
                 (click)="submitNewPrescription()"
               >
-                {{ saving() ? 'جاري الحفظ...' : 'حفظ وإصدار الوصفة (Save Prescription)' }}
+                {{ saving() ? (isAr() ? 'جاري الحفظ...' : 'Saving...') : (isAr() ? 'حفظ وإصدار الوصفة' : 'Save Prescription') }}
               </button>
             </div>
           </div>
@@ -503,8 +520,11 @@ interface DraftMedicationRow {
               <div class="rx-sheet-toolbar-left">
                 <span class="rx-code-badge" dir="ltr">Prescription {{ sheet.rxNumber }}</span>
                 <span class="rx-toolbar-hint">
-                  مقاس الورق: <strong>{{ letterhead().paperSize }}</strong>
-                  {{ letterhead().prePrintedPaper ? '· وضع ورق مروّس مسبقاً' : '· ترويسة العيادة الرقمية' }}
+                  {{ isAr() ? 'مقاس الورق:' : 'Paper Size:' }} <strong>{{ letterhead().paperSize }}</strong>
+                  {{ isAr()
+                    ? (letterhead().prePrintedPaper ? '· وضع ورق مروّس مسبقاً' : '· ترويسة العيادة الرقمية')
+                    : (letterhead().prePrintedPaper ? '· Pre-printed letterhead' : '· Digital clinic letterhead')
+                  }}
                 </span>
               </div>
               <div class="rx-sheet-toolbar-actions">
@@ -515,7 +535,7 @@ interface DraftMedicationRow {
                     data-testid="preview-customize-letterhead-btn"
                     (click)="openLetterheadModal()"
                   >
-                    تعديل الترويسة (Customize Letterhead)
+                    {{ isAr() ? 'تعديل الترويسة' : 'Customize Letterhead' }}
                   </button>
                 }
                 <button
@@ -524,7 +544,7 @@ interface DraftMedicationRow {
                   data-testid="print-prescription-btn"
                   (click)="triggerPrint()"
                 >
-                  طباعة الوصفة (Print)
+                  {{ isAr() ? 'طباعة الوصفة' : 'Print Prescription' }}
                 </button>
                 @if (canWritePrescription()) {
                   <button
@@ -533,7 +553,7 @@ interface DraftMedicationRow {
                     data-testid="preview-delete-prescription-btn"
                     (click)="promptDeleteSheet(sheet)"
                   >
-                    حذف الوصفة (Delete)
+                    {{ isAr() ? 'حذف الوصفة' : 'Delete Prescription' }}
                   </button>
                 }
                 <button
@@ -541,7 +561,7 @@ interface DraftMedicationRow {
                   class="fe-btn fe-btn--ghost fe-btn--sm"
                   (click)="closePreviewSheet()"
                 >
-                  إغلاق
+                  {{ isAr() ? 'إغلاق' : 'Close' }}
                 </button>
               </div>
             </div>
@@ -564,8 +584,8 @@ interface DraftMedicationRow {
                       />
                     } @else {
                       <div class="rx-doc-logo-box" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M12 2C8.5 2 6 4.5 6 7.5c0 2.2 1 4 1.5 6.5.5 2.5 1 6 2.5 6 1.2 0 1.2-3 2-3s.8 3 2 3c1.5 0 2-3.5 2.5-6 .5-2.5 1.5-4.3 1.5-6.5C18 4.5 15.5 2 12 2z"></path>
+                        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 4.5c-1.8-1.5-4.5-1.5-6.5 0-2 1.5-2.5 4.5-1.5 7 .5 1.5 1 3 1.5 5 .5 2 1.5 3.5 2.5 3.5 1 0 1.5-1.5 2-3.5.3-1.2.7-2 2-2s1.7.8 2 2c.5 2 1 3.5 2 3.5 1 0 2-1.5 2.5-3.5.5-2 1-3.5 1.5-5 1-2.5.5-5.5-1.5-7-2-1.5-4.7-1.5-6.5 0z"></path>
                         </svg>
                       </div>
                     }
@@ -605,7 +625,7 @@ interface DraftMedicationRow {
               <!-- Patient & Prescriber Row -->
               <section class="rx-doc-parties">
                 <div class="rx-doc-party">
-                  <span class="rx-doc-label">Patient · المريض</span>
+                  <span class="rx-doc-label">{{ isAr() ? 'المريض' : 'Patient' }}</span>
                   <strong class="rx-doc-value">{{ sheet.patientName }}</strong>
                   @if (sheet.patientPhone) {
                     <span class="rx-doc-subvalue" dir="ltr">{{ sheet.patientPhone }}</span>
@@ -613,7 +633,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-doc-party rx-doc-party--end">
-                  <span class="rx-doc-label">Prescribed by · الطبيب المعالج</span>
+                  <span class="rx-doc-label">{{ isAr() ? 'الطبيب المعالج' : 'Prescribed by' }}</span>
                   <strong class="rx-doc-value">{{ sheet.doctorName || '—' }}</strong>
                   @if (sheet.doctorSpecialty) {
                     <span class="rx-doc-subvalue">{{ sheet.doctorSpecialty }}</span>
@@ -623,7 +643,7 @@ interface DraftMedicationRow {
 
               <!-- Diagnosis Section -->
               <section class="rx-doc-diagnosis">
-                <span class="rx-doc-label">Diagnosis · التشخيص الطبي</span>
+                <span class="rx-doc-label">{{ isAr() ? 'التشخيص الطبي' : 'Diagnosis' }}</span>
                 <div class="rx-doc-diagnosis-val">{{ sheet.diagnosis || '—' }}</div>
               </section>
 
@@ -637,11 +657,11 @@ interface DraftMedicationRow {
                 <table class="rx-doc-table">
                   <thead>
                     <tr>
-                      <th>MEDICINE · الدواء</th>
-                      <th>DOSAGE · الجرعة</th>
-                      <th>FREQUENCY · التكرار</th>
-                      <th>DURATION · المدة</th>
-                      <th>INSTRUCTIONS · التعليمات</th>
+                      <th>{{ isAr() ? 'الدواء' : 'MEDICINE' }}</th>
+                      <th>{{ isAr() ? 'الجرعة' : 'DOSAGE' }}</th>
+                      <th>{{ isAr() ? 'التكرار' : 'FREQUENCY' }}</th>
+                      <th>{{ isAr() ? 'المدة' : 'DURATION' }}</th>
+                      <th>{{ isAr() ? 'التعليمات' : 'INSTRUCTIONS' }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -663,7 +683,7 @@ interface DraftMedicationRow {
                 <section class="rx-doc-notes">
                   @if (sheet.notes) {
                     <div class="rx-doc-note-item">
-                      <strong>ملاحظات الطبيب (Notes):</strong> {{ sheet.notes }}
+                      <strong>{{ isAr() ? 'ملاحظات الطبيب:' : 'Doctor Notes:' }}</strong> {{ sheet.notes }}
                     </div>
                   }
                   @if (letterhead().defaultInstructions) {
@@ -688,7 +708,7 @@ interface DraftMedicationRow {
                         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                         <rect x="6" y="14" width="12" height="8"></rect>
                       </svg>
-                      <span>Print · طباعة</span>
+                      <span>{{ isAr() ? 'طباعة' : 'Print' }}</span>
                     </button>
                   </div>
 
@@ -721,9 +741,12 @@ interface DraftMedicationRow {
           >
             <div class="rx-modal-header">
               <div>
-                <h2 class="rx-modal-title">تخصيص الورقة المروسة للعيادة (Clinic Letterhead)</h2>
+                <h2 class="rx-modal-title">{{ isAr() ? 'تخصيص الورقة المروّسة للعيادة' : 'Clinic Letterhead Settings' }}</h2>
                 <p class="rx-modal-sub">
-                  عدّل ترويسة وشعار وبيانات العيادة المعتمدة التي تظهر في جميع الوصفات المطبوعة لهذه العيادة.
+                  {{ isAr()
+                    ? 'عدّل ترويسة وشعار وبيانات العيادة المعتمدة التي تظهر في جميع الوصفات المطبوعة لهذه العيادة.'
+                    : 'Configure the official clinic header, logo, contact information, and print template.'
+                  }}
                 </p>
               </div>
               <button type="button" class="rx-modal-close" (click)="closeLetterheadModal()">&times;</button>
@@ -732,7 +755,7 @@ interface DraftMedicationRow {
             <div class="rx-modal-body">
               <div class="rx-letterhead-form-grid">
                 <div class="rx-field">
-                  <label class="rx-label">اسم العيادة الرسمي (Clinic Name) *</label>
+                  <label class="rx-label">{{ isAr() ? 'اسم العيادة الرسمي *' : 'Official Clinic Name *' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -742,7 +765,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">الوصف / التخصص الفرعي (Subtitle)</label>
+                  <label class="rx-label">{{ isAr() ? 'الوصف / التخصص الفرعي' : 'Subtitle / Specialty' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -752,7 +775,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field rx-field--full">
-                  <label class="rx-label">العنوان التفصيلي (Clinic Address)</label>
+                  <label class="rx-label">{{ isAr() ? 'العنوان التفصيلي' : 'Clinic Address' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -762,7 +785,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">رقم الهاتف (Phone)</label>
+                  <label class="rx-label">{{ isAr() ? 'رقم الهاتف' : 'Phone' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -773,7 +796,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">رقم الواتساب / الطوارئ (WhatsApp)</label>
+                  <label class="rx-label">{{ isAr() ? 'رقم الواتساب / الطوارئ' : 'WhatsApp / Emergency' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -783,7 +806,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">البريد الإلكتروني (Email)</label>
+                  <label class="rx-label">{{ isAr() ? 'البريد الإلكتروني' : 'Email' }}</label>
                   <input
                     type="email"
                     class="rx-input"
@@ -793,7 +816,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">رقم الترخيص الطبي (License #)</label>
+                  <label class="rx-label">{{ isAr() ? 'رقم الترخيص الطبي' : 'License Number' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -803,17 +826,17 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">شعار العيادة (رفع صورة أو رابط Logo URL)</label>
+                  <label class="rx-label">{{ isAr() ? 'شعار العيادة (رفع صورة أو رابط)' : 'Clinic Logo (Upload or URL)' }}</label>
                   <div class="rx-logo-upload-row">
                     <input
                       type="text"
                       class="rx-input"
                       dir="ltr"
-                      placeholder="https://... أو ارفع شعاراً"
+                      [placeholder]="isAr() ? 'https://... أو ارفع شعاراً' : 'https://... or upload logo'"
                       [(ngModel)]="lhLogoUrl"
                     />
                     <label class="fe-btn fe-btn--ghost fe-btn--sm rx-upload-label">
-                      رفع شعار
+                      {{ isAr() ? 'رفع شعار' : 'Upload' }}
                       <input
                         type="file"
                         accept="image/*"
@@ -823,22 +846,22 @@ interface DraftMedicationRow {
                     </label>
                     @if (lhLogoUrl) {
                       <button type="button" class="fe-btn fe-btn--ghost fe-btn--sm" (click)="lhLogoUrl = ''">
-                        إزالة
+                        {{ isAr() ? 'إزالة' : 'Remove' }}
                       </button>
                     }
                   </div>
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">مقاس ورق الطباعة (Paper Size)</label>
+                  <label class="rx-label">{{ isAr() ? 'مقاس ورق الطباعة' : 'Paper Size' }}</label>
                   <select class="rx-select" [(ngModel)]="lhPaperSize">
-                    <option value="A4">A4 (صفحة قياسية كاملة)</option>
-                    <option value="A5">A5 (نصف صفحة للوصفات الطبية)</option>
+                    <option value="A4">{{ isAr() ? 'A4 (صفحة قياسية كاملة)' : 'A4 (Standard full page)' }}</option>
+                    <option value="A5">{{ isAr() ? 'A5 (نصف صفحة للوصفات الطبية)' : 'A5 (Half page - Rx standard)' }}</option>
                   </select>
                 </div>
 
                 <div class="rx-field rx-field--full">
-                  <label class="rx-label">التعليمات الطبية الافتراضية على الوصفة (Default Instructions)</label>
+                  <label class="rx-label">{{ isAr() ? 'التعليمات الطبية الافتراضية على الوصفة' : 'Default Prescription Instructions' }}</label>
                   <textarea
                     rows="2"
                     class="rx-textarea"
@@ -847,7 +870,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field rx-field--full">
-                  <label class="rx-label">نص تذييل الورقة المروسة (Footer Text)</label>
+                  <label class="rx-label">{{ isAr() ? 'نص تذييل الورقة المروّسة' : 'Letterhead Footer Text' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -856,7 +879,7 @@ interface DraftMedicationRow {
                 </div>
 
                 <div class="rx-field">
-                  <label class="rx-label">عنوان خانة التوقيع (Signature Label)</label>
+                  <label class="rx-label">{{ isAr() ? 'عنوان خانة التوقيع' : 'Signature Field Label' }}</label>
                   <input
                     type="text"
                     class="rx-input"
@@ -868,8 +891,8 @@ interface DraftMedicationRow {
                   <label class="rx-checkbox-label">
                     <input type="checkbox" [(ngModel)]="lhPrePrintedPaper" />
                     <span>
-                      <strong>الطباعة على ورق مروّس مسبقاً (Pre-printed Paper)</strong>
-                      <small>إخفاء الترويسة العلوية والتذييل الرقمي عند الطباعة لمطابقة ورق المطبعة الجاهز.</small>
+                      <strong>{{ isAr() ? 'الطباعة على ورق مروّس مسبقاً' : 'Pre-printed Paper Mode' }}</strong>
+                      <small>{{ isAr() ? 'إخفاء الترويسة العلوية والتذييل الرقمي عند الطباعة لمطابقة ورق المطبعة الجاهز.' : 'Hide digital header and footer when printing to use pre-printed physical stationery.' }}</small>
                     </span>
                   </label>
                 </div>
@@ -878,7 +901,7 @@ interface DraftMedicationRow {
 
             <div class="rx-modal-footer">
               <button type="button" class="fe-btn fe-btn--ghost" (click)="closeLetterheadModal()">
-                إلغاء
+                {{ isAr() ? 'إلغاء' : 'Cancel' }}
               </button>
               <button
                 type="button"
@@ -887,7 +910,7 @@ interface DraftMedicationRow {
                 [disabled]="savingLetterhead()"
                 (click)="saveLetterheadSettings()"
               >
-                {{ savingLetterhead() ? 'جاري الحفظ...' : 'حفظ واعتماد الترويسة (Save Letterhead)' }}
+                {{ savingLetterhead() ? (isAr() ? 'جاري الحفظ...' : 'Saving...') : (isAr() ? 'حفظ واعتماد الترويسة' : 'Save Letterhead') }}
               </button>
             </div>
           </div>
@@ -912,17 +935,23 @@ interface DraftMedicationRow {
                 <line x1="14" y1="11" x2="14" y2="17"></line>
               </svg>
             </div>
-            <h2 class="rx-confirm-title">تأكيد حذف الوصفة الطبية</h2>
+            <h2 class="rx-confirm-title">{{ isAr() ? 'تأكيد حذف الوصفة الطبية' : 'Confirm Delete Prescription' }}</h2>
             <p class="rx-confirm-sub">
-              هل أنت متأكد من رغبتك في حذف الوصفة رقم <strong dir="ltr">{{ delSheet.rxNumber }}</strong> للمريض <strong>{{ delSheet.patientName }}</strong>؟
+              {{ isAr()
+                ? ('هل أنت متأكد من رغبتك في حذف الوصفة رقم ' + delSheet.rxNumber + ' للمريض ' + delSheet.patientName + '؟')
+                : ('Are you sure you want to delete prescription ' + delSheet.rxNumber + ' for patient ' + delSheet.patientName + '?')
+              }}
             </p>
             <div class="rx-confirm-details">
-              <div><strong>التشخيص:</strong> {{ delSheet.diagnosis || '—' }}</div>
-              <div><strong>تاريخ الوصفة:</strong> {{ format.date(delSheet.visitDate) }}</div>
-              <div><strong>عدد الأدوية:</strong> {{ delSheet.medications.length }} دواء</div>
+              <div><strong>{{ isAr() ? 'التشخيص:' : 'Diagnosis:' }}</strong> {{ delSheet.diagnosis || '—' }}</div>
+              <div><strong>{{ isAr() ? 'تاريخ الوصفة:' : 'Prescription Date:' }}</strong> {{ format.date(delSheet.visitDate) }}</div>
+              <div><strong>{{ isAr() ? 'عدد الأدوية:' : 'Medications Count:' }}</strong> {{ delSheet.medications.length }}</div>
             </div>
             <div class="rx-confirm-alert">
-              تحذير: سيتم حذف جميع بنود الأدوية ضمن هذه الوصفة بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.
+              {{ isAr()
+                ? 'تحذير: سيتم حذف جميع بنود الأدوية ضمن هذه الوصفة بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.'
+                : 'Warning: All medication items in this prescription will be permanently deleted. This cannot be undone.'
+              }}
             </div>
             <div class="rx-confirm-buttons">
               <button
@@ -931,7 +960,7 @@ interface DraftMedicationRow {
                 [disabled]="deleting()"
                 (click)="cancelDeleteSheet()"
               >
-                إلغاء
+                {{ isAr() ? 'إلغاء' : 'Cancel' }}
               </button>
               <button
                 type="button"
@@ -939,7 +968,7 @@ interface DraftMedicationRow {
                 [disabled]="deleting()"
                 (click)="executeDeleteSheet(delSheet)"
               >
-                {{ deleting() ? 'جاري الحذف...' : 'تأكيد الحذف النهائي' }}
+                {{ deleting() ? (isAr() ? 'جاري الحذف...' : 'Deleting...') : (isAr() ? 'تأكيد الحذف النهائي' : 'Confirm Delete') }}
               </button>
             </div>
           </div>
@@ -958,9 +987,12 @@ interface DraftMedicationRow {
           >
             <div class="rx-modal-header">
               <div>
-                <h2 class="rx-modal-title">دليل الأدوية والاختصارات السريعة (Medications & Presets)</h2>
+                <h2 class="rx-modal-title">{{ isAr() ? 'دليل الأدوية والاختصارات السريعة' : 'Medications & Presets Catalog' }}</h2>
                 <p class="rx-modal-sub">
-                  إدارة الأدوية المعتمدة بالعيادة وجرعاتها الافتراضية، وتخصيص الاختصارات السريعة لتسهيل وصف العلاج.
+                  {{ isAr()
+                    ? 'إدارة الأدوية المعتمدة بالعيادة وجرعاتها الافتراضية، وتخصيص الاختصارات السريعة لتسهيل وصف العلاج.'
+                    : 'Manage approved clinic medications, default dosages, and quick shortcuts for prescriptions.'
+                  }}
                 </p>
               </div>
               <button type="button" class="rx-modal-close" (click)="closePresetsCatalogModal()">&times;</button>
@@ -974,7 +1006,7 @@ interface DraftMedicationRow {
                 [class.rx-catalog-tab--active]="activePresetsTab === 'medications'"
                 (click)="activePresetsTab = 'medications'"
               >
-                أدوية العيادة والاختصارات ({{ medicationPresets().length }})
+                {{ isAr() ? ('أدوية العيادة والاختصارات (' + medicationPresets().length + ')') : ('Clinic Medications (' + medicationPresets().length + ')') }}
               </button>
               <button
                 type="button"
@@ -982,7 +1014,7 @@ interface DraftMedicationRow {
                 [class.rx-catalog-tab--active]="activePresetsTab === 'diagnoses'"
                 (click)="activePresetsTab = 'diagnoses'"
               >
-                اختصارات التشخيصات ({{ diagnosisPresets().length }})
+                {{ isAr() ? ('اختصارات التشخيصات (' + diagnosisPresets().length + ')') : ('Diagnosis Presets (' + diagnosisPresets().length + ')') }}
               </button>
             </div>
 
@@ -995,11 +1027,11 @@ interface DraftMedicationRow {
                       <input
                         type="search"
                         class="rx-input rx-input--sm"
-                        placeholder="بحث في الأدوية المحفوظة..."
+                        [placeholder]="isAr() ? 'بحث في الأدوية المحفوظة...' : 'Search saved medications...'"
                         [(ngModel)]="presetMedSearchQuery"
                       />
                       <select class="rx-select rx-select--sm" [(ngModel)]="presetMedCategoryFilter">
-                        <option value="">كل التصنيفات</option>
+                        <option value="">{{ isAr() ? 'كل التصنيفات' : 'All Categories' }}</option>
                         @for (cat of medCategories(); track cat) {
                           <option [value]="cat">{{ cat }}</option>
                         }
@@ -1010,12 +1042,12 @@ interface DraftMedicationRow {
                       <table class="rx-table rx-table--compact">
                         <thead>
                           <tr>
-                            <th>الدواء (Medicine)</th>
-                            <th>الجرعة</th>
-                            <th>التكرار</th>
-                            <th>المدة</th>
-                            <th>مفضل</th>
-                            <th>حذف</th>
+                            <th>{{ isAr() ? 'الدواء' : 'Medicine' }}</th>
+                            <th>{{ isAr() ? 'الجرعة' : 'Dosage' }}</th>
+                            <th>{{ isAr() ? 'التكرار' : 'Frequency' }}</th>
+                            <th>{{ isAr() ? 'المدة' : 'Duration' }}</th>
+                            <th>{{ isAr() ? 'مفضل' : 'Favorite' }}</th>
+                            <th>{{ isAr() ? 'حذف' : 'Del' }}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1032,16 +1064,16 @@ interface DraftMedicationRow {
                                 <span
                                   class="rx-fav-badge"
                                   [class.rx-fav-badge--on]="p.isFavorite"
-                                  title="{{ p.isFavorite ? 'يظهر في شريط الاختصارات السريعة' : 'غير مثبت' }}"
+                                  [title]="p.isFavorite ? (isAr() ? 'يظهر في شريط الاختصارات السريعة' : 'Pinned to quick presets') : (isAr() ? 'غير مثبت' : 'Not pinned')"
                                 >
-                                  {{ p.isFavorite ? '★ مثبت' : '☆' }}
+                                  {{ p.isFavorite ? (isAr() ? '★ مثبت' : '★ Pinned') : '☆' }}
                                 </span>
                               </td>
                               <td>
                                 <button
                                   type="button"
                                   class="rx-del-row-btn"
-                                  title="حذف الدواء من الدليل"
+                                  [title]="isAr() ? 'حذف الدواء من الدليل' : 'Delete medicine from catalog'"
                                   (click)="deleteMedicationPreset(p.id)"
                                 >
                                   &times;
@@ -1057,75 +1089,75 @@ interface DraftMedicationRow {
                   <!-- Right: Add New Medication Form -->
                   <div class="rx-catalog-form-col">
                     <div class="rx-form-card">
-                      <h4 class="rx-form-card-title">+ إضافة دواء جديد لدليل العيادة</h4>
+                      <h4 class="rx-form-card-title">{{ isAr() ? '+ إضافة دواء جديد لدليل العيادة' : '+ Add New Medicine to Catalog' }}</h4>
                       <div class="rx-form-stack rx-form-stack--sm">
                         <div class="rx-field">
-                          <label class="rx-label">اسم الدواء والعيار (Medicine Name) *</label>
+                          <label class="rx-label">{{ isAr() ? 'اسم الدواء والعيار *' : 'Medicine Name & Strength *' }}</label>
                           <input
                             type="text"
                             class="rx-input"
                             [(ngModel)]="newMedName"
-                            placeholder="مثال: Augmentin 1g"
+                            [placeholder]="isAr() ? 'مثال: Augmentin 1g' : 'e.g., Augmentin 1g'"
                           />
                         </div>
                         <div class="rx-field">
-                          <label class="rx-label">الجرعة الافتراضية (Dosage)</label>
+                          <label class="rx-label">{{ isAr() ? 'الجرعة الافتراضية' : 'Default Dosage' }}</label>
                           <input
                             type="text"
                             class="rx-input"
                             [(ngModel)]="newMedDosage"
-                            placeholder="مثال: 1 tablet / 1 capsule"
+                            [placeholder]="isAr() ? 'مثال: 1 قرص' : 'e.g., 1 tablet / 1 capsule'"
                           />
                         </div>
                         <div class="rx-field">
-                          <label class="rx-label">التكرار الافتراضي (Frequency)</label>
+                          <label class="rx-label">{{ isAr() ? 'التكرار الافتراضي' : 'Default Frequency' }}</label>
                           <input
                             type="text"
                             class="rx-input"
                             [(ngModel)]="newMedFrequency"
-                            placeholder="مثال: Twice a day / كل 12 ساعة"
+                            [placeholder]="isAr() ? 'مثال: مرتين يومياً / كل 12 ساعة' : 'e.g., Twice a day'"
                           />
                         </div>
                         <div class="rx-field">
-                          <label class="rx-label">المدة الافتراضية (Duration)</label>
+                          <label class="rx-label">{{ isAr() ? 'المدة الافتراضية' : 'Default Duration' }}</label>
                           <input
                             type="text"
                             class="rx-input"
                             [(ngModel)]="newMedDuration"
-                            placeholder="مثال: 5 days / 7 days"
+                            [placeholder]="isAr() ? 'مثال: 5 أيام' : 'e.g., 5 days'"
                           />
                         </div>
                         <div class="rx-field">
-                          <label class="rx-label">التعليمات الافتراضية (Instructions)</label>
+                          <label class="rx-label">{{ isAr() ? 'التعليمات الافتراضية' : 'Default Instructions' }}</label>
                           <input
                             type="text"
                             class="rx-input"
                             [(ngModel)]="newMedInstructions"
-                            placeholder="مثال: بعد الأكل مع كوب ماء كبير"
+                            [placeholder]="isAr() ? 'مثال: بعد الأكل مع كوب ماء كبير' : 'e.g., After meals with water'"
                           />
                         </div>
                         <div class="rx-field">
-                          <label class="rx-label">التصنيف (Category)</label>
+                          <label class="rx-label">{{ isAr() ? 'التصنيف' : 'Category' }}</label>
                           <input
                             type="text"
                             class="rx-input"
                             list="med-category-options"
                             [(ngModel)]="newMedCategory"
-                            placeholder="المضادات الحيوية / المسكنات..."
+                            [placeholder]="isAr() ? 'المضادات الحيوية / المسكنات...' : 'Antibiotics / NSAIDs...'"
                           />
                           <datalist id="med-category-options">
-                            <option value="المضادات الحيوية (Antibiotics)"></option>
-                            <option value="مسكنات ومضادات التهاب (NSAIDs)"></option>
-                            <option value="مسكنات وخافضات حرارة (Analgesics)"></option>
-                            <option value="مضامض وغسول فم (Mouthwash)"></option>
-                            <option value="الستيرويدات ومضادات التورم"></option>
-                            <option value="فيتامينات ومكملات"></option>
+                            <option [value]="isAr() ? 'المضادات الحيوية (Antibiotics)' : 'Antibiotics'"></option>
+                            <option [value]="isAr() ? 'مسكنات ومضادات التهاب (NSAIDs)' : 'NSAIDs'"></option>
+                            <option [value]="isAr() ? 'مسكنات وخافضات حرارة (Analgesics)' : 'Analgesics'"></option>
+                            <option [value]="isAr() ? 'مضامض وغسول فم (Mouthwash)' : 'Mouthwash'"></option>
+                            <option [value]="isAr() ? 'الستيرويدات ومضادات التورم' : 'Steroids'"></option>
+                            <option [value]="isAr() ? 'فيتامينات ومكملات' : 'Supplements'"></option>
                           </datalist>
                         </div>
                         <div class="rx-field rx-field--checkbox">
                           <label class="rx-checkbox-label">
                             <input type="checkbox" [(ngModel)]="newMedIsFavorite" />
-                            <span>تثبيت في شريط الاختصارات السريعة للوصفة</span>
+                            <span>{{ isAr() ? 'تثبيت في شريط الاختصارات السريعة للوصفة' : 'Pin to quick prescription shortcuts' }}</span>
                           </label>
                         </div>
                         <button
@@ -1134,7 +1166,7 @@ interface DraftMedicationRow {
                           [disabled]="!newMedName.trim() || savingMedPreset()"
                           (click)="saveNewMedicationPreset()"
                         >
-                          {{ savingMedPreset() ? 'جاري الحفظ...' : '+ حفظ الدواء في الدليل' }}
+                          {{ savingMedPreset() ? (isAr() ? 'جاري الحفظ...' : 'Saving...') : (isAr() ? '+ حفظ الدواء في الدليل' : '+ Save Medicine to Catalog') }}
                         </button>
                       </div>
                     </div>
@@ -1148,9 +1180,9 @@ interface DraftMedicationRow {
                       <table class="rx-table rx-table--compact">
                         <thead>
                           <tr>
-                            <th>التشخيص السريري (Diagnosis Name)</th>
-                            <th>الرمز الطبي (Code)</th>
-                            <th>حذف</th>
+                            <th>{{ isAr() ? 'التشخيص السريري' : 'Clinical Diagnosis' }}</th>
+                            <th>{{ isAr() ? 'الرمز الطبي' : 'Medical Code' }}</th>
+                            <th>{{ isAr() ? 'حذف' : 'Del' }}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1162,7 +1194,7 @@ interface DraftMedicationRow {
                                 <button
                                   type="button"
                                   class="rx-del-row-btn"
-                                  title="حذف الاختصار"
+                                  [title]="isAr() ? 'حذف الاختصار' : 'Delete preset'"
                                   (click)="deleteDiagnosisPreset(d.id)"
                                 >
                                   &times;
@@ -1177,19 +1209,19 @@ interface DraftMedicationRow {
 
                   <div class="rx-catalog-form-col">
                     <div class="rx-form-card">
-                      <h4 class="rx-form-card-title">+ إضافة اختصار تشخيص جديد</h4>
+                      <h4 class="rx-form-card-title">{{ isAr() ? '+ إضافة اختصار تشخيص جديد' : '+ Add Diagnosis Preset' }}</h4>
                       <div class="rx-form-stack rx-form-stack--sm">
                         <div class="rx-field">
-                          <label class="rx-label">اسم التشخيص (Diagnosis) *</label>
+                          <label class="rx-label">{{ isAr() ? 'اسم التشخيص *' : 'Diagnosis Name *' }}</label>
                           <input
                             type="text"
                             class="rx-input"
                             [(ngModel)]="newDiagName"
-                            placeholder="مثال: Pulpitis · التهاب عصب السن"
+                            [placeholder]="isAr() ? 'مثال: Pulpitis · التهاب عصب السن' : 'e.g., Pulpitis'"
                           />
                         </div>
                         <div class="rx-field">
-                          <label class="rx-label">الرمز الطبي الاختياري (Code - ICD/Dental)</label>
+                          <label class="rx-label">{{ isAr() ? 'الرمز الطبي الاختياري (Code - ICD/Dental)' : 'Optional Code (ICD / Dental)' }}</label>
                           <input
                             type="text"
                             class="rx-input"
@@ -1204,7 +1236,7 @@ interface DraftMedicationRow {
                           [disabled]="!newDiagName.trim() || savingDiagPreset()"
                           (click)="saveNewDiagnosisPreset()"
                         >
-                          {{ savingDiagPreset() ? 'جاري الحفظ...' : '+ إضافة التشخيص' }}
+                          {{ savingDiagPreset() ? (isAr() ? 'جاري الحفظ...' : 'Saving...') : (isAr() ? '+ إضافة التشخيص' : '+ Add Diagnosis') }}
                         </button>
                       </div>
                     </div>
@@ -1215,7 +1247,7 @@ interface DraftMedicationRow {
 
             <div class="rx-modal-footer">
               <button type="button" class="fe-btn fe-btn--ghost" (click)="closePresetsCatalogModal()">
-                إغلاق (Close)
+                {{ isAr() ? 'إغلاق' : 'Close' }}
               </button>
             </div>
           </div>
@@ -1234,8 +1266,8 @@ interface DraftMedicationRow {
           >
             <div class="rx-modal-header">
               <div>
-                <h3 class="rx-modal-title">إضافة دواء جديد للاختصارات</h3>
-                <p class="rx-modal-sub">سيتم حفظ الدواء في دليل العيادة وشريط الاختصارات السريعة فوراً.</p>
+                <h3 class="rx-modal-title">{{ isAr() ? 'إضافة دواء جديد للاختصارات' : 'Quick Add Medication' }}</h3>
+                <p class="rx-modal-sub">{{ isAr() ? 'سيتم حفظ الدواء في دليل العيادة وشريط الاختصارات السريعة فوراً.' : 'Medicine will be saved to clinic catalog and quick shortcuts immediately.' }}</p>
               </div>
               <button type="button" class="rx-modal-close" (click)="closeQuickAddMedModal()">&times;</button>
             </div>
@@ -1243,48 +1275,48 @@ interface DraftMedicationRow {
             <div class="rx-modal-body">
               <div class="rx-form-stack rx-form-stack--sm">
                 <div class="rx-field">
-                  <label class="rx-label">اسم الدواء *</label>
+                  <label class="rx-label">{{ isAr() ? 'اسم الدواء *' : 'Medicine Name *' }}</label>
                   <input
                     type="text"
                     class="rx-input"
                     [(ngModel)]="quickAddMedName"
-                    placeholder="مثال: Cataflam 50mg"
+                    [placeholder]="isAr() ? 'مثال: Cataflam 50mg' : 'e.g., Cataflam 50mg'"
                   />
                 </div>
                 <div class="rx-field">
-                  <label class="rx-label">الجرعة الافتراضية</label>
+                  <label class="rx-label">{{ isAr() ? 'الجرعة الافتراضية' : 'Default Dosage' }}</label>
                   <input
                     type="text"
                     class="rx-input"
                     [(ngModel)]="quickAddMedDosage"
-                    placeholder="مثال: 1 tablet"
+                    [placeholder]="isAr() ? 'مثال: 1 قرص' : 'e.g., 1 tablet'"
                   />
                 </div>
                 <div class="rx-field">
-                  <label class="rx-label">التكرار</label>
+                  <label class="rx-label">{{ isAr() ? 'التكرار' : 'Frequency' }}</label>
                   <input
                     type="text"
                     class="rx-input"
                     [(ngModel)]="quickAddMedFrequency"
-                    placeholder="مثال: Twice a day"
+                    [placeholder]="isAr() ? 'مثال: مرتين يومياً' : 'e.g., Twice a day'"
                   />
                 </div>
                 <div class="rx-field">
-                  <label class="rx-label">المدة</label>
+                  <label class="rx-label">{{ isAr() ? 'المدة' : 'Duration' }}</label>
                   <input
                     type="text"
                     class="rx-input"
                     [(ngModel)]="quickAddMedDuration"
-                    placeholder="مثال: 3 days"
+                    [placeholder]="isAr() ? 'مثال: 3 أيام' : 'e.g., 3 days'"
                   />
                 </div>
                 <div class="rx-field">
-                  <label class="rx-label">التعليمات</label>
+                  <label class="rx-label">{{ isAr() ? 'التعليمات' : 'Instructions' }}</label>
                   <input
                     type="text"
                     class="rx-input"
                     [(ngModel)]="quickAddMedInstructions"
-                    placeholder="مثال: بعد الأكل عند اللزوم"
+                    [placeholder]="isAr() ? 'مثال: بعد الأكل عند اللزوم' : 'e.g., After meals as needed'"
                   />
                 </div>
               </div>
@@ -1292,7 +1324,7 @@ interface DraftMedicationRow {
 
             <div class="rx-modal-footer">
               <button type="button" class="fe-btn fe-btn--ghost" (click)="closeQuickAddMedModal()">
-                إلغاء
+                {{ isAr() ? 'إلغاء' : 'Cancel' }}
               </button>
               <button
                 type="button"
@@ -1300,7 +1332,7 @@ interface DraftMedicationRow {
                 [disabled]="!quickAddMedName.trim() || savingQuickAddMed()"
                 (click)="submitQuickAddMed()"
               >
-                {{ savingQuickAddMed() ? 'جاري الحفظ...' : 'حفظ وإدراج في الوصفة' }}
+                {{ savingQuickAddMed() ? (isAr() ? 'جاري الحفظ...' : 'Saving...') : (isAr() ? 'حفظ وإدراج في الوصفة' : 'Save & Insert into Rx') }}
               </button>
             </div>
           </div>
@@ -1342,6 +1374,9 @@ interface DraftMedicationRow {
         align-items: center;
         flex-wrap: wrap;
         gap: 0.6rem;
+        position: relative;
+        z-index: 50;
+        overflow: visible;
       }
       .rx-eyebrow {
         font-size: 0.7rem;
@@ -1351,18 +1386,17 @@ interface DraftMedicationRow {
         text-transform: uppercase;
         margin-bottom: 0.1rem;
       }
+      .rx-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
       .rx-title {
         margin: 0;
         font-size: 1.35rem;
         font-weight: 800;
         color: var(--ink, #0f172a);
         line-height: 1.2;
-      }
-      .rx-subtitle {
-        margin: 0.1rem 0 0;
-        font-size: 0.8rem;
-        color: var(--mute, #64748b);
-        line-height: 1.3;
       }
       .rx-header-actions {
         display: flex;
@@ -1376,7 +1410,7 @@ interface DraftMedicationRow {
         justify-content: space-between;
         align-items: center;
         padding: 0.6rem 0.9rem;
-        border-radius: 8px;
+        border-radius: 3px;
         font-size: 0.85rem;
         font-weight: 600;
       }
@@ -1400,7 +1434,7 @@ interface DraftMedicationRow {
       .rx-card {
         background: var(--surf, #ffffff);
         border: 1px solid var(--line, #e2e8f0);
-        border-radius: 12px;
+        border-radius: 4px;
         box-shadow: var(--shadow-xs);
       }
       .rx-toolbar-card {
@@ -1429,6 +1463,7 @@ interface DraftMedicationRow {
       .rx-search-input {
         padding-inline-start: 2.3rem !important;
         height: 36px;
+        border-radius: 2px !important;
       }
       .rx-filter-group {
         display: flex;
@@ -1462,7 +1497,7 @@ interface DraftMedicationRow {
         justify-content: center;
         width: 26px;
         height: 26px;
-        border-radius: 6px;
+        border-radius: 2px;
         background: rgba(0, 156, 166, 0.12);
         color: var(--pri, #009ca6);
         font-weight: 800;
@@ -1480,7 +1515,7 @@ interface DraftMedicationRow {
         font-size: 0.74rem;
         font-weight: 700;
         padding: 0.12rem 0.5rem;
-        border-radius: 999px;
+        border-radius: 2px;
       }
       .rx-table-wrap {
         flex: 1 1 0% !important;
@@ -1512,11 +1547,11 @@ interface DraftMedicationRow {
         position: sticky;
         top: 0;
         z-index: 5;
-        padding: 0.6rem 0.95rem;
-        font-size: 0.72rem;
+        padding: 10px 14px;
+        font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.05em;
         color: var(--mute, #64748b);
         background: var(--surf2, #f8fafc);
         border-bottom: 1px solid var(--line, #e2e8f0);
@@ -1524,14 +1559,15 @@ interface DraftMedicationRow {
         white-space: nowrap;
       }
       .rx-table td {
-        padding: 0.65rem 0.95rem;
+        padding: 10px 14px;
         border-bottom: 1px solid var(--line, #e2e8f0);
         vertical-align: middle;
-        font-size: 0.88rem;
+        font-size: 12.5px;
         color: var(--ink, #0f172a);
+        line-height: 1.4;
       }
       .rx-table tbody tr:hover {
-        background: rgba(0, 156, 166, 0.06);
+        background: var(--surf2);
       }
       .rx-select option {
         background: var(--surf, #ffffff);
@@ -1539,35 +1575,42 @@ interface DraftMedicationRow {
       }
       .rx-code-badge {
         display: inline-block;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-weight: 800;
-        font-size: 0.88rem;
+        font-family: var(--fe-font-mono, monospace);
+        font-weight: 700;
+        font-size: 11.5px;
         color: var(--pri, #009ca6);
         background: rgba(0, 156, 166, 0.12);
-        padding: 0.25rem 0.6rem;
-        border-radius: 7px;
+        padding: 2px 6px;
+        border-radius: 2px;
       }
       .rx-patient-cell,
       .rx-doctor-cell {
         display: flex;
         flex-direction: column;
-        gap: 0.15rem;
+        gap: 1px;
       }
       .rx-patient-link {
         color: var(--ink, #0f172a);
         font-weight: 600;
+        font-size: 12.5px;
         text-decoration: none;
+      }
+      .rx-doctor-name {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink, #0f172a);
       }
       .rx-patient-link:hover {
         color: var(--pri, #009ca6);
         text-decoration: underline;
       }
       .rx-cell-sub {
-        font-size: 0.78rem;
+        font-size: 11px;
         color: var(--mute, #64748b);
       }
       .rx-diagnosis-text {
         font-weight: 500;
+        font-size: 12.5px;
         color: var(--ink, #1e293b);
       }
       .rx-meds-pills {
@@ -1576,19 +1619,19 @@ interface DraftMedicationRow {
         gap: 0.35rem;
       }
       .rx-med-chip {
-        font-size: 0.76rem;
+        font-size: 11.5px;
         font-weight: 600;
-        padding: 0.18rem 0.5rem;
-        border-radius: 6px;
+        padding: 2px 6px;
+        border-radius: 2px;
         background: var(--surf2, #f1f5f9);
         border: 1px solid var(--line, #e2e8f0);
         color: var(--ink, #334155);
       }
       .rx-med-more {
-        font-size: 0.75rem;
+        font-size: 11px;
         font-weight: 700;
         color: var(--pri, #009ca6);
-        padding: 0.15rem 0.4rem;
+        padding: 2px 4px;
       }
       .rx-col-actions {
         text-align: end;
@@ -1596,15 +1639,15 @@ interface DraftMedicationRow {
       .rx-row-actions {
         display: inline-flex;
         align-items: center;
-        gap: 0.45rem;
+        gap: 0.35rem;
       }
       .rx-action-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 34px;
-        height: 34px;
-        border-radius: 8px;
+        width: 26px;
+        height: 26px;
+        border-radius: 2px;
         border: 1px solid transparent;
         cursor: pointer;
         transition: all 0.15s ease;
@@ -1617,8 +1660,8 @@ interface DraftMedicationRow {
         opacity: 0.9;
       }
       .rx-action-btn--delete {
-        background: rgba(239, 68, 68, 0.1);
-        color: #dc2626;
+        background: var(--accent-red-soft, rgba(239, 68, 68, 0.1));
+        color: var(--accent-red-ink, #dc2626);
         border-color: rgba(239, 68, 68, 0.25);
       }
       .rx-action-btn--delete:hover {
@@ -2436,6 +2479,8 @@ export class ClinicPrescriptionsComponent {
   private readonly router = inject(Router);
   protected readonly rbac = inject(ClinicRbacService);
   protected readonly format = inject(FormatService);
+  protected readonly i18n = inject(I18nService);
+  protected readonly isAr = computed(() => this.i18n.locale() === 'ar');
 
   protected readonly canViewPrescriptions = computed(() =>
     this.rbac.hasAnyPermission(['clinical.view_record', 'clinical.write_record', 'clinical.view_history']) ||
@@ -2460,6 +2505,11 @@ export class ClinicPrescriptionsComponent {
   protected readonly savingLetterhead = signal<boolean>(false);
   protected readonly feedbackMessage = signal<string | null>(null);
   protected readonly errorMessage = signal<string | null>(null);
+
+  protected readonly showDescInfo = signal<boolean>(false);
+  toggleDescInfo(): void {
+    this.showDescInfo.update((v) => !v);
+  }
 
   protected readonly sheets = signal<ClinicPrescriptionSheet[]>([]);
   protected readonly patients = signal<ClinicPatient[]>([]);
@@ -2652,7 +2702,7 @@ export class ClinicPrescriptionsComponent {
         this.newRxDoctorId = doctorsPage.items![0].id ?? '';
       }
     } catch {
-      this.errorMessage.set('تعذر تحميل سجل الوصفات الطبية.');
+      this.errorMessage.set(this.isAr() ? 'تعذر تحميل سجل الوصفات الطبية.' : 'Failed to load prescriptions log.');
     } finally {
       this.loading.set(false);
     }
@@ -2678,8 +2728,8 @@ export class ClinicPrescriptionsComponent {
       ]);
     } else {
       this.draftMedications.set([
-        this.createEmptyMedRow('Amoxicillin 500mg', '1 capsule', 'Three times a day', '5 days', 'بعد الأكل كل 8 ساعات'),
-        this.createEmptyMedRow('Paracetamol 650mg', '1 tablet', 'As needed', '3 days', 'Max 3 per day'),
+        this.createEmptyMedRow('Amoxicillin 500mg', '1 capsule', 'Three times a day', '5 days', this.isAr() ? 'بعد الأكل كل 8 ساعات' : 'After meals every 8h'),
+        this.createEmptyMedRow('Paracetamol 650mg', '1 tablet', 'As needed', '3 days', this.isAr() ? 'عند اللزوم حد أقصى 3 مرات' : 'Max 3 per day as needed'),
       ]);
     }
     this.isNewModalOpen.set(true);
@@ -2744,7 +2794,7 @@ export class ClinicPrescriptionsComponent {
 
   protected async submitNewPrescription(): Promise<void> {
     if (!this.newRxPatientId) {
-      this.errorMessage.set('يرجى اختيار المريض قبل حفظ الوصفة.');
+      this.errorMessage.set(this.isAr() ? 'يرجى اختيار المريض قبل حفظ الوصفة.' : 'Please select a patient before saving prescription.');
       return;
     }
     const validMeds: CreatePrescriptionPayload[] = this.draftMedications()
@@ -2759,7 +2809,7 @@ export class ClinicPrescriptionsComponent {
       }));
 
     if (validMeds.length === 0) {
-      this.errorMessage.set('يرجى إدخال دواء واحد على الأقل في الوصفة الطبية.');
+      this.errorMessage.set(this.isAr() ? 'يرجى إدخال دواء واحد على الأقل في الوصفة الطبية.' : 'Please add at least one medication to the prescription.');
       return;
     }
 
@@ -2781,11 +2831,15 @@ export class ClinicPrescriptionsComponent {
       );
 
       this.isNewModalOpen.set(false);
-      this.feedbackMessage.set(`تم إصدار الوصفة الطبية (${created.rxNumber}) للمريض ${created.patientName} بنجاح.`);
+      this.feedbackMessage.set(
+        this.isAr()
+          ? `تم إصدار الوصفة الطبية (${created.rxNumber}) للمريض ${created.patientName} بنجاح.`
+          : `Prescription (${created.rxNumber}) for patient ${created.patientName} issued successfully.`
+      );
       await this.reloadAll();
       this.activeSheet.set(created);
     } catch {
-      this.errorMessage.set('حدث خطأ أثناء حفظ الوصفة الطبية. يرجى المحاولة مرة أخرى.');
+      this.errorMessage.set(this.isAr() ? 'حدث خطأ أثناء حفظ الوصفة الطبية. يرجى المحاولة مرة أخرى.' : 'Error saving prescription. Please try again.');
     } finally {
       this.saving.set(false);
     }
@@ -2822,9 +2876,13 @@ export class ClinicPrescriptionsComponent {
         this.activeSheet.set(null);
       }
       this.sheetToDelete.set(null);
-      this.feedbackMessage.set(`تم حذف الوصفة الطبية (${sheet.rxNumber}) بنجاح.`);
+      this.feedbackMessage.set(
+        this.isAr()
+          ? `تم حذف الوصفة الطبية (${sheet.rxNumber}) بنجاح.`
+          : `Prescription (${sheet.rxNumber}) deleted successfully.`
+      );
     } catch {
-      this.errorMessage.set('تعذر حذف الوصفة الطبية.');
+      this.errorMessage.set(this.isAr() ? 'تعذر حذف الوصفة الطبية.' : 'Failed to delete prescription.');
     } finally {
       this.deleting.set(false);
     }
@@ -2871,9 +2929,13 @@ export class ClinicPrescriptionsComponent {
       this.medicationPresets.update((prev) => [...prev, created]);
       this.newMedName = '';
       this.newMedInstructions = '';
-      this.feedbackMessage.set(`تم إضافة الدواء (${created.medicationName}) إلى دليل العيادة بنجاح.`);
+      this.feedbackMessage.set(
+        this.isAr()
+          ? `تم إضافة الدواء (${created.medicationName}) إلى دليل العيادة بنجاح.`
+          : `Medication (${created.medicationName}) added to catalog successfully.`
+      );
     } catch {
-      this.errorMessage.set('تعذر إضافة الدواء إلى الدليل.');
+      this.errorMessage.set(this.isAr() ? 'تعذر إضافة الدواء إلى الدليل.' : 'Failed to add medication to catalog.');
     } finally {
       this.savingMedPreset.set(false);
     }
@@ -2884,9 +2946,9 @@ export class ClinicPrescriptionsComponent {
     try {
       await this.api.deleteMedicationPreset(id, { projectId });
       this.medicationPresets.update((prev) => prev.filter((m) => m.id !== id));
-      this.feedbackMessage.set('تم حذف الدواء من الدليل.');
+      this.feedbackMessage.set(this.isAr() ? 'تم حذف الدواء من الدليل.' : 'Medication deleted from catalog.');
     } catch {
-      this.errorMessage.set('تعذر حذف الدواء.');
+      this.errorMessage.set(this.isAr() ? 'تعذر حذف الدواء.' : 'Failed to delete medication.');
     }
   }
 
@@ -2907,9 +2969,13 @@ export class ClinicPrescriptionsComponent {
       this.diagnosisPresets.update((prev) => [...prev, created]);
       this.newDiagName = '';
       this.newDiagCode = '';
-      this.feedbackMessage.set(`تم إضافة التشخيص (${created.name}) بنجاح.`);
+      this.feedbackMessage.set(
+        this.isAr()
+          ? `تم إضافة التشخيص (${created.name}) بنجاح.`
+          : `Diagnosis preset (${created.name}) added successfully.`
+      );
     } catch {
-      this.errorMessage.set('تعذر إضافة التشخيص.');
+      this.errorMessage.set(this.isAr() ? 'تعذر إضافة التشخيص.' : 'Failed to add diagnosis preset.');
     } finally {
       this.savingDiagPreset.set(false);
     }
@@ -2920,9 +2986,9 @@ export class ClinicPrescriptionsComponent {
     try {
       await this.api.deleteDiagnosisPreset(id, { projectId });
       this.diagnosisPresets.update((prev) => prev.filter((d) => d.id !== id));
-      this.feedbackMessage.set('تم حذف التشخيص بنجاح.');
+      this.feedbackMessage.set(this.isAr() ? 'تم حذف التشخيص بنجاح.' : 'Diagnosis preset deleted.');
     } catch {
-      this.errorMessage.set('تعذر حذف التشخيص.');
+      this.errorMessage.set(this.isAr() ? 'تعذر حذف التشخيص.' : 'Failed to delete diagnosis preset.');
     }
   }
 
@@ -2952,7 +3018,7 @@ export class ClinicPrescriptionsComponent {
           frequency: this.quickAddMedFrequency.trim() || 'Twice a day',
           duration: this.quickAddMedDuration.trim() || '5 days',
           instructions: this.quickAddMedInstructions.trim() || undefined,
-          category: 'أدوية العيادة المضافة',
+          category: this.isAr() ? 'أدوية العيادة المضافة' : 'Added Medications',
           isFavorite: true,
           sortOrder: 0,
           projectId,
@@ -2962,9 +3028,13 @@ export class ClinicPrescriptionsComponent {
       this.medicationPresets.update((prev) => [created, ...prev]);
       this.appendPresetObject(created);
       this.isQuickAddMedModalOpen.set(false);
-      this.feedbackMessage.set(`تم حفظ الدواء (${created.medicationName}) وإدراجه في الوصفة.`);
+      this.feedbackMessage.set(
+        this.isAr()
+          ? `تم حفظ الدواء (${created.medicationName}) وإدراجه في الوصفة.`
+          : `Medication (${created.medicationName}) saved and added to prescription.`
+      );
     } catch {
-      this.errorMessage.set('تعذر حفظ الدواء الجديد.');
+      this.errorMessage.set(this.isAr() ? 'تعذر حفظ الدواء الجديد.' : 'Failed to save new medication.');
     } finally {
       this.savingQuickAddMed.set(false);
     }
@@ -3054,9 +3124,13 @@ export class ClinicPrescriptionsComponent {
       );
       this.letterhead.set(updated);
       this.isLetterheadModalOpen.set(false);
-      this.feedbackMessage.set('تم حفظ وتحديث ترويسة الورقة المروسة للعيادة بنجاح.');
+      this.feedbackMessage.set(
+        this.isAr()
+          ? 'تم حفظ وتحديث ترويسة الورقة المروسة للعيادة بنجاح.'
+          : 'Clinic letterhead settings saved successfully.'
+      );
     } catch {
-      this.errorMessage.set('تعذر حفظ إعدادات الترويسة.');
+      this.errorMessage.set(this.isAr() ? 'تعذر حفظ إعدادات الترويسة.' : 'Failed to save letterhead settings.');
     } finally {
       this.savingLetterhead.set(false);
     }

@@ -482,6 +482,23 @@ public class EncounterRepository {
     }
 
     /**
+     * Finds the parent encounter ID of a prescription item.
+     */
+    public Optional<UUID> findPrescriptionEncounterId(ClinicScope scope, UUID prescriptionId) {
+        return scope.read(() -> {
+            List<UUID> ids = jdbc.query("""
+                    select cp."encounterId"
+                      from "clinical_prescriptions" cp
+                     where %s
+                       and cp."id" = :prescriptionId
+                    """.formatted(scope.predicate("cp")),
+                    scope.bind().addValue("prescriptionId", prescriptionId),
+                    (rs, rowNum) -> rs.getObject("encounterId", UUID.class));
+            return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
+        });
+    }
+
+    /**
      * Removes a prescription.
      */
     public boolean deletePrescription(ClinicScope scope, UUID prescriptionId) {
@@ -490,6 +507,11 @@ public class EncounterRepository {
                     delete from "clinical_prescriptions" cp
                      where %s
                        and cp."id" = :prescriptionId
+                       and not exists (
+                           select 1 from "clinical_encounters" ce
+                            where ce."id" = cp."encounterId"
+                              and ce."signedAt" is not null
+                       )
                     """.formatted(scope.predicate("cp")),
                     scope.bind().addValue("prescriptionId", prescriptionId));
             return rows > 0;
@@ -1087,8 +1109,192 @@ public class EncounterRepository {
         return rows > 0;
     }
 
+    public List<EncounterModels.LabOrderRow> listLabOrders(ClinicScope scope, UUID patientId, String status) {
+
+        return scope.read(() -> {
+            StringBuilder sql = new StringBuilder("""
+                    select lo.id, lo."organizationId", lo."projectId", lo."patientId",
+                           coalesce(p."displayName", 'Patient') as "patientName",
+                           lo."doctorId", coalesce(d."name", 'Doctor') as "doctorName",
+                           lo."labName", lo."workType", lo."impressionType", lo."shade", lo."toothFdi",
+                           lo."teethFdi", lo."files", lo."status",
+                           lo."sentDate", lo."dueDate", lo."receivedDate", lo."cost", lo."currency",
+                           lo."notes", lo."createdAt", lo."updatedAt"
+                      from clinic_lab_orders lo
+                      left join "patients" p on p."id" = lo."patientId" and p."organizationId" = lo."organizationId"
+                      left join "doctors" d on d."id" = lo."doctorId" and d."organizationId" = lo."organizationId"
+                     where %s
+                    """.formatted(scope.predicate("lo")));
+            MapSqlParameterSource params = scope.bind();
+            if (patientId != null) {
+                sql.append(" and lo.\"patientId\" = :patientId");
+                params.addValue("patientId", patientId);
+            }
+            if (status != null && !status.isBlank()) {
+                sql.append(" and lo.\"status\" = :status");
+                params.addValue("status", status.trim().toUpperCase());
+            }
+            sql.append(" order by lo.\"createdAt\" desc");
+            return jdbc.query(sql.toString(), params, EncounterRepository::mapLabOrderRow);
+        });
+    }
+
+    public EncounterModels.LabOrderRow createLabOrder(ClinicScope scope, EncounterModels.CreateLabOrderRequest req) {
+
+        if (!scope.isProjectScoped()) {
+            throw new IllegalStateException("Lab order must belong to one clinic; name project explicitly.");
+        }
+        return scope.read(() -> {
+            UUID id = UUID.randomUUID();
+            UUID orgId = scope.queryScope().organizationId();
+            UUID projId = scope.projectId();
+            BigDecimal cost = req.cost() != null ? req.cost().setScale(3, java.math.RoundingMode.HALF_UP) : new BigDecimal("0.000");
+            String currency = req.currency() != null && !req.currency().isBlank() ? req.currency().trim().toUpperCase() : "JOD";
+
+            jdbc.update("""
+                    insert into clinic_lab_orders
+                        (id, "organizationId", "projectId", "patientId", "doctorId", "labName",
+                         "workType", "impressionType", "shade", "toothFdi", "teethFdi", "files",
+                         "status", "dueDate", "cost", "currency", "notes")
+                    values
+                        (:id, :orgId, :projId, :patientId, :doctorId, :labName,
+                         :workType, :impressionType, :shade, :toothFdi, :teethFdi, :files,
+                         'SENT_TO_LAB', :dueDate, :cost, :currency, :notes)
+                    """, new MapSqlParameterSource()
+                    .addValue("id", id)
+                    .addValue("orgId", orgId)
+                    .addValue("projId", projId)
+                    .addValue("patientId", req.patientId())
+                    .addValue("doctorId", req.doctorId())
+                    .addValue("labName", req.labName().trim())
+                    .addValue("workType", req.workType().trim())
+                    .addValue("impressionType", req.impressionType())
+                    .addValue("shade", req.shade())
+                    .addValue("toothFdi", req.toothFdi())
+                    .addValue("teethFdi", req.teethFdi() != null ? req.teethFdi().toArray(Integer[]::new) : null)
+                    .addValue("files", req.files() != null ? req.files().toArray(String[]::new) : null)
+                    .addValue("dueDate", req.dueDate() != null ? Timestamp.valueOf(req.dueDate()) : null)
+                    .addValue("cost", cost)
+                    .addValue("currency", currency)
+                    .addValue("notes", req.notes()));
+
+            return findLabOrder(scope, id).orElseThrow(() -> new IllegalStateException("Lab order created but not found"));
+        });
+    }
+
+    public Optional<EncounterModels.LabOrderRow> findLabOrder(ClinicScope scope, UUID orderId) {
+
+        return scope.read(() -> {
+            List<EncounterModels.LabOrderRow> rows = jdbc.query("""
+                    select lo.id, lo."organizationId", lo."projectId", lo."patientId",
+                           coalesce(p."displayName", 'Patient') as "patientName",
+                           lo."doctorId", coalesce(d."name", 'Doctor') as "doctorName",
+                           lo."labName", lo."workType", lo."impressionType", lo."shade", lo."toothFdi",
+                           lo."teethFdi", lo."files", lo."status",
+                           lo."sentDate", lo."dueDate", lo."receivedDate", lo."cost", lo."currency",
+                           lo."notes", lo."createdAt", lo."updatedAt"
+                      from clinic_lab_orders lo
+                      left join "patients" p on p."id" = lo."patientId" and p."organizationId" = lo."organizationId"
+                      left join "doctors" d on d."id" = lo."doctorId" and d."organizationId" = lo."organizationId"
+                     where %s and lo.id = :id
+                    """.formatted(scope.predicate("lo")),
+                    scope.bind().addValue("id", orderId),
+                    EncounterRepository::mapLabOrderRow);
+            return rows.stream().findFirst();
+        });
+    }
+
+    public EncounterModels.LabOrderRow updateLabOrderStatus(
+            ClinicScope scope, UUID orderId, String status, String notes) {
+
+        String normStatus = status.trim().toUpperCase();
+        return scope.read(() -> {
+            int updated = jdbc.update("""
+                    update clinic_lab_orders lo
+                       set "status" = :status,
+                           "receivedDate" = case when :status in ('RECEIVED', 'DELIVERED', 'COMPLETED') then coalesce(lo."receivedDate", (now() at time zone 'utc')) else lo."receivedDate" end,
+                           "notes" = coalesce(:notes, lo."notes"),
+                           "updatedAt" = (now() at time zone 'utc')
+                     where %s and lo.id = :id
+                    """.formatted(scope.predicate("lo")),
+                    scope.bind()
+                            .addValue("id", orderId)
+                            .addValue("status", normStatus)
+                            .addValue("notes", notes));
+            if (updated == 0) {
+                throw new com.firstelement.crm.error.ResourceNotFoundException("Resource not found");
+            }
+            return findLabOrder(scope, orderId)
+                    .orElseThrow(() -> new com.firstelement.crm.error.ResourceNotFoundException("Resource not found"));
+        });
+    }
+
+    public boolean deleteLabOrder(ClinicScope scope, UUID orderId) {
+        return scope.read(() -> jdbc.update("""
+                delete from clinic_lab_orders lo
+                 where %s and lo.id = :id
+                """.formatted(scope.predicate("lo")),
+                scope.bind().addValue("id", orderId)) > 0);
+    }
+
+    private static EncounterModels.LabOrderRow mapLabOrderRow(ResultSet rs, int rowNum) throws SQLException {
+        return new EncounterModels.LabOrderRow(
+                rs.getObject("id", UUID.class),
+                rs.getObject("organizationId", UUID.class),
+                rs.getObject("projectId", UUID.class),
+                rs.getObject("patientId", UUID.class),
+                rs.getString("patientName"),
+                rs.getObject("doctorId", UUID.class),
+                rs.getString("doctorName"),
+                rs.getString("labName"),
+                rs.getString("workType"),
+                rs.getString("impressionType"),
+                rs.getString("shade"),
+                rs.getObject("toothFdi", Integer.class),
+                toIntegerList(rs.getArray("teethFdi")),
+                toStringList(rs.getArray("files")),
+                rs.getString("status"),
+                toLocalDateTime(rs.getTimestamp("sentDate")),
+                toLocalDateTime(rs.getTimestamp("dueDate")),
+                toLocalDateTime(rs.getTimestamp("receivedDate")),
+                rs.getBigDecimal("cost"),
+                rs.getString("currency"),
+                rs.getString("notes"),
+                toLocalDateTime(rs.getTimestamp("createdAt")),
+                toLocalDateTime(rs.getTimestamp("updatedAt")));
+    }
+
     private static LocalDateTime toLocalDateTime(Timestamp ts) {
         return ts != null ? ts.toLocalDateTime() : null;
+    }
+
+    /**
+     * Reads a PostgreSQL {@code integer[]} without leaking a driver array into the
+     * API. A null column is an absent selection, not an empty one, and the screens
+     * render both the same way.
+     */
+    private static List<Integer> toIntegerList(java.sql.Array array) {
+        if (array == null) {
+            return List.of();
+        }
+        try {
+            Integer[] values = (Integer[]) array.getArray();
+            return values != null ? List.of(values) : List.of();
+        } catch (SQLException e) {
+            return List.of();
+        }
+    }
+
+    private static List<String> toStringList(java.sql.Array array) {
+        if (array == null) {
+            return List.of();
+        }
+        try {
+            String[] values = (String[]) array.getArray();
+            return values != null ? List.of(values) : List.of();
+        } catch (SQLException e) {
+            return List.of();
+        }
     }
 
     private static EncounterModels.EncounterHeader mapEncounterHeader(ResultSet rs, boolean maskMedicalData) throws SQLException {

@@ -1,7 +1,14 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
+import { ClinicApi, type ClinicDoctor } from '../../core/api/endpoints';
+import { ProjectContextService } from '../../core/context/project-context.service';
+import {
+  ClinicPatientApi,
+  type ClinicAlignerCase,
+  type ClinicPatient,
+} from './clinic-patient.api';
 
 export type AlignerStageCategory =
   | 'ALL'
@@ -13,6 +20,8 @@ export type AlignerStageCategory =
 
 export interface AlignerCaseRecord {
   readonly id: string;
+  readonly patientId?: string;
+  readonly doctorId?: string | null;
   readonly doctorName: string;
   readonly patientName: string;
   readonly caseType: string;
@@ -222,12 +231,14 @@ export interface AlignerCaseRecord {
                     <span>Select Doctor *</span>
                     <select
                       class="tl-input"
-                      [ngModel]="draftDoctor()"
-                      (ngModelChange)="draftDoctor.set($event)"
+                      [ngModel]="draftDoctorId()"
+                      [disabled]="editingOrderId() !== null"
+                      (ngModelChange)="draftDoctorId.set($event)"
                     >
-                      <option value="Dr. Eman Khan">Dr. Eman Khan</option>
-                      <option value="Dr. Bilal Ahmed">Dr. Bilal Ahmed</option>
-                      <option value="Dr. Sara Malik">Dr. Sara Malik</option>
+                      <option value="" disabled>Select doctor</option>
+                      @for (doctor of doctors(); track doctor.id) {
+                        <option [value]="doctor.id">{{ doctor.name }}</option>
+                      }
                     </select>
                   </label>
 
@@ -235,15 +246,14 @@ export interface AlignerCaseRecord {
                     <span>Select Patient *</span>
                     <select
                       class="tl-input"
-                      [ngModel]="draftPatient()"
-                      (ngModelChange)="draftPatient.set($event)"
+                      [ngModel]="draftPatientId()"
+                      [disabled]="editingOrderId() !== null"
+                      (ngModelChange)="draftPatientId.set($event)"
                     >
-                      <option value="Mr. Awais">Mr. Awais</option>
-                      <option value="Mrs. Sana">Mrs. Sana</option>
-                      <option value="Ali Raza">Ali Raza</option>
-                      <option value="Zainab Tariq">Zainab Tariq</option>
-                      <option value="Hassan Mahmood">Hassan Mahmood</option>
-                      <option value="Ayesha Siddiqui">Ayesha Siddiqui</option>
+                      <option value="" disabled>Select patient</option>
+                      @for (patient of patients(); track patient.id) {
+                        <option [value]="patient.id">{{ patient.displayName }}</option>
+                      }
                     </select>
                   </label>
 
@@ -252,6 +262,7 @@ export interface AlignerCaseRecord {
                     <select
                       class="tl-input"
                       [ngModel]="draftCaseType()"
+                      [disabled]="editingOrderId() !== null"
                       (ngModelChange)="draftCaseType.set($event)"
                     >
                       <option value="Clear Aligner (Dual Arch)">Clear Aligner (Dual Arch)</option>
@@ -289,6 +300,7 @@ export interface AlignerCaseRecord {
                     <select
                       class="tl-input"
                       [ngModel]="draftImpressionType()"
+                      [disabled]="editingOrderId() !== null"
                       (ngModelChange)="draftImpressionType.set($event)"
                     >
                       <option value="Digital Intraoral Scan (STL) (A2)">Digital Intraoral Scan (STL) (A2)</option>
@@ -304,6 +316,7 @@ export interface AlignerCaseRecord {
                     <select
                       class="tl-input"
                       [ngModel]="draftShade()"
+                      [disabled]="editingOrderId() !== null"
                       (ngModelChange)="draftShade.set($event)"
                     >
                       <option value="A1">A1</option>
@@ -327,6 +340,7 @@ export interface AlignerCaseRecord {
                       min="1"
                       max="60"
                       class="tl-input"
+                      [disabled]="editingOrderId() !== null"
                       [ngModel]="draftUpperSteps()"
                       (ngModelChange)="draftUpperSteps.set($event)"
                     />
@@ -338,6 +352,7 @@ export interface AlignerCaseRecord {
                       min="1"
                       max="60"
                       class="tl-input"
+                      [disabled]="editingOrderId() !== null"
                       [ngModel]="draftLowerSteps()"
                       (ngModelChange)="draftLowerSteps.set($event)"
                     />
@@ -348,6 +363,7 @@ export interface AlignerCaseRecord {
                       type="text"
                       class="tl-input"
                       placeholder="e.g. 0.2mm anterior segment"
+                      [disabled]="editingOrderId() !== null"
                       [ngModel]="draftIpr()"
                       (ngModelChange)="draftIpr.set($event)"
                     />
@@ -359,6 +375,7 @@ export interface AlignerCaseRecord {
                       min="0"
                       max="32"
                       class="tl-input"
+                      [disabled]="editingOrderId() !== null"
                       [ngModel]="draftAttachments()"
                       (ngModelChange)="draftAttachments.set($event)"
                     />
@@ -372,15 +389,15 @@ export interface AlignerCaseRecord {
                 <div class="tl-upload-grid">
                   <label class="tl-upload-box">
                     <span class="tl-upload-title">Maxilla (Upper Arch STL)</span>
-                    <input type="file" (change)="onFileSelected('Upper Arch STL', $event)" />
+                    <input type="file" [disabled]="editingOrderId() !== null" (change)="onFileSelected('Upper Arch STL', $event)" />
                   </label>
                   <label class="tl-upload-box">
                     <span class="tl-upload-title">Mandible (Lower Arch STL)</span>
-                    <input type="file" (change)="onFileSelected('Lower Arch STL', $event)" />
+                    <input type="file" [disabled]="editingOrderId() !== null" (change)="onFileSelected('Lower Arch STL', $event)" />
                   </label>
                   <label class="tl-upload-box">
                     <span class="tl-upload-title">Centric Occlusion Bite Scan</span>
-                    <input type="file" multiple (change)="onFileSelected('Buccal Bite Scan', $event)" />
+                    <input type="file" multiple [disabled]="editingOrderId() !== null" (change)="onFileSelected('Buccal Bite Scan', $event)" />
                   </label>
                 </div>
                 @if (draftFiles().length > 0) {
@@ -401,6 +418,7 @@ export interface AlignerCaseRecord {
                     rows="3"
                     class="tl-textarea"
                     placeholder="Provide specific notes regarding teeth not to move, midline correction, and IPR restrictions..."
+                    [disabled]="editingOrderId() !== null"
                     [ngModel]="draftRxNotes()"
                     (ngModelChange)="draftRxNotes.set($event)"
                   ></textarea>
@@ -563,13 +581,17 @@ export interface AlignerCaseRecord {
         font-size: 13px;
       }
       .tl-table thead th {
-        background: var(--tl-teal, #26c6da);
-        color: #ffffff;
+        background: var(--surf2);
+        color: var(--mute);
         text-align: left;
-        padding: 12px 14px;
+        padding: 10px 14px;
+        font-size: 11px;
         font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
         white-space: nowrap;
         border: none;
+        border-bottom: 1px solid var(--line);
       }
       .tl-table tbody td {
         padding: 12px 14px;
@@ -803,100 +825,16 @@ export interface AlignerCaseRecord {
     `,
   ],
 })
-export class ClinicAlignersComponent {
-  private readonly router = inject(Router);
+export class ClinicAlignersComponent implements OnInit {
+  private readonly api = inject(ClinicPatientApi);
+  private readonly clinic = inject(ClinicApi);
+  private readonly projects = inject(ProjectContextService);
 
-  constructor() {
-    this.router.navigate(['/app/dashboard'], { replaceUrl: true });
-  }
-
-  protected readonly orders = signal<readonly AlignerCaseRecord[]>([
-    {
-      id: 'CP-16970',
-      doctorName: 'Dr. Eman Khan',
-      patientName: 'Mr. Awais',
-      caseType: 'Clear Aligner (Dual Arch)',
-      impressionType: 'Digital Intraoral Scan (STL) (A2)',
-      shade: 'A2',
-      status: 'In Production',
-      createdAt: '11:20 2026-04-08 AM',
-      upperSteps: 18,
-      lowerSteps: 16,
-      teethSummary: '#36, #15, #16',
-      iprSummary: '0.2mm anterior segment',
-      attachmentsCount: 8,
-      rxNotes: 'Class I midline correction with vertical rectangular attachments on premolars.',
-      files: ['Upper Arch STL', 'Lower Arch STL'],
-    },
-    {
-      id: 'CP-16964',
-      doctorName: 'Dr. Eman Khan',
-      patientName: 'Mrs. Sana',
-      caseType: 'Clear Aligner (Dual Arch)',
-      impressionType: 'PVS Elastomeric Putty/Wash (B1)',
-      shade: 'B1',
-      status: 'Sent to Lab',
-      createdAt: '02:45 2026-04-09 PM',
-      upperSteps: 22,
-      lowerSteps: 22,
-      teethSummary: '#22, #21, #11, #12, #13, #23',
-      iprSummary: '0.3mm lower incisors',
-      attachmentsCount: 10,
-      rxNotes: 'Mild anterior crowding resolved via arch expansion and minimal anterior IPR.',
-      files: ['Bite Scan', 'Maxillary Impression'],
-    },
-    {
-      id: 'CP-16958',
-      doctorName: 'Dr. Bilal Ahmed',
-      patientName: 'Ali Raza',
-      caseType: 'Clear Aligner (Upper Arch Only)',
-      impressionType: 'Digital Intraoral Scan (STL) (A3)',
-      shade: 'A3',
-      status: 'Completed',
-      createdAt: '09:15 2026-04-05 AM',
-      upperSteps: 14,
-      lowerSteps: 14,
-      teethSummary: '#46',
-      iprSummary: 'None',
-      attachmentsCount: 6,
-      rxNotes: 'Express aesthetic alignment completed successfully.',
-      files: ['Trios Scan Export'],
-    },
-    {
-      id: 'CP-16951',
-      doctorName: 'Dr. Sara Malik',
-      patientName: 'Zainab Tariq',
-      caseType: 'Clear Aligner (Dual Arch)',
-      impressionType: '3Shape TRIOS Direct STL',
-      shade: 'BL2 (Bleach)',
-      status: 'In Production',
-      createdAt: '04:10 2026-04-03 PM',
-      upperSteps: 20,
-      lowerSteps: 18,
-      teethSummary: '#14, #15, #24, #25',
-      iprSummary: '0.25mm bilateral premolars',
-      attachmentsCount: 9,
-      rxNotes: 'Class II deep bite correction with elastics cutouts.',
-      files: ['Full Arch Scan'],
-    },
-    {
-      id: 'CP-16944',
-      doctorName: 'Dr. Eman Khan',
-      patientName: 'Hassan Mahmood',
-      caseType: 'Express Aesthetic 12-Step Series',
-      impressionType: 'Medit i700 Cloud Export',
-      shade: 'A1',
-      status: 'On Hold',
-      createdAt: '10:30 2026-04-01 AM',
-      upperSteps: 12,
-      lowerSteps: 12,
-      teethSummary: '#32-#42',
-      iprSummary: '0.2mm lower anterior',
-      attachmentsCount: 4,
-      rxNotes: 'Awaiting updated centric occlusion bite scan verification.',
-      files: ['Medit Scan'],
-    },
-  ]);
+  protected readonly orders = signal<readonly AlignerCaseRecord[]>([]);
+  protected readonly doctors = signal<readonly ClinicDoctor[]>([]);
+  protected readonly patients = signal<readonly ClinicPatient[]>([]);
+  protected readonly loading = signal(false);
+  protected readonly saveBusy = signal(false);
 
   protected readonly searchQuery = signal('');
   protected readonly bulkAction = signal('');
@@ -907,11 +845,11 @@ export class ClinicAlignersComponent {
   protected readonly editingOrderId = signal<string | null>(null);
 
   // Drawer Form Signals
-  protected readonly draftDoctor = signal('Dr. Eman Khan');
-  protected readonly draftPatient = signal('Mr. Awais');
+  protected readonly draftDoctorId = signal('');
+  protected readonly draftPatientId = signal('');
   protected readonly draftCaseType = signal('Clear Aligner (Dual Arch)');
-  protected readonly draftStatus = signal<'Sent to Lab' | 'In Production' | 'Quality Check' | 'Completed' | 'On Hold'>('Sent to Lab');
-  protected readonly draftImpressionType = signal('Digital Intraoral Scan (STL) (A2)');
+  protected readonly draftStatus = signal<AlignerCaseRecord['status']>('Sent to Lab');
+  protected readonly draftImpressionType = signal('Digital Intraoral Scan (STL)');
   protected readonly draftShade = signal('A2');
   protected readonly draftUpperSteps = signal(18);
   protected readonly draftLowerSteps = signal(16);
@@ -930,7 +868,7 @@ export class ClinicAlignersComponent {
       r.patientName.toLowerCase().includes(q) ||
       r.caseType.toLowerCase().includes(q) ||
       r.status.toLowerCase().includes(q) ||
-      r.teethSummary.toLowerCase().includes(q)
+      r.teethSummary.toLowerCase().includes(q),
     );
   });
 
@@ -939,6 +877,57 @@ export class ClinicAlignersComponent {
     const sel = this.selectedIds();
     return rows.length > 0 && rows.every((r) => sel.has(r.id));
   });
+
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  private projectQuery(): { projectId?: string } {
+    const projectId = this.projects.selectedProjectId();
+    return projectId ? { projectId } : {};
+  }
+
+  private async load(): Promise<void> {
+    this.loading.set(true);
+    try {
+      const query = this.projectQuery();
+      const [cases, doctors, patients] = await Promise.all([
+        this.api.alignerCases(query),
+        this.clinic.doctors(query),
+        this.api.patients(query),
+      ]);
+      this.orders.set(cases.map((row) => this.toRecord(row)));
+      this.doctors.set(doctors.items ?? []);
+      this.patients.set(patients);
+    } catch {
+      this.bannerMessage.set('Could not load the aligner pipeline. Check the clinic connection.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private toRecord(row: ClinicAlignerCase): AlignerCaseRecord {
+    return {
+      id: row.id,
+      patientId: row.patientId,
+      doctorId: row.doctorId ?? null,
+      doctorName: row.doctorName ?? '—',
+      patientName: row.patientName ?? '—',
+      caseType: row.caseType,
+      impressionType: row.impressionType ?? '',
+      shade: row.shade ?? '',
+      status: ALIGNER_STATUS_LABEL[row.status] ?? 'Sent to Lab',
+      createdAt: formatTimestamp(row.createdAt),
+      upperSteps: row.upperSteps,
+      lowerSteps: row.lowerSteps,
+      teethSummary:
+        row.teethSummary ?? `#13-#23 (${row.upperSteps}U / ${row.lowerSteps}L)`,
+      iprSummary: row.iprSummary ?? 'None',
+      attachmentsCount: row.attachmentsCount,
+      rxNotes: row.rxNotes ?? '',
+      files: row.files ?? [],
+    };
+  }
 
   protected toggleRowSelection(id: string, checked: boolean): void {
     this.selectedIds.update((set) => {
@@ -957,24 +946,31 @@ export class ClinicAlignersComponent {
     }
   }
 
-  protected applyBulkAction(): void {
+  protected async applyBulkAction(): Promise<void> {
     const act = this.bulkAction();
-    const sel = this.selectedIds();
-    if (!act || sel.size === 0) return;
+    const sel = Array.from(this.selectedIds());
+    if (!act || sel.length === 0) return;
 
-    if (act === 'COMPLETED') {
-      this.orders.update((list) =>
-        list.map((r) => (sel.has(r.id) ? { ...r, status: 'Completed' } : r))
-      );
-      this.bannerMessage.set(`Marked ${sel.size} aligner case(s) as Completed.`);
-    } else if (act === 'PRODUCTION') {
-      this.orders.update((list) =>
-        list.map((r) => (sel.has(r.id) ? { ...r, status: 'In Production' } : r))
-      );
-      this.bannerMessage.set(`Marked ${sel.size} aligner case(s) as In Production.`);
-    } else if (act === 'DELETE') {
-      this.orders.update((list) => list.filter((r) => !sel.has(r.id)));
-      this.bannerMessage.set(`Deleted ${sel.size} aligner case(s).`);
+    if (act === 'DELETE') {
+      let deleted = 0;
+      for (const id of sel) {
+        try {
+          await this.api.deleteAlignerCase(id, this.projectQuery());
+          deleted += 1;
+        } catch {
+          // A refused row does not abort the batch; the count reports what moved.
+        }
+      }
+      await this.load();
+      this.bannerMessage.set(`Deleted ${deleted} of ${sel.length} aligner case(s).`);
+    } else {
+      const status = act === 'COMPLETED' ? 'Completed' : 'In Production';
+      let moved = 0;
+      for (const id of sel) {
+        const updated = await this.applyStatus(id, status);
+        if (updated) moved += 1;
+      }
+      this.bannerMessage.set(`Moved ${moved} of ${sel.length} aligner case(s) to ${status}.`);
     }
     this.selectedIds.set(new Set());
     this.bulkAction.set('');
@@ -987,7 +983,7 @@ export class ClinicAlignersComponent {
       rows
         .map(
           (r) =>
-            `"${r.id}","${r.doctorName}","${r.patientName}","${r.caseType}","${r.impressionType}","${r.teethSummary}","${r.status}","${r.createdAt}"`
+            `"${r.id}","${r.doctorName}","${r.patientName}","${r.caseType}","${r.impressionType}","${r.teethSummary}","${r.status}","${r.createdAt}"`,
         )
         .join('\n');
 
@@ -1003,11 +999,11 @@ export class ClinicAlignersComponent {
 
   protected openCreateDrawer(): void {
     this.editingOrderId.set(null);
-    this.draftDoctor.set('Dr. Eman Khan');
-    this.draftPatient.set('Mr. Awais');
+    this.draftDoctorId.set('');
+    this.draftPatientId.set('');
     this.draftCaseType.set('Clear Aligner (Dual Arch)');
     this.draftStatus.set('Sent to Lab');
-    this.draftImpressionType.set('Digital Intraoral Scan (STL) (A2)');
+    this.draftImpressionType.set('Digital Intraoral Scan (STL)');
     this.draftShade.set('A2');
     this.draftUpperSteps.set(18);
     this.draftLowerSteps.set(16);
@@ -1020,8 +1016,8 @@ export class ClinicAlignersComponent {
 
   protected viewOrder(row: AlignerCaseRecord): void {
     this.editingOrderId.set(row.id);
-    this.draftDoctor.set(row.doctorName);
-    this.draftPatient.set(row.patientName);
+    this.draftDoctorId.set(row.doctorId ?? '');
+    this.draftPatientId.set(row.patientId ?? '');
     this.draftCaseType.set(row.caseType);
     this.draftStatus.set(row.status);
     this.draftImpressionType.set(row.impressionType);
@@ -1039,9 +1035,14 @@ export class ClinicAlignersComponent {
     this.drawerOpen.set(false);
   }
 
-  protected deleteOrder(id: string): void {
-    this.orders.update((list) => list.filter((r) => r.id !== id));
-    this.bannerMessage.set(`Deleted aligner case ${id}.`);
+  protected async deleteOrder(id: string): Promise<void> {
+    try {
+      await this.api.deleteAlignerCase(id, this.projectQuery());
+      this.orders.update((list) => list.filter((r) => r.id !== id));
+      this.bannerMessage.set(`Deleted aligner case ${shortRef(id)}.`);
+    } catch {
+      this.bannerMessage.set('Only a clinic administrator can delete an aligner case.');
+    }
   }
 
   protected printOrder(_row: AlignerCaseRecord): void {
@@ -1049,6 +1050,7 @@ export class ClinicAlignersComponent {
   }
 
   protected onFileSelected(label: string, event: Event): void {
+    if (this.editingOrderId() !== null) return;
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       const fileName = input.files[0].name;
@@ -1056,54 +1058,106 @@ export class ClinicAlignersComponent {
     }
   }
 
-  protected saveAlignerCase(): void {
+  protected async saveAlignerCase(): Promise<void> {
+    if (this.saveBusy()) return;
     const editId = this.editingOrderId();
     if (editId) {
-      this.orders.update((list) =>
-        list.map((r) =>
-          r.id === editId
-            ? {
-                ...r,
-                doctorName: this.draftDoctor(),
-                patientName: this.draftPatient(),
-                caseType: this.draftCaseType(),
-                status: this.draftStatus(),
-                impressionType: this.draftImpressionType(),
-                shade: this.draftShade(),
-                upperSteps: this.draftUpperSteps(),
-                lowerSteps: this.draftLowerSteps(),
-                iprSummary: this.draftIpr(),
-                attachmentsCount: this.draftAttachments(),
-                rxNotes: this.draftRxNotes(),
-                files: this.draftFiles(),
-              }
-            : r
-        )
-      );
-      this.bannerMessage.set(`Updated clear aligner case ${editId}.`);
-    } else {
-      const nextNum = 16971 + this.orders().length;
-      const newId = `CP-${nextNum}`;
-      const newRecord: AlignerCaseRecord = {
-        id: newId,
-        doctorName: this.draftDoctor(),
-        patientName: this.draftPatient(),
-        caseType: this.draftCaseType(),
-        impressionType: this.draftImpressionType(),
-        shade: this.draftShade(),
-        status: this.draftStatus(),
-        createdAt: 'Just now',
-        upperSteps: this.draftUpperSteps(),
-        lowerSteps: this.draftLowerSteps(),
-        teethSummary: `#13-#23 (${this.draftUpperSteps()}U / ${this.draftLowerSteps()}L)`,
-        iprSummary: this.draftIpr(),
-        attachmentsCount: this.draftAttachments(),
-        rxNotes: this.draftRxNotes(),
-        files: this.draftFiles(),
-      };
-      this.orders.update((list) => [newRecord, ...list]);
-      this.bannerMessage.set(`Created new clear aligner case ${newId}.`);
+      await this.applyStatus(editId, this.draftStatus());
+      this.drawerOpen.set(false);
+      return;
     }
-    this.drawerOpen.set(false);
+
+    const patientId = this.draftPatientId();
+    if (!patientId) {
+      this.bannerMessage.set('Choose a patient before saving the aligner case.');
+      return;
+    }
+    this.saveBusy.set(true);
+    try {
+      const created = await this.api.createAlignerCase(
+        {
+          patientId,
+          doctorId: this.draftDoctorId() || null,
+          caseType: this.draftCaseType(),
+          impressionType: this.draftImpressionType(),
+          shade: this.draftShade(),
+          upperSteps: this.draftUpperSteps(),
+          lowerSteps: this.draftLowerSteps(),
+          teethSummary: `#13-#23 (${this.draftUpperSteps()}U / ${this.draftLowerSteps()}L)`,
+          iprSummary: this.draftIpr(),
+          attachmentsCount: this.draftAttachments(),
+          rxNotes: this.draftRxNotes(),
+          files: this.draftFiles(),
+          ...this.projectQuery(),
+        },
+        this.projectQuery(),
+      );
+      let record = this.toRecord(created);
+      if (this.draftStatus() !== 'Sent to Lab') {
+        const moved = await this.api.updateAlignerCaseStatus(
+          created.id,
+          ALIGNER_STATUS_WIRE[this.draftStatus()],
+          this.projectQuery(),
+        );
+        record = this.toRecord(moved);
+      }
+      this.orders.update((list) => [record, ...list]);
+      this.bannerMessage.set(`Created clear aligner case ${shortRef(record.id)}.`);
+      this.drawerOpen.set(false);
+    } catch {
+      this.bannerMessage.set('Could not save the aligner case. The server refused the request.');
+    } finally {
+      this.saveBusy.set(false);
+    }
   }
+
+  private async applyStatus(
+    id: string,
+    status: AlignerCaseRecord['status'],
+  ): Promise<boolean> {
+    const current = this.orders().find((row) => row.id === id);
+    if (current?.status === status) return true;
+    try {
+      const updated = await this.api.updateAlignerCaseStatus(
+        id,
+        ALIGNER_STATUS_WIRE[status],
+        this.projectQuery(),
+      );
+      this.orders.update((list) =>
+        list.map((row) => (row.id === id ? this.toRecord(updated) : row)),
+      );
+      return true;
+    } catch {
+      this.bannerMessage.set(`Could not move case ${shortRef(id)} to ${status}.`);
+      return false;
+    }
+  }
+}
+
+const ALIGNER_STATUS_LABEL: Record<string, AlignerCaseRecord['status']> = {
+  SENT_TO_LAB: 'Sent to Lab',
+  IN_PRODUCTION: 'In Production',
+  QUALITY_CHECK: 'Quality Check',
+  COMPLETED: 'Completed',
+  ON_HOLD: 'On Hold',
+};
+
+const ALIGNER_STATUS_WIRE: Record<AlignerCaseRecord['status'], string> = {
+  'Sent to Lab': 'SENT_TO_LAB',
+  'In Production': 'IN_PRODUCTION',
+  'Quality Check': 'QUALITY_CHECK',
+  Completed: 'COMPLETED',
+  'On Hold': 'ON_HOLD',
+};
+
+function shortRef(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }

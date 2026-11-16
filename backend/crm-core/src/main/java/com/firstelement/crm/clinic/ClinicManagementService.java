@@ -430,7 +430,7 @@ public class ClinicManagementService {
         }
         ClinicScope scope = ClinicScope.forCaller(caller);
         List<UUID> reachable = scope.accessibleProjectIds();
-        if (!reachable.isEmpty()) {
+        if (reachable.size() == 1) {
             return ClinicScope.forRequestedProject(guard, caller, reachable.get(0));
         }
         throw new ValidationFailedException(

@@ -233,6 +233,15 @@ public class InvoiceService {
         if (request.discountAmount().compareTo(invoice.subtotal()) > 0) {
             throw new IllegalArgumentException("Discount cannot exceed the invoice subtotal (" + invoice.subtotal() + ")");
         }
+        BigDecimal maxAllowedDiscount = invoice.subtotal().subtract(
+                invoice.paidAmount() != null ? invoice.paidAmount() : BigDecimal.ZERO);
+        if (request.discountAmount().compareTo(maxAllowedDiscount) > 0) {
+            throw new IllegalArgumentException("Discount (" + request.discountAmount()
+                    + ") cannot exceed the remaining unpaid balance (" + maxAllowedDiscount + ")");
+        }
+
+        BigDecimal previousDiscount = invoice.discountAmount() != null ? invoice.discountAmount() : BigDecimal.ZERO;
+        BigDecimal discountDelta = request.discountAmount().subtract(previousDiscount);
 
         repository.applyDiscount(
                 scope,
@@ -242,21 +251,38 @@ public class InvoiceService {
                 caller.userId()
         );
 
-        // Record discount credit entry in patient ledger
-        repository.insertLedgerEntry(
-                scope,
-                invoice.patientId(),
-                "DISCOUNT_CREDIT",
-                "CREDIT",
-                request.discountAmount(),
-                invoice.currency(),
-                invoiceId,
-                null,
-                null,
-                invoice.invoiceNumber(),
-                "Manager discount applied: " + request.discountReason().trim(),
-                caller.userId()
-        );
+        // Record net discount delta entry in patient ledger so invoice and ledger stay reconciled to the fils
+        if (discountDelta.compareTo(BigDecimal.ZERO) > 0) {
+            repository.insertLedgerEntry(
+                    scope,
+                    invoice.patientId(),
+                    "DISCOUNT_CREDIT",
+                    "CREDIT",
+                    discountDelta,
+                    invoice.currency(),
+                    invoiceId,
+                    null,
+                    null,
+                    invoice.invoiceNumber(),
+                    "Manager discount applied: " + request.discountReason().trim(),
+                    caller.userId()
+            );
+        } else if (discountDelta.compareTo(BigDecimal.ZERO) < 0) {
+            repository.insertLedgerEntry(
+                    scope,
+                    invoice.patientId(),
+                    "ADJUSTMENT",
+                    "DEBIT",
+                    discountDelta.abs(),
+                    invoice.currency(),
+                    invoiceId,
+                    null,
+                    null,
+                    invoice.invoiceNumber(),
+                    "Manager discount adjusted: " + request.discountReason().trim(),
+                    caller.userId()
+            );
+        }
 
         return repository.findInvoice(scope, invoiceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found after applying discount"));
@@ -428,7 +454,13 @@ public class InvoiceService {
                     + ") cannot exceed paid amount on invoice (" + invoice.paidAmount() + ")");
         }
 
-        String currency = request.currency() != null ? request.currency().toUpperCase() : invoice.currency();
+        String currency = request.currency() != null && !request.currency().isBlank()
+                ? request.currency().trim().toUpperCase()
+                : invoice.currency();
+        if (!currency.equalsIgnoreCase(invoice.currency())) {
+            throw new IllegalArgumentException("Refund currency (" + currency
+                    + ") must match invoice currency (" + invoice.currency() + ") (BIL-07).");
+        }
         String refundNumber = repository.allocateSequenceNumber(scope, "REFUND", "REF");
 
         UUID refundId = repository.insertRefund(

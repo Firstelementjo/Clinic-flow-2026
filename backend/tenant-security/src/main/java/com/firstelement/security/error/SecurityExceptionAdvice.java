@@ -113,7 +113,7 @@ public class SecurityExceptionAdvice {
     public ResponseEntity<ErrorResponse> policyDenied(PolicyDeniedException ex, HttpServletRequest request) {
         publish(SecurityEventType.AUTHORIZATION_DENIED, request, "web", ex.reason(),
             Map.of("scope", ex.reason(), "surface", "http"));
-        log.info("Authorization denied reason={} path={}", ex.reason(), request.getRequestURI());
+        log.info("Request rejected path={}", request.getRequestURI());
         return build(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found", request);
     }
 

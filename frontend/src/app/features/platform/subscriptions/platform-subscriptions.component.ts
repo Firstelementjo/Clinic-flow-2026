@@ -135,7 +135,7 @@ export class PlatformSubscriptionsComponent implements OnInit {
     this.paymentRef = '';
     this.paymentMonths = 1;
     this.paymentNotes = '';
-    this.paymentIdempotencyKey = 'PAY-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    this.paymentIdempotencyKey = 'PAY-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase() : Date.now().toString(36).toUpperCase());
     this.paymentError.set(null);
     this.paymentModalOpen.set(true);
   }
@@ -146,7 +146,7 @@ export class PlatformSubscriptionsComponent implements OnInit {
   }
 
   regenerateIdempotencyKey(): void {
-    this.paymentIdempotencyKey = 'PAY-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    this.paymentIdempotencyKey = 'PAY-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase() : Date.now().toString(36).toUpperCase());
   }
 
   async submitPayment(): Promise<void> {

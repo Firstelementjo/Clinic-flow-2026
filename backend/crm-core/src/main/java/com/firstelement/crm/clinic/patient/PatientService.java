@@ -125,6 +125,33 @@ public class PatientService {
                         "Patient " + id + " was written but could not be read back in scope."));
     }
 
+    public PatientModels.PatientRow update(
+            ClinicScope scope, UUID patientId, PatientModels.CreatePatientCommand command) {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("patientNo", command.patientNo());
+        parameters.put("displayName", command.displayName());
+        parameters.put("givenName", command.givenName());
+        parameters.put("familyName", command.familyName());
+        parameters.put("gender", command.gender());
+        parameters.put("dateOfBirth", command.dateOfBirth());
+        parameters.put("primaryPhone", command.phone());
+        parameters.put("primaryEmail", command.email());
+        parameters.put("cnic", command.cnic());
+        parameters.put("profileImageUrl", command.profileImageUrl());
+        parameters.put("addressLine", command.addressLine());
+        parameters.put("country", command.country());
+        parameters.put("state", command.state());
+        parameters.put("city", command.city());
+        parameters.put("postalCode", command.postalCode());
+        parameters.put("isActive", command.isActive());
+        parameters.put("locale", command.locale() == null ? "ar" : command.locale());
+        parameters.put("customerId", command.customerId());
+
+        repository.update(scope, patientId, parameters);
+        return repository.findById(scope, patientId)
+                .orElseThrow(() -> new com.firstelement.crm.error.ResourceNotFoundException("Resource not found"));
+    }
+
     /**
      * Duplicate candidates for a person who is about to be created.
      *

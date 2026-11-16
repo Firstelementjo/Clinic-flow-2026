@@ -249,9 +249,6 @@ public final class RolePermissions {
                                                     Set<Capability> capabilities,
                                                     boolean isPlatformAdmin) {
         if (type == PrincipalType.USER) {
-            if (role == UserRole.ADMIN) {
-                return ADMIN;
-            }
             return isPlatformAdmin ? OPERATOR : forRole(role);
         }
         return forCapabilities(capabilities);

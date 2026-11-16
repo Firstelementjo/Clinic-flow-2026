@@ -335,5 +335,56 @@ public final class EncounterModels {
             String code,
             String projectId) {
     }
+
+    /**
+     * Dental Lab Order record for prosthetic/lab case tracking.
+     */
+    public record LabOrderRow(
+            UUID id,
+            UUID organizationId,
+            UUID projectId,
+            UUID patientId,
+            String patientName,
+            UUID doctorId,
+            String doctorName,
+            String labName,
+            String workType,
+            String impressionType,
+            String shade,
+            Integer toothFdi,
+            List<Integer> teethFdi,
+            List<String> files,
+            String status,
+            LocalDateTime sentDate,
+            LocalDateTime dueDate,
+            LocalDateTime receivedDate,
+            BigDecimal cost,
+            String currency,
+            String notes,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {
+    }
+
+    public record CreateLabOrderRequest(
+            UUID patientId,
+            UUID doctorId,
+            String labName,
+            String workType,
+            String impressionType,
+            String shade,
+            Integer toothFdi,
+            List<Integer> teethFdi,
+            List<String> files,
+            LocalDateTime dueDate,
+            BigDecimal cost,
+            String currency,
+            String notes,
+            String projectId) {
+    }
+
+    public record UpdateLabOrderStatusRequest(
+            String status,
+            String notes) {
+    }
 }
 

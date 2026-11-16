@@ -26,36 +26,44 @@ export type StatusTone = 'human' | 'ai' | 'escalated' | 'ok' | 'warn' | 'bad' | 
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 2px 9px;
-        border-radius: 999px;
+        padding: 3px 8px;
+        border-radius: 2px;
         font-size: var(--fe-text-xs);
-        font-weight: 500;
+        font-weight: 600;
+        letter-spacing: -0.01em;
         background: var(--pri-soft);
         color: var(--pri);
+        border: 1px solid transparent;
       }
       .chip--human {
         background: var(--pri-soft);
         color: var(--pri);
+        border-color: rgba(13, 148, 136, 0.25);
       }
       .chip--ai {
         background: var(--blue-soft);
         color: var(--blue);
+        border-color: rgba(37, 99, 235, 0.25);
       }
       .chip--escalated {
         background: var(--warn-soft);
         color: var(--warn);
+        border-color: rgba(217, 119, 6, 0.25);
       }
       .chip--ok {
         background: var(--ok-soft);
         color: var(--ok);
+        border-color: rgba(22, 163, 74, 0.25);
       }
       .chip--warn {
         background: var(--warn-soft);
         color: var(--warn);
+        border-color: rgba(217, 119, 6, 0.25);
       }
       .chip--bad {
         background: var(--bad-soft);
         color: var(--bad);
+        border-color: rgba(220, 38, 38, 0.25);
       }
       .chip--neutral {
         background: var(--surf2);

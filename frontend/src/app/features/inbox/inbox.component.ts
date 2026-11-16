@@ -695,7 +695,8 @@ export class InboxComponent implements OnInit, OnDestroy {
     this.sending.set(true);
     this.collision.set(null);
     this.notice.set(null);
-    this.idempotencyKey ??= `fe-${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const randSuffix = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').slice(0, 8) : Date.now().toString(36);
+    this.idempotencyKey ??= `fe-${id}-${Date.now()}-${randSuffix}`;
 
     try {
       const updated = await this.conversations.reply(
