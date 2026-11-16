@@ -113,7 +113,17 @@
 
 ## Getting Started
 
-### Prerequisites
+### Quick Start (Windows 1-Click Deployment)
+Simply double-click or run the automated deployment batch script:
+
+```cmd
+deploy.bat
+```
+- **Option 1:** Complete Docker Production Stack (PostgreSQL, Redis, Spring Boot API, and Angular).
+- **Option 2:** Fast Local Dev Mode (Runs databases in Docker, and launches Spring Boot and Angular with hot-reload).
+- **Option 3:** Stop and clean all running containers.
+
+### Prerequisites (Manual Setup)
 - **Java 21** or higher
 - **Node.js 20+** and **npm**
 - **Docker** and **Docker Compose**
