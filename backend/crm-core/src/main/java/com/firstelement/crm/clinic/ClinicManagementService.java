@@ -141,6 +141,10 @@ public class ClinicManagementService {
         if (normalized.frontDeskOfficerId() != null) {
             staff.assignClinic(scope, normalized.frontDeskOfficerId(), id);
         }
+        int roomsCount = normalized.initialTreatmentRooms() != null && normalized.initialTreatmentRooms() > 0
+                ? normalized.initialTreatmentRooms()
+                : 1;
+        repository.seedTreatmentRoomsForLocation(scope, id, roomsCount);
         return repository.location(scope, id)
             .orElseThrow(() -> new IllegalStateException("The clinic was inserted but not read back."));
     }
@@ -301,7 +305,8 @@ public class ClinicManagementService {
             trimToNull(input.postalCode()),
             input.slotMinutes(),
             input.brandImageUrl(),
-            input.isActive());
+            input.isActive(),
+            input.initialTreatmentRooms());
     }
 
     private ProcedureInput validateProcedure(ClinicScope scope, ProcedureInput input,

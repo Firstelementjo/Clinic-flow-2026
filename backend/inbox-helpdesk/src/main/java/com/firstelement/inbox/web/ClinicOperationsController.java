@@ -11,6 +11,7 @@ import com.firstelement.security.permission.Permission;
 import com.firstelement.security.query.TenantQueryGuard;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -186,6 +188,438 @@ public class ClinicOperationsController {
             @RequestParam(required = false) String projectId) {
         return operationsService.updatePayoutStatus(
                 writeScope(projectId), payoutId, request.status(), caller());
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 1: Inventory Management & Service-to-Material Mapping
+    // ------------------------------------------------------------------
+
+    @GetMapping("/inventory/items")
+    @RequirePermission(Permission.PROCEDURE_READ)
+    @Operation(summary = "List branch inventory items")
+    public List<ClinicOperationsModels.InventoryItemRow> listInventoryItems(
+            @RequestParam(required = false) String clinicId,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false, defaultValue = "false") boolean lowStockOnly,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listInventoryItems(
+                scope(projectId), RequestParams.optionalUuid(clinicId, "clinicId"), q, lowStockOnly);
+    }
+
+    @GetMapping("/inventory/consolidated")
+    @RequirePermission(Permission.PROCEDURE_READ)
+    @Operation(summary = "Consolidated multi-branch inventory overview")
+    public List<ClinicOperationsModels.ConsolidatedInventoryRow> listConsolidatedInventory(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listConsolidatedInventory(scope(projectId), q);
+    }
+
+    @PostMapping("/inventory/items")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.PROCEDURE_MANAGE)
+    @Operation(summary = "Create an inventory material item")
+    public ClinicOperationsModels.InventoryItemRow createInventoryItem(
+            @RequestBody ClinicOperationsModels.CreateInventoryItemRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createInventoryItem(writeScope(effectiveProject), request, caller());
+    }
+
+    @PatchMapping("/inventory/items/{itemId}")
+    @RequirePermission(Permission.PROCEDURE_MANAGE)
+    @Operation(summary = "Update an inventory material item")
+    public ClinicOperationsModels.InventoryItemRow updateInventoryItem(
+            @PathVariable("itemId") UUID itemId,
+            @RequestBody ClinicOperationsModels.UpdateInventoryItemRequest request,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.updateInventoryItem(writeScope(projectId), itemId, request, caller());
+    }
+
+    @PostMapping("/inventory/items/{itemId}/adjust")
+    @RequirePermission(Permission.PROCEDURE_MANAGE)
+    @Operation(summary = "Adjust or purchase inventory stock")
+    public ClinicOperationsModels.InventoryItemRow adjustInventoryStock(
+            @PathVariable("itemId") UUID itemId,
+            @RequestBody ClinicOperationsModels.AdjustInventoryStockRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.adjustInventoryStock(writeScope(effectiveProject), itemId, request, caller());
+    }
+
+    @DeleteMapping("/inventory/items/{itemId}")
+    @RequirePermission(Permission.PROCEDURE_MANAGE)
+    @Operation(summary = "Delete or archive an inventory item")
+    public boolean deleteInventoryItem(
+            @PathVariable("itemId") UUID itemId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.deleteInventoryItem(writeScope(projectId), itemId, caller());
+    }
+
+    @GetMapping("/inventory/transactions")
+    @RequirePermission(Permission.PROCEDURE_READ)
+    @Operation(summary = "List inventory transaction audit ledger")
+    public List<ClinicOperationsModels.InventoryTransactionRow> listInventoryTransactions(
+            @RequestParam(required = false) String itemId,
+            @RequestParam(required = false) String transactionType,
+            @RequestParam(defaultValue = "200") int limit,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listInventoryTransactions(
+                scope(projectId), RequestParams.optionalUuid(itemId, "itemId"), transactionType, limit);
+    }
+
+    @GetMapping("/inventory/check-availability")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Check available stock for a procedure before completion")
+    public List<ClinicOperationsModels.InventoryStockWarning> checkInventoryAvailability(
+            @RequestParam String procedureId,
+            @RequestParam(defaultValue = "1") int quantity,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.checkProcedureAvailability(
+                scope(projectId), RequestParams.requiredUuid(procedureId, "procedureId"), quantity);
+    }
+
+    @GetMapping("/procedures/{procedureId}/materials")
+    @RequirePermission(Permission.PROCEDURE_READ)
+    @Operation(summary = "List required materials configured for a service")
+    public List<ClinicOperationsModels.ServiceMaterialRow> listServiceMaterials(
+            @PathVariable("procedureId") UUID procedureId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listServiceMaterials(scope(projectId), procedureId);
+    }
+
+    @PutMapping("/procedures/{procedureId}/materials")
+    @RequirePermission(Permission.PROCEDURE_MANAGE)
+    @Operation(summary = "Replace required inventory materials for a service")
+    public List<ClinicOperationsModels.ServiceMaterialRow> replaceServiceMaterials(
+            @PathVariable("procedureId") UUID procedureId,
+            @RequestBody List<ClinicOperationsModels.ServiceMaterialInput> materials,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.replaceServiceMaterials(writeScope(projectId), procedureId, materials, caller());
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 2: HR Lite — Staff Scheduling & Leave Management
+    // ------------------------------------------------------------------
+
+    @GetMapping("/hr/schedules")
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "List staff work schedules (weekly templates and date rosters)")
+    public List<ClinicOperationsModels.StaffScheduleRow> listStaffSchedules(
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String doctorId,
+            @RequestParam(required = false, defaultValue = "false") boolean mineOnly,
+            @RequestParam(required = false) String scheduleType,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listStaffSchedules(
+                scope(projectId),
+                RequestParams.optionalUuid(userId, "userId"),
+                RequestParams.optionalUuid(doctorId, "doctorId"),
+                mineOnly,
+                scheduleType,
+                caller());
+    }
+
+    @PostMapping("/hr/schedules")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Create a staff work schedule shift")
+    public ClinicOperationsModels.StaffScheduleRow createStaffSchedule(
+            @RequestBody ClinicOperationsModels.CreateStaffScheduleRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createStaffSchedule(writeScope(effectiveProject), request, caller());
+    }
+
+    @PatchMapping("/hr/schedules/{scheduleId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Update a staff work schedule shift")
+    public ClinicOperationsModels.StaffScheduleRow updateStaffSchedule(
+            @PathVariable("scheduleId") UUID scheduleId,
+            @RequestBody ClinicOperationsModels.CreateStaffScheduleRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.updateStaffSchedule(writeScope(effectiveProject), scheduleId, request, caller());
+    }
+
+    @DeleteMapping("/hr/schedules/{scheduleId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Delete a staff work schedule shift")
+    public boolean deleteStaffSchedule(
+            @PathVariable("scheduleId") UUID scheduleId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.deleteStaffSchedule(writeScope(projectId), scheduleId, caller());
+    }
+
+    @GetMapping("/hr/leave-requests")
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "List staff leave requests")
+    public List<ClinicOperationsModels.LeaveRequestRow> listLeaveRequests(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false, defaultValue = "false") boolean mineOnly,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listLeaveRequests(scope(projectId), status, mineOnly, caller());
+    }
+
+    @PostMapping("/hr/leave-requests")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "Submit a staff leave request")
+    public ClinicOperationsModels.LeaveRequestRow createLeaveRequest(
+            @RequestBody ClinicOperationsModels.CreateLeaveRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createLeaveRequest(writeScope(effectiveProject), request, caller());
+    }
+
+    @GetMapping("/hr/leave-requests/{requestId}/conflicts")
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "Inspect impacted appointments and shifts before approving leave")
+    public ClinicOperationsModels.LeaveConflictReport getLeaveConflicts(
+            @PathVariable("requestId") UUID requestId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.getLeaveConflicts(scope(projectId), requestId);
+    }
+
+    @PatchMapping("/hr/leave-requests/{requestId}/decision")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Approve or reject a staff leave request")
+    public ClinicOperationsModels.LeaveRequestRow reviewLeaveRequest(
+            @PathVariable("requestId") UUID requestId,
+            @RequestBody ClinicOperationsModels.ReviewLeaveRequest request,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.reviewLeaveRequest(writeScope(projectId), requestId, request, caller());
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 3: Financial Management & Performance Analytics
+    // ------------------------------------------------------------------
+
+    @GetMapping("/finance/expenses")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "List clinic operational expenses")
+    public List<ClinicOperationsModels.ExpenseRow> listExpenses(
+            @RequestParam(required = false) String clinicId,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listExpenses(
+                scope(projectId), RequestParams.optionalUuid(clinicId, "clinicId"), category, from, to);
+    }
+
+    @PostMapping("/finance/expenses")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Record a clinic operational expense")
+    public ClinicOperationsModels.ExpenseRow createExpense(
+            @RequestBody ClinicOperationsModels.CreateExpenseRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createExpense(writeScope(effectiveProject), request, caller());
+    }
+
+    @DeleteMapping("/finance/expenses/{expenseId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Delete an operational expense")
+    public boolean deleteExpense(
+            @PathVariable("expenseId") UUID expenseId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.deleteExpense(writeScope(projectId), expenseId, caller());
+    }
+
+    @GetMapping("/finance/recurring-templates")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "List recurring monthly expense and salary templates")
+    public List<ClinicOperationsModels.RecurringExpenseTemplateRow> listRecurringTemplates(
+            @RequestParam(required = false) String clinicId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listRecurringTemplates(
+                scope(projectId), RequestParams.optionalUuid(clinicId, "clinicId"));
+    }
+
+    @PostMapping("/finance/recurring-templates")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Create a recurring monthly expense or salary template")
+    public ClinicOperationsModels.RecurringExpenseTemplateRow createRecurringTemplate(
+            @RequestBody ClinicOperationsModels.CreateRecurringTemplateRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createRecurringTemplate(writeScope(effectiveProject), request, caller());
+    }
+
+    @PostMapping("/finance/recurring-templates/{templateId}/confirm")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Confirm and log a recurring monthly expense or salary into the ledger")
+    public ClinicOperationsModels.ExpenseRow confirmRecurringTemplate(
+            @PathVariable("templateId") UUID templateId,
+            @RequestBody(required = false) ClinicOperationsModels.ConfirmRecurringTemplateRequest request,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.confirmRecurringTemplate(writeScope(projectId), templateId, request, caller());
+    }
+
+    @DeleteMapping("/finance/recurring-templates/{templateId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Delete a recurring expense template")
+    public boolean deleteRecurringTemplate(
+            @PathVariable("templateId") UUID templateId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.deleteRecurringTemplate(writeScope(projectId), templateId, caller());
+    }
+
+    @GetMapping("/finance/analytics")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Get Gregorian quarterly/monthly/annual P&L financial analytics")
+    public ClinicOperationsModels.FinancialAnalyticsReport getFinancialAnalytics(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false, defaultValue = "QUARTERLY") String periodType,
+            @RequestParam(required = false) String clinicId,
+            @RequestParam(required = false) String projectId) {
+        int safeYear = year != null ? year : LocalDate.now().getYear();
+        return operationsService.getFinancialAnalytics(
+                scope(projectId), safeYear, periodType, RequestParams.optionalUuid(clinicId, "clinicId"));
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 4: Treatment Room Management
+    // ------------------------------------------------------------------
+
+    @GetMapping("/treatment-rooms")
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "List branch treatment rooms with availability and utilization metrics")
+    public List<ClinicOperationsModels.TreatmentRoomRow> listTreatmentRooms(
+            @RequestParam(required = false) String clinicId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listTreatmentRooms(
+                scope(projectId), RequestParams.optionalUuid(clinicId, "clinicId"));
+    }
+
+    @PostMapping("/treatment-rooms")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Create a treatment room")
+    public ClinicOperationsModels.TreatmentRoomRow createTreatmentRoom(
+            @RequestBody ClinicOperationsModels.CreateTreatmentRoomRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createTreatmentRoom(writeScope(effectiveProject), request, caller());
+    }
+
+    @PatchMapping("/treatment-rooms/{roomId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Update a treatment room")
+    public ClinicOperationsModels.TreatmentRoomRow updateTreatmentRoom(
+            @PathVariable("roomId") UUID roomId,
+            @RequestBody ClinicOperationsModels.CreateTreatmentRoomRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.updateTreatmentRoom(writeScope(effectiveProject), roomId, request, caller());
+    }
+
+    @DeleteMapping("/treatment-rooms/{roomId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Delete a treatment room")
+    public boolean deleteTreatmentRoom(
+            @PathVariable("roomId") UUID roomId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.deleteTreatmentRoom(writeScope(projectId), roomId, caller());
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 5: Dental Imaging Integration & External Labs
+    // ------------------------------------------------------------------
+
+    @GetMapping("/imaging/labs")
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "List clinic preferred external imaging laboratories")
+    public List<ClinicOperationsModels.ImagingLabRow> listImagingLabs(
+            @RequestParam(required = false) String clinicId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listImagingLabs(
+                scope(projectId), RequestParams.optionalUuid(clinicId, "clinicId"));
+    }
+
+    @PostMapping("/imaging/labs")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "Create a preferred external imaging laboratory")
+    public ClinicOperationsModels.ImagingLabRow createImagingLab(
+            @RequestBody ClinicOperationsModels.CreateImagingLabRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createImagingLab(writeScope(effectiveProject), request, caller());
+    }
+
+    @PatchMapping("/imaging/labs/{labId}")
+    @RequirePermission(Permission.DOCTOR_READ)
+    @Operation(summary = "Update an external imaging laboratory")
+    public ClinicOperationsModels.ImagingLabRow updateImagingLab(
+            @PathVariable("labId") UUID labId,
+            @RequestBody ClinicOperationsModels.CreateImagingLabRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.updateImagingLab(writeScope(effectiveProject), labId, request, caller());
+    }
+
+    @DeleteMapping("/imaging/labs/{labId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Delete an external imaging laboratory")
+    public boolean deleteImagingLab(
+            @PathVariable("labId") UUID labId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.deleteImagingLab(writeScope(projectId), labId, caller());
+    }
+
+    @GetMapping("/imaging/requests")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "List dental imaging requests")
+    public List<ClinicOperationsModels.ImagingRequestRow> listImagingRequests(
+            @RequestParam(required = false) String patientId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String imagingType,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.listImagingRequests(
+                scope(projectId), RequestParams.optionalUuid(patientId, "patientId"), status, imagingType);
+    }
+
+    @GetMapping("/imaging/analytics")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Get dental imaging consumption, costs, revenue and profitability summary")
+    public ClinicOperationsModels.ImagingSummaryAnalytics getImagingAnalytics(
+            @RequestParam(required = false) String projectId) {
+        return operationsService.getImagingAnalytics(scope(projectId));
+    }
+
+    @PostMapping("/imaging/requests")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Create a dental imaging request")
+    public ClinicOperationsModels.ImagingRequestRow createImagingRequest(
+            @RequestBody ClinicOperationsModels.CreateImagingRequest request,
+            @RequestParam(required = false) String projectId) {
+        String effectiveProject = projectId != null ? projectId : request.projectId();
+        return operationsService.createImagingRequest(writeScope(effectiveProject), request, caller());
+    }
+
+    @PatchMapping("/imaging/requests/{requestId}")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Update a dental imaging request and sync billing/expenses on completion")
+    public ClinicOperationsModels.ImagingRequestRow updateImagingRequest(
+            @PathVariable("requestId") UUID requestId,
+            @RequestBody ClinicOperationsModels.UpdateImagingRequest request,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.updateImagingRequest(writeScope(projectId), requestId, request, caller());
+    }
+
+    @DeleteMapping("/imaging/requests/{requestId}")
+    @RequirePermission(Permission.CLINIC_MANAGE)
+    @Operation(summary = "Delete a dental imaging request")
+    public boolean deleteImagingRequest(
+            @PathVariable("requestId") UUID requestId,
+            @RequestParam(required = false) String projectId) {
+        return operationsService.deleteImagingRequest(writeScope(projectId), requestId, caller());
     }
 
     // ------------------------------------------------------------------

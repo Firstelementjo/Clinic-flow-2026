@@ -194,8 +194,44 @@ public final class ClinicModels {
             boolean isAiProposed,
             String ticketNumber,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            UUID treatmentRoomId,
+            String treatmentRoomName
     ) {
+        public Appointment(
+                UUID id,
+                UUID organizationId,
+                UUID projectId,
+                UUID customerId,
+                UUID patientId,
+                UUID clinicId,
+                UUID doctorId,
+                UUID procedureId,
+                String title,
+                String patientName,
+                String patientEmail,
+                LocalDateTime appointmentDate,
+                int durationMinutes,
+                String status,
+                String service,
+                String doctorName,
+                String doctorImageUrl,
+                Double price,
+                int quantity,
+                Double totalAmount,
+                String paymentStatus,
+                String medicalReportName,
+                String medicalReportUrl,
+                boolean isAiProposed,
+                String ticketNumber,
+                LocalDateTime createdAt,
+                LocalDateTime updatedAt) {
+            this(id, organizationId, projectId, customerId, patientId, clinicId, doctorId,
+                 procedureId, title, patientName, patientEmail, appointmentDate, durationMinutes,
+                 status, service, doctorName, doctorImageUrl, price, quantity, totalAmount,
+                 paymentStatus, medicalReportName, medicalReportUrl, isAiProposed, ticketNumber,
+                 createdAt, updatedAt, null, null);
+        }
     }
 
     /**

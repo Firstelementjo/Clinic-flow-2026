@@ -33,10 +33,12 @@ import type { Namespace } from '../../core/i18n/i18n.types';
 import { TranslatePipe } from '../../core/i18n/translate.pipe';
 import { TlDrawerComponent } from '../../ui/tl-drawer.component';
 import { clinicAdminStrings } from './clinic-admin.strings';
+import { ClinicPatientApi, type TreatmentRoomRow } from './clinic-patient.api';
 
 type StatusFilter = '' | 'ACTIVE' | 'INACTIVE';
 type BulkAction = '' | 'ACTIVE' | 'INACTIVE';
 type Toast = { readonly message: string; readonly error: boolean };
+type LocationsPageTab = 'branches' | 'rooms';
 
 @Component({
   selector: 'fe-clinic-locations-page',
@@ -66,6 +68,26 @@ type Toast = { readonly message: string; readonly error: boolean };
         }
       </div>
 
+      <nav class="tl-tabs-nav" aria-label="Branches and Treatment Rooms">
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="activeTab() === 'branches'"
+          (click)="switchTab('branches')"
+        >
+          Clinic Branches ({{ rows().length }})
+        </button>
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="activeTab() === 'rooms'"
+          (click)="switchTab('rooms')"
+        >
+          Treatment Rooms ({{ treatmentRooms().length }})
+        </button>
+      </nav>
+
+      @if (activeTab() === 'branches') {
       <div class="tl-toolbar">
         <div class="tl-toolbar-left">
           <select
@@ -291,6 +313,112 @@ type Toast = { readonly message: string; readonly error: boolean };
           </div>
         }
       </div>
+      }
+
+      @if (activeTab() === 'rooms') {
+        <div class="tl-toolbar">
+          <div class="tl-toolbar-left">
+            <select
+              class="tl-select"
+              [ngModel]="roomClinicFilter()"
+              (ngModelChange)="roomClinicFilter.set($event); loadRooms()"
+              aria-label="Filter Rooms by Branch"
+            >
+              <option value="">All Branches</option>
+              @for (loc of rows(); track loc.id) {
+                <option [value]="loc.id">{{ loc.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="tl-toolbar-right">
+            <button type="button" class="tl-btn tl-btn-gray" (click)="loadRooms()">Refresh Utilization</button>
+            <button
+              type="button"
+              class="tl-btn tl-btn-teal"
+              (click)="openCreateRoom()"
+              [disabled]="!canManage()"
+            >
+              + Add Treatment Room
+            </button>
+          </div>
+        </div>
+
+        <div class="tl-table-wrap">
+          @if (roomsLoading()) {
+            <div class="tl-table-empty" role="status">Loading treatment rooms &amp; utilization...</div>
+          } @else if (treatmentRooms().length === 0) {
+            <div class="tl-table-empty">
+              <strong>No treatment rooms found</strong>
+              <span>Add treatment rooms to assign appointments and track 30-day room utilization and productivity.</span>
+            </div>
+          } @else {
+            <table class="tl-table">
+              <thead>
+                <tr>
+                  <th>Room Name / Number</th>
+                  <th>Branch</th>
+                  <th>Room Type</th>
+                  <th>Live Availability</th>
+                  <th>Current Doctor</th>
+                  <th>Utilization %</th>
+                  <th>Completed Procedures</th>
+                  <th>Room Revenue</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (room of treatmentRooms(); track room.id) {
+                  <tr>
+                    <td>
+                      <strong>{{ room.name }}</strong>
+                      @if (room.roomNumber) {
+                        <div style="font-size:0.76rem;color:var(--mute);">{{ room.roomNumber }}</div>
+                      }
+                    </td>
+                    <td>{{ room.clinicName || '—' }}</td>
+                    <td>{{ room.roomType || 'GENERAL' }}</td>
+                    <td>
+                      @if (!room.isActive) {
+                        <span class="tl-pill tl-pill--muted">INACTIVE</span>
+                      } @else if (room.currentStatus === 'OCCUPIED') {
+                        <span class="tl-pill tl-pill--warn">OCCUPIED</span>
+                      } @else {
+                        <span class="tl-pill tl-pill--ok">AVAILABLE</span>
+                      }
+                    </td>
+                    <td>{{ room.currentOccupiedByDoctor || '—' }}</td>
+                    <td><strong>{{ room.utilizationPercent }}%</strong></td>
+                    <td>{{ room.completedProceduresCount }}</td>
+                    <td><strong>{{ room.roomRevenue }} JOD</strong></td>
+                    <td>
+                      <div style="display:flex;gap:0.35rem;">
+                        <button
+                          type="button"
+                          class="tl-btn tl-btn-gray"
+                          style="padding:0.25rem 0.55rem;font-size:0.76rem;"
+                          (click)="openEditRoom(room)"
+                          [disabled]="!canManage()"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          class="tl-btn tl-btn-gray"
+                          style="padding:0.25rem 0.55rem;font-size:0.76rem;color:#c62828;"
+                          (click)="deleteRoom(room)"
+                          [disabled]="!canManage()"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
     </div>
 
     <fe-tl-drawer
@@ -364,6 +492,21 @@ type Toast = { readonly message: string; readonly error: boolean };
             <span class="tl-error">{{ 'clinicAdmin.clinics.slotHint' | t }}</span>
           }
         </div>
+
+        @if (!editing()) {
+          <div class="tl-field">
+            <label class="tl-label" for="clinic-rooms-count">Initial Treatment Rooms Count</label>
+            <input
+              id="clinic-rooms-count"
+              class="tl-input"
+              type="number"
+              min="1"
+              max="50"
+              formControlName="initialTreatmentRooms"
+            />
+            <span class="tl-hint">Auto-seeds Treatment Room 1..N for this branch (can be modified later).</span>
+          </div>
+        }
 
         <div class="tl-field">
           <span class="tl-label">{{ 'clinicAdmin.common.status' | t }}</span>
@@ -571,6 +714,53 @@ type Toast = { readonly message: string; readonly error: boolean };
       </div>
     }
 
+    @if (roomModalOpen()) {
+      <div class="fe-modal-overlay" (click)="roomModalOpen.set(false)">
+        <div class="fe-modal-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" style="max-width:520px;width:100%;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;">
+            <h3 style="margin:0;font-size:1.05rem;">
+              {{ editingRoom() ? 'Edit Treatment Room' : 'Add Treatment Room' }}
+            </h3>
+            <button type="button" class="tl-btn tl-btn-gray" (click)="roomModalOpen.set(false)">✕</button>
+          </div>
+          <div class="tl-form-grid">
+            <div class="tl-field">
+              <label class="tl-label">Room Name *</label>
+              <input class="tl-input" [(ngModel)]="roomFormName" placeholder="e.g., Treatment Room 1 / Surgery Suite A" />
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Room Code</label>
+              <input class="tl-input" [(ngModel)]="roomFormCode" placeholder="TR-01" />
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Branch *</label>
+              <select class="tl-select--field" [(ngModel)]="roomFormClinicId">
+                @for (loc of rows(); track loc.id) {
+                  <option [value]="loc.id">{{ loc.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Floor / Wing</label>
+              <input class="tl-input" [(ngModel)]="roomFormFloor" placeholder="1st Floor / West Wing" />
+            </div>
+            <div class="tl-field tl-field--full">
+              <label style="display:inline-flex;align-items:center;gap:0.45rem;font-size:0.84rem;font-weight:600;">
+                <input type="checkbox" [(ngModel)]="roomFormActive" />
+                Room Active for Booking
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1rem;">
+            <button type="button" class="tl-btn tl-btn-gray" (click)="roomModalOpen.set(false)">Cancel</button>
+            <button type="button" class="tl-btn tl-btn-teal" (click)="saveRoom()" [disabled]="roomSaving()">
+              {{ roomSaving() ? 'Saving...' : 'Save Room' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
     @if (toast(); as notice) {
       <div class="tl-toast" [class.tl-toast--error]="notice.error" role="status">
         {{ notice.message }}
@@ -578,6 +768,39 @@ type Toast = { readonly message: string; readonly error: boolean };
     }
   `,
   styles: [`
+    .tl-tabs-nav {
+      display: flex;
+      gap: 0.4rem;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.35rem;
+      margin-bottom: 0.85rem;
+    }
+    .tl-tab-btn {
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--mute);
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tl-tab-btn:hover { background: var(--line); color: var(--ink); }
+    .tl-tab-btn--active {
+      background: rgba(0, 137, 123, 0.1);
+      color: #00796b;
+      border-color: rgba(0, 137, 123, 0.25);
+    }
+    .tl-pill {
+      display: inline-block;
+      padding: 0.16rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .tl-pill--ok { background: #e8f5e9; color: #2e7d32; }
+    .tl-pill--warn { background: #fff3e0; color: #e65100; }
+    .tl-pill--muted { background: #eceff1; color: #546e7a; }
     .tl-action-icon.delete {
       color: var(--mute, #94a3b8);
       transition: color 0.15s ease, background 0.15s ease;
@@ -868,6 +1091,7 @@ type Toast = { readonly message: string; readonly error: boolean };
 })
 export class ClinicLocationsComponent implements OnInit {
   private readonly api = inject(ClinicApi);
+  private readonly patientsApi = inject(ClinicPatientApi);
   private readonly sessions = inject(SessionService);
   private readonly clinicRbac = inject(ClinicRbacService);
   private readonly projects = inject(ProjectContextService);
@@ -875,6 +1099,19 @@ export class ClinicLocationsComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly cdr = inject(ChangeDetectorRef);
+
+  protected readonly activeTab = signal<LocationsPageTab>('branches');
+  protected readonly treatmentRooms = signal<readonly TreatmentRoomRow[]>([]);
+  protected readonly roomsLoading = signal(false);
+  protected readonly roomSaving = signal(false);
+  protected readonly roomClinicFilter = signal('');
+  protected readonly roomModalOpen = signal(false);
+  protected readonly editingRoom = signal<TreatmentRoomRow | null>(null);
+  protected roomFormName = '';
+  protected roomFormCode = '';
+  protected roomFormClinicId = '';
+  protected roomFormFloor = '';
+  protected roomFormActive = true;
 
   protected readonly isPlatformAdmin = computed(() => {
     const roles = this.clinicRbac.activeRoles();
@@ -917,6 +1154,7 @@ export class ClinicLocationsComponent implements OnInit {
     city: [''],
     postalCode: [''],
     slotMinutes: [30, [Validators.min(5), Validators.max(480)]],
+    initialTreatmentRooms: [1, [Validators.min(1), Validators.max(50)]],
     brandImageUrl: [''],
     frontDeskOfficerId: [''],
     isActive: [true],
@@ -1026,6 +1264,7 @@ export class ClinicLocationsComponent implements OnInit {
       city: '',
       postalCode: '',
       slotMinutes: 30,
+      initialTreatmentRooms: 1,
       brandImageUrl: '',
       frontDeskOfficerId: '',
       isActive: true,
@@ -1134,6 +1373,9 @@ export class ClinicLocationsComponent implements OnInit {
       }
       this.drawerOpen.set(false);
       await this.load();
+      if (this.activeTab() === 'rooms' || !current?.id) {
+        void this.loadRooms();
+      }
       this.showToast('clinicAdmin.common.updated', false);
     } catch (cause) {
       this.saveFailed.set(true);
@@ -1308,6 +1550,7 @@ export class ClinicLocationsComponent implements OnInit {
       city: blankToNull(value.city),
       postalCode: blankToNull(value.postalCode),
       slotMinutes: value.slotMinutes ?? 30,
+      initialTreatmentRooms: this.editing() ? undefined : Math.max(1, Number(value.initialTreatmentRooms) || 1),
       brandImageUrl: blankToNull(value.brandImageUrl),
       isActive: value.isActive ?? true,
       frontDeskOfficerId: officerId,
@@ -1319,6 +1562,103 @@ export class ClinicLocationsComponent implements OnInit {
     };
   }
 
+  protected switchTab(tab: LocationsPageTab): void {
+    this.activeTab.set(tab);
+    if (tab === 'rooms') {
+      void this.loadRooms();
+    }
+  }
+
+  protected async loadRooms(): Promise<void> {
+    this.roomsLoading.set(true);
+    try {
+      const list = await this.patientsApi.treatmentRooms({
+        projectId: this.projectId(),
+        clinicId: this.roomClinicFilter() || undefined,
+      });
+      this.treatmentRooms.set(list ?? []);
+    } catch {
+      this.showRawToast('Failed to load treatment rooms.', true);
+    } finally {
+      this.roomsLoading.set(false);
+    }
+  }
+
+  protected openCreateRoom(): void {
+    if (!this.canManage()) return;
+    this.editingRoom.set(null);
+    this.roomFormName = `Treatment Room ${this.treatmentRooms().length + 1}`;
+    this.roomFormCode = `TR-0${this.treatmentRooms().length + 1}`;
+    this.roomFormClinicId = this.roomClinicFilter() || this.rows()[0]?.id || '';
+    this.roomFormFloor = '';
+    this.roomFormActive = true;
+    this.roomModalOpen.set(true);
+  }
+
+  protected openEditRoom(room: TreatmentRoomRow): void {
+    if (!this.canManage()) return;
+    this.editingRoom.set(room);
+    this.roomFormName = room.name;
+    this.roomFormCode = room.roomNumber ?? '';
+    this.roomFormClinicId = room.clinicId ?? '';
+    this.roomFormFloor = room.roomType ?? 'GENERAL';
+    this.roomFormActive = room.isActive;
+    this.roomModalOpen.set(true);
+  }
+
+  protected async saveRoom(): Promise<void> {
+    const name = this.roomFormName.trim();
+    if (!name || !this.roomFormClinicId) {
+      this.showRawToast('Room name and branch are required.', true);
+      return;
+    }
+    this.roomSaving.set(true);
+    try {
+      const target = this.editingRoom();
+      if (target) {
+        await this.patientsApi.updateTreatmentRoom(
+          target.id,
+          {
+            name,
+            roomNumber: this.roomFormCode.trim() || undefined,
+            roomType: this.roomFormFloor.trim() || 'GENERAL',
+            isActive: this.roomFormActive,
+          },
+          { projectId: this.projectId() },
+        );
+        this.showRawToast('Treatment room updated.', false);
+      } else {
+        await this.patientsApi.createTreatmentRoom(
+          {
+            clinicId: this.roomFormClinicId,
+            name,
+            roomNumber: this.roomFormCode.trim() || undefined,
+            roomType: this.roomFormFloor.trim() || 'GENERAL',
+          },
+          { projectId: this.projectId() },
+        );
+        this.showRawToast('Treatment room created.', false);
+      }
+      this.roomModalOpen.set(false);
+      await this.loadRooms();
+    } catch (err) {
+      this.showRawToast(err instanceof Error ? err.message : 'Failed to save treatment room.', true);
+    } finally {
+      this.roomSaving.set(false);
+    }
+  }
+
+  protected async deleteRoom(room: TreatmentRoomRow): Promise<void> {
+    if (!this.canManage()) return;
+    try {
+      await this.patientsApi.deleteTreatmentRoom(room.id, { projectId: this.projectId() });
+      this.showRawToast('Treatment room deleted.', false);
+      await this.loadRooms();
+    } catch {
+      this.showRawToast('Failed to delete treatment room.', true);
+    }
+  }
+
   protected projectId(): string | undefined {
     return this.projects.selectedProjectId() ?? this.sessions.session()?.projectIds?.[0] ?? undefined;
   }
@@ -1327,6 +1667,12 @@ export class ClinicLocationsComponent implements OnInit {
     this.toast.set({ message: this.i18n.t(messageKey), error });
     if (this.toastTimer) clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => this.toast.set(null), 3200);
+  }
+
+  private showRawToast(message: string, error: boolean): void {
+    this.toast.set({ message, error });
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toast.set(null), 3400);
   }
 }
 

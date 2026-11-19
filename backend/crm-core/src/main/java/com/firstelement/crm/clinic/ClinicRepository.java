@@ -126,11 +126,15 @@ public class ClinicRepository {
                a."status", a."service", a."doctorName", d."imageUrl" as "doctorImageUrl",
                a."price", a."quantity", (a."price" * a."quantity") as "totalAmount",
                a."paymentStatus", a."medicalReportName", a."medicalReportUrl",
-               a."isAiProposed", a."ticketNumber", a."createdAt", a."updatedAt"
+               a."isAiProposed", a."ticketNumber", a."createdAt", a."updatedAt",
+               a."treatmentRoomId", tr."name" as "treatmentRoomName"
           from appointments a
           left join doctors d
                  on d."id" = a."doctorId"
                 and d."organizationId" = a."organizationId"
+          left join treatment_rooms tr
+                 on tr."id" = a."treatmentRoomId"
+                and tr."organizationId" = a."organizationId"
          where %s
            and a."appointmentDate" > :from and a."appointmentDate" <= :to
            and (%2$s is null or a."status" = %2$s)
@@ -570,7 +574,9 @@ public class ClinicRepository {
             rs.getBoolean("isAiProposed"),
             rs.getString("ticketNumber"),
             rs.getObject("createdAt", LocalDateTime.class),
-            rs.getObject("updatedAt", LocalDateTime.class));
+            rs.getObject("updatedAt", LocalDateTime.class),
+            rs.getObject("treatmentRoomId", UUID.class),
+            rs.getString("treatmentRoomName"));
     }
 
     // ------------------------------------------------------------------

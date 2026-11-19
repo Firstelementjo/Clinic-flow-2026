@@ -138,6 +138,46 @@ public class ClinicManagementRepository {
         return id;
     }
 
+    /** Seeds initial treatment rooms when a new clinic location (branch) is created. */
+    public void seedTreatmentRoomsForLocation(ClinicScope scope, UUID clinicId, int roomsCount) {
+        if (!scope.isProjectScoped() || clinicId == null) {
+            return;
+        }
+        int safeCount = Math.min(Math.max(roomsCount, 1), 50);
+        scope.read(() -> {
+            Integer existing = jdbc.queryForObject("""
+                    select count(*) from "treatment_rooms" tr
+                     where tr."organizationId" = :org and tr."projectId" = :proj and tr."clinicId" = :clinicId
+                    """,
+                    scope.bind()
+                            .addValue("org", scope.queryScope().organizationId())
+                            .addValue("proj", scope.projectId())
+                            .addValue("clinicId", clinicId),
+                    Integer.class);
+            if (existing != null && existing > 0) {
+                return 0;
+            }
+            for (int i = 1; i <= safeCount; i++) {
+                jdbc.update("""
+                        insert into "treatment_rooms"
+                            ("id", "organizationId", "projectId", "clinicId", "name", "roomNumber",
+                             "roomType", "operationalStartHour", "operationalEndHour", "isActive")
+                        values
+                            (:id, :org, :proj, :clinicId, :name, :roomNumber,
+                             'GENERAL_OPERATORY', '09:00', '17:00', true)
+                        """,
+                        scope.bind()
+                                .addValue("id", UUID.randomUUID())
+                                .addValue("org", scope.queryScope().organizationId())
+                                .addValue("proj", scope.projectId())
+                                .addValue("clinicId", clinicId)
+                                .addValue("name", "Treatment Room " + i)
+                                .addValue("roomNumber", "R-" + i));
+            }
+            return safeCount;
+        });
+    }
+
     /** Updates a location in scope. A foreign id changes no rows. */
     public boolean updateLocation(ClinicScope scope, UUID locationId, ClinicLocationInput input,
                                   int slotMinutes, boolean isActive) {

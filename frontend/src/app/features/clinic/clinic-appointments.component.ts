@@ -41,7 +41,11 @@ import {
 import { AsyncStateComponent } from '../../ui/async-state.component';
 import { ClinicAppointmentDrawerComponent } from './clinic-appointment-drawer.component';
 import { clinicAdminStrings } from './clinic-admin.strings';
-import { ClinicPatientApi } from './clinic-patient.api';
+import {
+  ClinicPatientApi,
+  type InventoryStockWarning,
+  type TreatmentRoomRow,
+} from './clinic-patient.api';
 
 const PAYMENT_STATES = ['PAID', 'UNPAID', 'PARTIAL', 'REFUNDED'] as const;
 const STATUS_STATES = [
@@ -224,6 +228,7 @@ const STATUS_STATES = [
                   <th scope="col">{{ 'clinicAdmin.appointments.service' | t }}</th>
                   <th scope="col">{{ 'clinicAdmin.appointments.price' | t }}</th>
                   <th scope="col">{{ 'clinicAdmin.appointments.doctor' | t }}</th>
+                  <th scope="col">Treatment Room</th>
                   <th scope="col">{{ 'clinicAdmin.appointments.status' | t }}</th>
                   <th scope="col">{{ 'clinicAdmin.appointments.paymentStatus' | t }}</th>
                   <th scope="col">{{ 'clinicAdmin.appointments.action' | t }}</th>
@@ -290,6 +295,23 @@ const STATUS_STATES = [
                           }
                         </div>
                       </div>
+                    </td>
+                    <td>
+                      <select
+                        class="tl-inline-select"
+                        style="min-width:130px;background:#f8fafc;color:var(--ink);border-color:var(--line);"
+                        [value]="row.treatmentRoomId || ''"
+                        [disabled]="bulkBusy()"
+                        (change)="assignRoom(row, $any($event.target).value)"
+                        aria-label="Treatment Room"
+                      >
+                        <option value="">Unassigned</option>
+                        @for (room of roomsForRow(row); track room.id) {
+                          <option [value]="room.id" [selected]="room.id === row.treatmentRoomId">
+                            {{ room.name }}
+                          </option>
+                        }
+                      </select>
                     </td>
                     <td>
                       <select
@@ -475,7 +497,35 @@ const STATUS_STATES = [
             {{ message | t }}
           </p>
         }
+        @if (rawBannerMessage(); as rawMsg) {
+          <p class="tl-operation tl-operation--error" role="status">{{ rawMsg }}</p>
+        }
       </section>
+
+      @if (inventoryWarningsModal().length > 0) {
+        <div class="tl-modal-backdrop" (click)="inventoryWarningsModal.set([])">
+          <div class="tl-modal-card" (click)="$event.stopPropagation()">
+            <h3 style="margin:0 0 0.5rem;font-size:1.05rem;color:#b45309;">
+              Insufficient Inventory Warning
+            </h3>
+            <p style="margin:0 0 0.75rem;font-size:0.86rem;color:var(--ink);">
+              The procedure/appointment was marked <strong>Completed</strong>, but branch stock for the following required material(s) was below the required amount:
+            </p>
+            <ul style="margin:0 0 1rem;padding-left:1.25rem;font-size:0.84rem;color:#991b1b;">
+              @for (w of inventoryWarningsModal(); track w.itemId) {
+                <li style="margin-bottom:0.35rem;">
+                  <strong>{{ w.itemName }}</strong>: required {{ w.quantityRequired }}, available {{ w.quantityAvailable }} (shortfall {{ w.shortfallQuantity }})
+                </li>
+              }
+            </ul>
+            <div style="display:flex;justify-content:flex-end;">
+              <button type="button" class="tl-btn tl-btn-teal" (click)="inventoryWarningsModal.set([])">
+                Acknowledge &amp; Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      }
 
       <fe-clinic-appointment-drawer
         [open]="drawerOpen()"
@@ -897,6 +947,23 @@ const STATUS_STATES = [
           min-inline-size: 0;
         }
       }
+      .tl-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1200;
+        padding: 1rem;
+      }
+      .tl-modal-card {
+        background: var(--surf, #ffffff);
+        border-radius: 12px;
+        padding: 1.25rem;
+        width: min(500px, 100%);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+      }
     `,
   ],
 })
@@ -933,6 +1000,9 @@ export class ClinicAppointmentsComponent implements OnInit {
 
   protected readonly operationMessage = signal<string | null>(null);
   protected readonly operationFailed = signal(false);
+  protected readonly rawBannerMessage = signal<string | null>(null);
+  protected readonly inventoryWarningsModal = signal<readonly InventoryStockWarning[]>([]);
+  protected readonly treatmentRooms = signal<readonly TreatmentRoomRow[]>([]);
 
   protected readonly drawerOpen = signal(false);
   protected readonly doctorEmails = signal<ReadonlyMap<string, string>>(new Map());
@@ -982,6 +1052,55 @@ export class ClinicAppointmentsComponent implements OnInit {
     }
     void this.load(true);
     void this.loadDoctorEmails();
+    void this.loadTreatmentRooms();
+  }
+
+  private async loadTreatmentRooms(): Promise<void> {
+    try {
+      const rooms = await this.patientsApi.treatmentRooms({ projectId: this.projectId() });
+      this.treatmentRooms.set((rooms ?? []).filter((r) => r.isActive));
+    } catch {
+      this.treatmentRooms.set([]);
+    }
+  }
+
+  protected roomsForRow(row: ClinicAppointment): readonly TreatmentRoomRow[] {
+    const rooms = this.treatmentRooms();
+    if (!row.clinicId) return rooms;
+    return rooms.filter((r) => !r.clinicId || r.clinicId === row.clinicId);
+  }
+
+  protected async assignRoom(row: ClinicAppointment, roomId: string): Promise<void> {
+    if (!row.id || this.bulkBusy()) return;
+    this.bulkBusy.set(true);
+    this.rawBannerMessage.set(null);
+    try {
+      await this.patientsApi.assignTreatmentRoom(
+        row.id,
+        roomId || null,
+        { projectId: this.projectId() },
+      );
+      const roomName = this.treatmentRooms().find((r) => r.id === roomId)?.name ?? null;
+      this.rows.update((list) =>
+        list.map((item) =>
+          item.id === row.id
+            ? { ...item, treatmentRoomId: roomId || null, treatmentRoomName: roomName }
+            : item,
+        ),
+      );
+      this.showMessage('clinicAdmin.appointments.statusUpdated', false);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not assign treatment room (possible scheduling conflict).';
+      this.rawBannerMessage.set(msg);
+      await this.load();
+    } finally {
+      this.bulkBusy.set(false);
+    }
   }
 
   protected projectId(): string | undefined {
@@ -1160,7 +1279,7 @@ export class ClinicAppointmentsComponent implements OnInit {
     if (!row.id || !status || row.status === status || this.bulkBusy()) return;
     this.bulkBusy.set(true);
     try {
-      await this.patientsApi.updateAppointmentStatus(
+      const res = await this.patientsApi.updateAppointmentStatus(
         row.id,
         { status },
         { projectId: this.projectId() },
@@ -1168,6 +1287,9 @@ export class ClinicAppointmentsComponent implements OnInit {
       this.rows.update((list) =>
         list.map((item) => (item.id === row.id ? { ...item, status } : item)),
       );
+      if (res?.inventoryWarnings && res.inventoryWarnings.length > 0) {
+        this.inventoryWarningsModal.set(res.inventoryWarnings);
+      }
       this.showMessage('clinicAdmin.appointments.statusUpdated', false);
       await this.load();
     } catch {

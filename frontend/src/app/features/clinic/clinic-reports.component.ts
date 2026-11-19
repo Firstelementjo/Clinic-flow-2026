@@ -7,12 +7,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   OnInit,
+  computed,
   inject,
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { ClinicApi, type ClinicLocation } from '../../core/api/endpoints';
 import { ProjectContextService } from '../../core/context/project-context.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { Namespace } from '../../core/i18n/i18n.types';
@@ -28,10 +30,13 @@ import {
   type BreakGlassGrantRow,
   type ClinicAuditRow,
   type ClinicAuditExportView,
+  type ClinicExpenseRow,
+  type FinancialAnalyticsReport,
+  type RecurringExpenseTemplateRow,
 } from './clinic-patient.api';
 import { clinicStrings } from './clinic.strings';
 
-type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'compliance' | 'audit';
+type ReportTab = 'productivity' | 'procedures' | 'financials' | 'expensePnl' | 'recall' | 'compliance' | 'audit';
 
 @Component({
   selector: 'fe-clinic-reports-page',
@@ -257,6 +262,14 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
             (click)="setTab('audit')"
           >
             {{ 'clinic.audit.title' | t }}
+          </button>
+          <button
+            class="report-nav-btn"
+            [class.active]="activeTab() === 'expensePnl'"
+            data-testid="tab-expense-pnl"
+            (click)="setTab('expensePnl')"
+          >
+            Expenses &amp; P&amp;L Analytics
           </button>
         </nav>
 
@@ -599,6 +612,358 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
             </table>
           </div>
         </section>
+      }
+
+      <!-- TAB 7: Expenses, Recurring Salaries & P&L Analytics -->
+      @if (activeTab() === 'expensePnl') {
+        <section class="report-panel" data-testid="panel-expense-pnl" style="display:flex;flex-direction:column;gap:0.85rem;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+              <label style="font-size:0.82rem;font-weight:600;">
+                Gregorian Year:
+                <select class="fe-select" style="width:auto;display:inline-block;margin-left:0.25rem;" [(ngModel)]="pnlYear" (ngModelChange)="loadExpensePnl()">
+                  <option [ngValue]="2025">2025</option>
+                  <option [ngValue]="2026">2026</option>
+                  <option [ngValue]="2027">2027</option>
+                </select>
+              </label>
+              <label style="font-size:0.82rem;font-weight:600;">
+                Period View:
+                <select class="fe-select" style="width:auto;display:inline-block;margin-left:0.25rem;" [(ngModel)]="pnlPeriodType" (ngModelChange)="loadExpensePnl()">
+                  <option value="ANNUAL">Annual (Full Year)</option>
+                  <option value="QUARTERLY">Quarterly (Q1–Q4)</option>
+                  <option value="MONTHLY">Monthly</option>
+                </select>
+              </label>
+              <label style="font-size:0.82rem;font-weight:600;">
+                Branch Scope:
+                <select class="fe-select" style="width:auto;display:inline-block;margin-left:0.25rem;" [(ngModel)]="pnlClinicId" (ngModelChange)="loadExpensePnl()">
+                  <option value="">All Branches Consolidated</option>
+                  @for (loc of branchLocations(); track loc.id) {
+                    <option [value]="loc.id">{{ loc.name }}</option>
+                  }
+                </select>
+              </label>
+            </div>
+            <div style="display:flex;gap:0.45rem;">
+              <button type="button" class="fe-btn fe-btn--secondary" (click)="openRecurringTemplateModal()">
+                + New Salary / Recurring Template
+              </button>
+              <button type="button" class="fe-btn fe-btn--primary" (click)="openExpenseModal()">
+                + Record Expense
+              </button>
+            </div>
+          </div>
+
+          @if (dueRecurringTemplates().length > 0) {
+            <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:0.75rem 1rem;">
+              <strong style="color:#92400e;font-size:0.88rem;">
+                Due Monthly Recurring Expenses &amp; Salaries ({{ dueRecurringTemplates().length }})
+              </strong>
+              <p style="margin:0.2rem 0 0.5rem;font-size:0.8rem;color:#78350f;">
+                Confirm and log each due monthly rent, utility, maintenance, or staff salary item into the branch ledger (no duplicate auto-posting):
+              </p>
+              <div style="display:flex;flex-direction:column;gap:0.4rem;">
+                @for (tpl of dueRecurringTemplates(); track tpl.id) {
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:#ffffff;padding:0.45rem 0.7rem;border-radius:6px;border:1px solid #fde68a;">
+                    <div>
+                      <strong>{{ tpl.title }}</strong>
+                      <span style="font-size:0.76rem;color:var(--mute);margin-left:0.4rem;">
+                        [{{ tpl.category }}] · Default {{ tpl.defaultAmount | number:'1.3-3' }} JOD · Day {{ tpl.dayOfMonth }}
+                        @if (tpl.clinicName) { · {{ tpl.clinicName }} }
+                      </span>
+                    </div>
+                    <div style="display:flex;gap:0.35rem;">
+                      <button type="button" class="fe-btn fe-btn--primary" style="padding:0.25rem 0.65rem;font-size:0.78rem;" (click)="openConfirmRecurringModal(tpl)">
+                        Confirm &amp; Log This Month
+                      </button>
+                      <button type="button" class="fe-btn fe-btn--secondary" style="padding:0.25rem 0.5rem;font-size:0.76rem;color:#c62828;" (click)="deleteRecurringTemplate(tpl.id)">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          @if (financialReport(); as rep) {
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:0.65rem;">
+              <div class="tl-stat-card" style="height:auto;padding:0.65rem 0.85rem;">
+                <div class="tl-stat-left">
+                  <span class="tl-stat-title">Total Revenue</span>
+                  <span class="tl-stat-value text-success">{{ rep.totalRevenue | number:'1.3-3' }} JOD</span>
+                </div>
+              </div>
+              <div class="tl-stat-card" style="height:auto;padding:0.65rem 0.85rem;">
+                <div class="tl-stat-left">
+                  <span class="tl-stat-title">Operational Expenses</span>
+                  <span class="tl-stat-value">{{ rep.operationalExpenses | number:'1.3-3' }} JOD</span>
+                </div>
+              </div>
+              <div class="tl-stat-card" style="height:auto;padding:0.65rem 0.85rem;">
+                <div class="tl-stat-left">
+                  <span class="tl-stat-title">Doctor Payouts</span>
+                  <span class="tl-stat-value">{{ rep.doctorPayouts | number:'1.3-3' }} JOD</span>
+                </div>
+              </div>
+              <div class="tl-stat-card" style="height:auto;padding:0.65rem 0.85rem;">
+                <div class="tl-stat-left">
+                  <span class="tl-stat-title">Total Expenses</span>
+                  <span class="tl-stat-value text-danger">{{ rep.totalExpenses | number:'1.3-3' }} JOD</span>
+                </div>
+              </div>
+              <div class="tl-stat-card" style="height:auto;padding:0.65rem 0.85rem;">
+                <div class="tl-stat-left">
+                  <span class="tl-stat-title">Net Profit (Rev − Exp)</span>
+                  <span class="tl-stat-value" [class.text-success]="rep.netProfit >= 0" [class.text-danger]="rep.netProfit < 0">
+                    {{ rep.netProfit | number:'1.3-3' }} JOD
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size:0.78rem;color:var(--mute);">
+              Cash-Basis Inventory Accounting (Option 2): Inventory purchases record expense upon restock (<strong>{{ rep.expensesByCategory['INVENTORY_PURCHASE'] ?? 0 | number:'1.3-3' }} JOD</strong> this period); clinical deductions track physical consumption without double-counting expenses.
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:0.85rem;">
+              <div class="table-container">
+                <h4 style="margin:0 0 0.45rem;font-size:0.9rem;">Gregorian Quarterly Seasonal P&amp;L ({{ rep.year }})</h4>
+                <table class="fe-table">
+                  <thead>
+                    <tr>
+                      <th>Quarter</th>
+                      <th>Revenue</th>
+                      <th>OpEx + Payouts</th>
+                      <th>Net Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (q of rep.quarterlyBreakdown; track q.periodKey) {
+                      <tr>
+                        <td class="font-bold">{{ q.periodLabel }}</td>
+                        <td class="text-success">{{ q.totalRevenue | number:'1.3-3' }}</td>
+                        <td class="text-danger">{{ q.totalExpenses | number:'1.3-3' }}</td>
+                        <td class="font-bold" [class.text-success]="q.netProfit >= 0" [class.text-danger]="q.netProfit < 0">
+                          {{ q.netProfit | number:'1.3-3' }} JOD
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="table-container">
+                <h4 style="margin:0 0 0.45rem;font-size:0.9rem;">Multi-Branch Financial Comparison ({{ rep.year }})</h4>
+                <table class="fe-table">
+                  <thead>
+                    <tr>
+                      <th>Branch</th>
+                      <th>Revenue</th>
+                      <th>Expenses</th>
+                      <th>Net Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (b of rep.branchBreakdown; track b.branchName) {
+                      <tr>
+                        <td class="font-bold">{{ b.branchName }}</td>
+                        <td class="text-success">{{ b.totalRevenue | number:'1.3-3' }}</td>
+                        <td class="text-danger">{{ b.totalExpenses | number:'1.3-3' }}</td>
+                        <td class="font-bold" [class.text-success]="b.netProfit >= 0" [class.text-danger]="b.netProfit < 0">
+                          {{ b.netProfit | number:'1.3-3' }} JOD
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr><td colspan="4" class="text-empty">No branch financial breakdown yet</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          }
+
+          <div class="table-container">
+            <h4 style="margin:0 0 0.45rem;font-size:0.9rem;">Operational Expenses Ledger ({{ expenseRows().length }})</h4>
+            <table class="fe-table">
+              <thead>
+                <tr>
+                  <th>Payment Date</th>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Frequency</th>
+                  <th>Branch</th>
+                  <th>Amount</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (exp of expenseRows(); track exp.id) {
+                  <tr>
+                    <td>{{ exp.paymentDate }}</td>
+                    <td class="font-bold">{{ exp.title }}</td>
+                    <td><code>{{ exp.category }}</code></td>
+                    <td>{{ exp.expenseFrequency }}</td>
+                    <td>{{ exp.clinicName || 'Project Wide' }}</td>
+                    <td class="font-bold text-danger">{{ exp.amount | number:'1.3-3' }} {{ exp.currency }}</td>
+                    <td>
+                      <button type="button" class="fe-btn fe-btn--secondary" style="padding:0.2rem 0.5rem;font-size:0.74rem;color:#c62828;" (click)="deleteExpenseRow(exp.id)">
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7" class="text-empty">No operational expenses recorded for this branch</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      @if (showExpenseModal()) {
+        <div class="modal-backdrop" role="dialog" aria-modal="true" (click)="showExpenseModal.set(false)">
+          <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Record Operational Expense</h3>
+              <button class="close-btn" (click)="showExpenseModal.set(false)">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>Category *</label>
+                <select class="fe-select" [(ngModel)]="expFormCategory">
+                  <option value="RENT">Rent</option>
+                  <option value="ELECTRICITY_WATER">Electricity &amp; Water</option>
+                  <option value="SALARIES">Salaries</option>
+                  <option value="MAINTENANCE">Maintenance</option>
+                  <option value="INVENTORY_PURCHASE">Inventory Purchase</option>
+                  <option value="LAB_FEES">Lab / Imaging Fees</option>
+                  <option value="OTHER">Other Operational Expense</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Description / Title *</label>
+                <input class="fe-input" [(ngModel)]="expFormTitle" placeholder="e.g., Monthly Clinic Rent" />
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;">
+                <div class="form-group">
+                  <label>Amount (JOD) *</label>
+                  <input class="fe-input" type="number" min="0" step="0.001" [(ngModel)]="expFormAmount" />
+                </div>
+                <div class="form-group">
+                  <label>Payment Date *</label>
+                  <input class="fe-input" type="date" [(ngModel)]="expFormDate" />
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;">
+                <div class="form-group">
+                  <label>Frequency</label>
+                  <select class="fe-select" [(ngModel)]="expFormFrequency">
+                    <option value="ONE_TIME">One-Time</option>
+                    <option value="RECURRING_MONTHLY">Recurring Monthly</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Branch</label>
+                  <select class="fe-select" [(ngModel)]="expFormClinicId">
+                    <option value="">Project Default Branch</option>
+                    @for (loc of branchLocations(); track loc.id) {
+                      <option [value]="loc.id">{{ loc.name }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Notes</label>
+                <input class="fe-input" [(ngModel)]="expFormNotes" placeholder="Receipt or invoice reference" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="fe-btn fe-btn--secondary" (click)="showExpenseModal.set(false)">Cancel</button>
+              <button class="fe-btn fe-btn--primary" [disabled]="submitting()" (click)="submitExpense()">Save Expense</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (showTemplateModal()) {
+        <div class="modal-backdrop" role="dialog" aria-modal="true" (click)="showTemplateModal.set(false)">
+          <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>New Monthly Recurring / Salary Template</h3>
+              <button class="close-btn" (click)="showTemplateModal.set(false)">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>Category *</label>
+                <select class="fe-select" [(ngModel)]="tplFormCategory">
+                  <option value="SALARIES">Staff Salaries</option>
+                  <option value="RENT">Monthly Rent</option>
+                  <option value="ELECTRICITY_WATER">Electricity &amp; Water</option>
+                  <option value="MAINTENANCE">Maintenance Contract</option>
+                  <option value="OTHER">Other Monthly Fixed Cost</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Title *</label>
+                <input class="fe-input" [(ngModel)]="tplFormTitle" placeholder="e.g., Front Desk &amp; Nurses Monthly Payroll" />
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;">
+                <div class="form-group">
+                  <label>Default Monthly Amount (JOD)</label>
+                  <input class="fe-input" type="number" min="0" step="0.001" [(ngModel)]="tplFormAmount" />
+                </div>
+                <div class="form-group">
+                  <label>Day of Month Due (1–28)</label>
+                  <input class="fe-input" type="number" min="1" max="28" [(ngModel)]="tplFormDay" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Branch</label>
+                <select class="fe-select" [(ngModel)]="tplFormClinicId">
+                  <option value="">Project Default Branch</option>
+                  @for (loc of branchLocations(); track loc.id) {
+                    <option [value]="loc.id">{{ loc.name }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="fe-btn fe-btn--secondary" (click)="showTemplateModal.set(false)">Cancel</button>
+              <button class="fe-btn fe-btn--primary" [disabled]="submitting()" (click)="submitRecurringTemplate()">Create Template</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (confirmTemplateTarget(); as tpl) {
+        <div class="modal-backdrop" role="dialog" aria-modal="true" (click)="confirmTemplateTarget.set(null)">
+          <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Confirm &amp; Log Monthly Expense: {{ tpl.title }}</h3>
+              <button class="close-btn" (click)="confirmTemplateTarget.set(null)">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>Confirmed Amount (JOD)</label>
+                <input class="fe-input" type="number" min="0" step="0.001" [(ngModel)]="confirmTplAmount" />
+              </div>
+              <div class="form-group">
+                <label>Payment Date</label>
+                <input class="fe-input" type="date" [(ngModel)]="confirmTplDate" />
+              </div>
+              <div class="form-group">
+                <label>Notes</label>
+                <input class="fe-input" [(ngModel)]="confirmTplNotes" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="fe-btn fe-btn--secondary" (click)="confirmTemplateTarget.set(null)">Cancel</button>
+              <button class="fe-btn fe-btn--primary" [disabled]="submitting()" (click)="submitConfirmRecurring()">Confirm &amp; Post Expense</button>
+            </div>
+          </div>
+        </div>
       }
 
       <!-- Break-Glass Request Modal -->
@@ -982,6 +1347,7 @@ type ReportTab = 'productivity' | 'procedures' | 'financials' | 'recall' | 'comp
 })
 export class ClinicReportsComponent implements OnInit {
   private readonly api = inject(ClinicPatientApi);
+  private readonly clinicApi = inject(ClinicApi);
   private readonly projectContext = inject(ProjectContextService);
 
   readonly activeTab = signal<ReportTab>('productivity');
@@ -989,6 +1355,36 @@ export class ClinicReportsComponent implements OnInit {
   readonly reportDate = signal<string>('2026-10-20');
   readonly loading = signal<boolean>(false);
   readonly error = signal<boolean>(false);
+
+  // Req 3: Finance, Expenses, Recurring Salaries & P&L Analytics
+  pnlYear = new Date().getFullYear();
+  pnlPeriodType = 'ANNUAL';
+  pnlClinicId = '';
+  readonly branchLocations = signal<readonly ClinicLocation[]>([]);
+  readonly financialReport = signal<FinancialAnalyticsReport | null>(null);
+  readonly expenseRows = signal<readonly ClinicExpenseRow[]>([]);
+  readonly recurringTemplates = signal<readonly RecurringExpenseTemplateRow[]>([]);
+  readonly dueRecurringTemplates = computed(() =>
+    this.recurringTemplates().filter((t) => t.dueThisMonth && t.isActive),
+  );
+  readonly showExpenseModal = signal(false);
+  readonly showTemplateModal = signal(false);
+  readonly confirmTemplateTarget = signal<RecurringExpenseTemplateRow | null>(null);
+  expFormCategory = 'RENT';
+  expFormTitle = '';
+  expFormAmount = 0;
+  expFormDate = new Date().toISOString().slice(0, 10);
+  expFormFrequency = 'ONE_TIME';
+  expFormClinicId = '';
+  expFormNotes = '';
+  tplFormCategory = 'SALARIES';
+  tplFormTitle = '';
+  tplFormAmount = 0;
+  tplFormDay = 1;
+  tplFormClinicId = '';
+  confirmTplAmount = 0;
+  confirmTplDate = new Date().toISOString().slice(0, 10);
+  confirmTplNotes = '';
 
   readonly showReportsInfo = signal<boolean>(false);
   toggleReportsInfo(): void {
@@ -1023,6 +1419,7 @@ export class ClinicReportsComponent implements OnInit {
 
   ngOnInit(): void {
     this.refreshActiveGrants();
+    void this.loadBranchLocations();
     this.loadCurrentTab();
   }
 
@@ -1031,6 +1428,7 @@ export class ClinicReportsComponent implements OnInit {
       case 'productivity': return this.productivityRows().length > 0;
       case 'procedures': return this.procedureRows().length > 0;
       case 'financials': return this.financialRows().length > 0;
+      case 'expensePnl': return true;
       case 'recall': return this.recallRows().length > 0;
       case 'compliance': return this.complianceRows().length > 0;
       case 'audit': return this.auditRows().length > 0;
@@ -1123,11 +1521,166 @@ export class ClinicReportsComponent implements OnInit {
           this.auditRows.set(rows);
           break;
         }
+        case 'expensePnl': {
+          await this.loadExpensePnl();
+          break;
+        }
       }
     } catch {
       this.error.set(true);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  private async loadBranchLocations(): Promise<void> {
+    try {
+      const proj = this.projectContext.selectedProjectId() || undefined;
+      const res = await this.clinicApi.locations({ projectId: proj, limit: 100 });
+      this.branchLocations.set(res.items ?? []);
+    } catch {
+      this.branchLocations.set([]);
+    }
+  }
+
+  async loadExpensePnl(): Promise<void> {
+    const proj = this.projectContext.selectedProjectId() || undefined;
+    const clinicId = this.pnlClinicId || undefined;
+    try {
+      const [report, expenses, templates] = await Promise.all([
+        this.api.financialAnalytics({
+          projectId: proj,
+          year: this.pnlYear,
+          periodType: this.pnlPeriodType,
+          clinicId,
+        }),
+        this.api.financeExpenses({ projectId: proj, clinicId }),
+        this.api.recurringExpenseTemplates({ projectId: proj, clinicId }),
+      ]);
+      this.financialReport.set(report);
+      this.expenseRows.set(expenses ?? []);
+      this.recurringTemplates.set(templates ?? []);
+    } catch {
+      this.error.set(true);
+    }
+  }
+
+  openExpenseModal(): void {
+    this.expFormCategory = 'RENT';
+    this.expFormTitle = '';
+    this.expFormAmount = 0;
+    this.expFormDate = new Date().toISOString().slice(0, 10);
+    this.expFormFrequency = 'ONE_TIME';
+    this.expFormClinicId = this.pnlClinicId || this.branchLocations()[0]?.id || '';
+    this.expFormNotes = '';
+    this.showExpenseModal.set(true);
+  }
+
+  async submitExpense(): Promise<void> {
+    const title = this.expFormTitle.trim();
+    if (!title) return;
+    this.submitting.set(true);
+    try {
+      const proj = this.projectContext.selectedProjectId() || undefined;
+      await this.api.createFinanceExpense(
+        {
+          category: this.expFormCategory,
+          title,
+          amount: Number(this.expFormAmount) || 0,
+          paymentDate: this.expFormDate,
+          expenseFrequency: this.expFormFrequency,
+          clinicId: this.expFormClinicId || null,
+          notes: this.expFormNotes.trim() || undefined,
+          projectId: proj,
+        },
+        { projectId: proj },
+      );
+      this.showExpenseModal.set(false);
+      await this.loadExpensePnl();
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  async deleteExpenseRow(expenseId: string): Promise<void> {
+    const proj = this.projectContext.selectedProjectId() || undefined;
+    try {
+      await this.api.deleteFinanceExpense(expenseId, { projectId: proj });
+      await this.loadExpensePnl();
+    } catch {
+      // ignore
+    }
+  }
+
+  openRecurringTemplateModal(): void {
+    this.tplFormCategory = 'SALARIES';
+    this.tplFormTitle = '';
+    this.tplFormAmount = 0;
+    this.tplFormDay = 1;
+    this.tplFormClinicId = this.pnlClinicId || this.branchLocations()[0]?.id || '';
+    this.showTemplateModal.set(true);
+  }
+
+  async submitRecurringTemplate(): Promise<void> {
+    const title = this.tplFormTitle.trim();
+    if (!title) return;
+    this.submitting.set(true);
+    try {
+      const proj = this.projectContext.selectedProjectId() || undefined;
+      await this.api.createRecurringExpenseTemplate(
+        {
+          category: this.tplFormCategory,
+          title,
+          defaultAmount: Number(this.tplFormAmount) || 0,
+          dayOfMonth: Number(this.tplFormDay) || 1,
+          clinicId: this.tplFormClinicId || null,
+          projectId: proj,
+        },
+        { projectId: proj },
+      );
+      this.showTemplateModal.set(false);
+      await this.loadExpensePnl();
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  async deleteRecurringTemplate(templateId: string): Promise<void> {
+    const proj = this.projectContext.selectedProjectId() || undefined;
+    try {
+      await this.api.deleteRecurringExpenseTemplate(templateId, { projectId: proj });
+      await this.loadExpensePnl();
+    } catch {
+      // ignore
+    }
+  }
+
+  openConfirmRecurringModal(tpl: RecurringExpenseTemplateRow): void {
+    this.confirmTemplateTarget.set(tpl);
+    this.confirmTplAmount = tpl.defaultAmount;
+    this.confirmTplDate = new Date().toISOString().slice(0, 10);
+    this.confirmTplNotes = `Confirmed recurring ${tpl.category}: ${tpl.title}`;
+  }
+
+  async submitConfirmRecurring(): Promise<void> {
+    const tpl = this.confirmTemplateTarget();
+    if (!tpl) return;
+    this.submitting.set(true);
+    try {
+      const proj = this.projectContext.selectedProjectId() || undefined;
+      await this.api.confirmRecurringExpenseTemplate(
+        tpl.id,
+        {
+          amount: Number(this.confirmTplAmount) || tpl.defaultAmount,
+          paymentDate: this.confirmTplDate,
+          notes: this.confirmTplNotes.trim() || undefined,
+        },
+        { projectId: proj },
+      );
+      this.confirmTemplateTarget.set(null);
+      await this.loadExpensePnl();
+    } finally {
+      this.submitting.set(false);
     }
   }
 

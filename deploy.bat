@@ -119,6 +119,7 @@ set SESSION_SECRET=wVj2K9yNqL7xP3sT6uB1eR5aZ8dF0mC4hI9gO2vY1nU=
 set ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 set SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5435/firstelement
 set SPRING_DATA_REDIS_PORT=6381
+set REDIS_URL=redis://localhost:6381
 start "ClinicFlow Backend (Spring Boot)" cmd /k "gradlew.bat :backend:app-bootstrap:bootRun"
 
 echo.

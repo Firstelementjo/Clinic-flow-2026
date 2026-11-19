@@ -173,7 +173,34 @@ public final class ScheduleModels {
             String medicalReportContentType,
             String medicalReportUrl,
             java.util.UUID resourceId,
-            String notes) {
+            String notes,
+            java.util.UUID treatmentRoomId) {
+        public CreateAppointmentRequest(
+                java.util.UUID doctorId,
+                String doctorName,
+                java.util.UUID patientId,
+                String patientName,
+                String patientPhone,
+                String patientEmail,
+                java.util.UUID clinicId,
+                java.util.UUID procedureId,
+                String service,
+                LocalDateTime appointmentDate,
+                Integer durationMinutes,
+                Integer bufferMinutes,
+                Integer quantity,
+                Double price,
+                String paymentStatus,
+                String medicalReportName,
+                String medicalReportContentType,
+                String medicalReportUrl,
+                java.util.UUID resourceId,
+                String notes) {
+            this(doctorId, doctorName, patientId, patientName, patientPhone, patientEmail,
+                 clinicId, procedureId, service, appointmentDate, durationMinutes, bufferMinutes,
+                 quantity, price, paymentStatus, medicalReportName, medicalReportContentType,
+                 medicalReportUrl, resourceId, notes, null);
+        }
     }
 
     public record UpdateAppointmentStatusRequest(

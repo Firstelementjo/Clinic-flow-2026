@@ -534,7 +534,7 @@ export class ClinicPatientApi {
     patientId: string,
     payload: CreateEncounterPayload,
     query: ClinicPatientQuery = {},
-  ): Promise<{ id: string; created: boolean }> {
+  ): Promise<{ id: string; created: boolean; inventoryWarnings?: InventoryStockWarning[] }> {
     return this.api.post(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/encounters`, payload, query);
   }
 
@@ -989,8 +989,20 @@ export class ClinicPatientApi {
     appointmentId: string,
     payload: UpdateAppointmentStatusPayload,
     query: { projectId?: string } = {},
-  ): Promise<{ id: string; status: string; updated: boolean }> {
+  ): Promise<{ id: string; status: string; updated: boolean; inventoryWarnings?: InventoryStockWarning[] }> {
     return this.api.patch(`/api/v1/clinic/schedules/appointments/${encodeURIComponent(appointmentId)}/status`, payload, query);
+  }
+
+  assignTreatmentRoom(
+    appointmentId: string,
+    treatmentRoomId: string | null,
+    query: { projectId?: string } = {},
+  ): Promise<{ id: string; treatmentRoomId: string; updated: boolean }> {
+    return this.api.patch(
+      `/api/v1/clinic/schedules/appointments/${encodeURIComponent(appointmentId)}/assign-room`,
+      { treatmentRoomId },
+      query,
+    );
   }
 
   /** `PATCH /api/v1/clinic/schedules/appointments/{id}/payment` â€” a separate decision from status. */
@@ -1427,6 +1439,283 @@ export class ClinicPatientApi {
       { status },
       query,
     );
+  }
+
+  // ---- Requirement 1: Inventory & Service-to-Material Mapping --------------
+
+  inventoryItems(
+    query: ClinicPatientQuery & { clinicId?: string; q?: string; lowStockOnly?: boolean } = {},
+  ): Promise<InventoryItemRow[]> {
+    return this.api.get('/api/v1/clinic/inventory/items', query);
+  }
+
+  consolidatedInventory(
+    query: ClinicPatientQuery & { q?: string } = {},
+  ): Promise<ConsolidatedInventoryRow[]> {
+    return this.api.get('/api/v1/clinic/inventory/consolidated', query);
+  }
+
+  createInventoryItem(
+    payload: CreateInventoryItemPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<InventoryItemRow> {
+    return this.api.post('/api/v1/clinic/inventory/items', payload, query);
+  }
+
+  updateInventoryItem(
+    itemId: string,
+    payload: UpdateInventoryItemPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<InventoryItemRow> {
+    return this.api.patch(`/api/v1/clinic/inventory/items/${encodeURIComponent(itemId)}`, payload, query);
+  }
+
+  adjustInventoryStock(
+    itemId: string,
+    payload: AdjustInventoryStockPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<InventoryItemRow> {
+    return this.api.post(`/api/v1/clinic/inventory/items/${encodeURIComponent(itemId)}/adjust`, payload, query);
+  }
+
+  deleteInventoryItem(itemId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(`/api/v1/clinic/inventory/items/${encodeURIComponent(itemId)}`, query);
+  }
+
+  inventoryTransactions(
+    query: ClinicPatientQuery & { itemId?: string; transactionType?: string; limit?: number } = {},
+  ): Promise<InventoryTransactionRow[]> {
+    return this.api.get('/api/v1/clinic/inventory/transactions', query);
+  }
+
+  checkInventoryAvailability(
+    procedureId: string,
+    quantity: number = 1,
+    query: ClinicPatientQuery = {},
+  ): Promise<InventoryStockWarning[]> {
+    return this.api.get('/api/v1/clinic/inventory/check-availability', {
+      ...query,
+      procedureId,
+      quantity,
+    });
+  }
+
+  getProcedureMaterials(
+    procedureId: string,
+    query: ClinicPatientQuery = {},
+  ): Promise<ServiceMaterialRow[]> {
+    return this.api.get(`/api/v1/clinic/procedures/${encodeURIComponent(procedureId)}/materials`, query);
+  }
+
+  saveProcedureMaterials(
+    procedureId: string,
+    materials: readonly ServiceMaterialInput[],
+    query: ClinicPatientQuery = {},
+  ): Promise<ServiceMaterialRow[]> {
+    return this.api.put(
+      `/api/v1/clinic/procedures/${encodeURIComponent(procedureId)}/materials`,
+      materials,
+      query,
+    );
+  }
+
+  // ---- Requirement 2: HR Lite — Staff Schedules & Leave Requests -----------
+
+  hrSchedules(
+    query: ClinicPatientQuery & {
+      userId?: string;
+      doctorId?: string;
+      mineOnly?: boolean;
+      scheduleType?: string;
+    } = {},
+  ): Promise<StaffScheduleRow[]> {
+    return this.api.get('/api/v1/clinic/hr/schedules', query);
+  }
+
+  createHrSchedule(
+    payload: CreateStaffSchedulePayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<StaffScheduleRow> {
+    return this.api.post('/api/v1/clinic/hr/schedules', payload, query);
+  }
+
+  updateHrSchedule(
+    scheduleId: string,
+    payload: Partial<CreateStaffSchedulePayload>,
+    query: ClinicPatientQuery = {},
+  ): Promise<StaffScheduleRow> {
+    return this.api.patch(`/api/v1/clinic/hr/schedules/${encodeURIComponent(scheduleId)}`, payload, query);
+  }
+
+  deleteHrSchedule(scheduleId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(`/api/v1/clinic/hr/schedules/${encodeURIComponent(scheduleId)}`, query);
+  }
+
+  hrLeaveRequests(
+    query: ClinicPatientQuery & { status?: string; mineOnly?: boolean } = {},
+  ): Promise<LeaveRequestRow[]> {
+    return this.api.get('/api/v1/clinic/hr/leave-requests', query);
+  }
+
+  createHrLeaveRequest(
+    payload: CreateLeaveRequestPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<LeaveRequestRow> {
+    return this.api.post('/api/v1/clinic/hr/leave-requests', payload, query);
+  }
+
+  hrLeaveConflicts(requestId: string, query: ClinicPatientQuery = {}): Promise<LeaveConflictReport> {
+    return this.api.get(`/api/v1/clinic/hr/leave-requests/${encodeURIComponent(requestId)}/conflicts`, query);
+  }
+
+  reviewHrLeaveRequest(
+    requestId: string,
+    payload: ReviewLeaveRequestPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<LeaveRequestRow> {
+    return this.api.patch(
+      `/api/v1/clinic/hr/leave-requests/${encodeURIComponent(requestId)}/decision`,
+      payload,
+      query,
+    );
+  }
+
+  // ---- Requirement 3: Financial Management & P&L Analytics -----------------
+
+  financeExpenses(
+    query: ClinicPatientQuery & { clinicId?: string; category?: string; from?: string; to?: string } = {},
+  ): Promise<ClinicExpenseRow[]> {
+    return this.api.get('/api/v1/clinic/finance/expenses', query);
+  }
+
+  createFinanceExpense(
+    payload: CreateClinicExpensePayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<ClinicExpenseRow> {
+    return this.api.post('/api/v1/clinic/finance/expenses', payload, query);
+  }
+
+  deleteFinanceExpense(expenseId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(`/api/v1/clinic/finance/expenses/${encodeURIComponent(expenseId)}`, query);
+  }
+
+  recurringExpenseTemplates(
+    query: ClinicPatientQuery & { clinicId?: string } = {},
+  ): Promise<RecurringExpenseTemplateRow[]> {
+    return this.api.get('/api/v1/clinic/finance/recurring-templates', query);
+  }
+
+  createRecurringExpenseTemplate(
+    payload: CreateRecurringTemplatePayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<RecurringExpenseTemplateRow> {
+    return this.api.post('/api/v1/clinic/finance/recurring-templates', payload, query);
+  }
+
+  confirmRecurringExpenseTemplate(
+    templateId: string,
+    payload: ConfirmRecurringTemplatePayload = {},
+    query: ClinicPatientQuery = {},
+  ): Promise<ClinicExpenseRow> {
+    return this.api.post(
+      `/api/v1/clinic/finance/recurring-templates/${encodeURIComponent(templateId)}/confirm`,
+      payload,
+      query,
+    );
+  }
+
+  deleteRecurringExpenseTemplate(templateId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(
+      `/api/v1/clinic/finance/recurring-templates/${encodeURIComponent(templateId)}`,
+      query,
+    );
+  }
+
+  financialAnalytics(
+    query: ClinicPatientQuery & { year?: number; periodType?: string; clinicId?: string } = {},
+  ): Promise<FinancialAnalyticsReport> {
+    return this.api.get('/api/v1/clinic/finance/analytics', query);
+  }
+
+  // ---- Requirement 4: Treatment Rooms --------------------------------------
+
+  treatmentRooms(
+    query: ClinicPatientQuery & { clinicId?: string } = {},
+  ): Promise<TreatmentRoomRow[]> {
+    return this.api.get('/api/v1/clinic/treatment-rooms', query);
+  }
+
+  createTreatmentRoom(
+    payload: CreateTreatmentRoomPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<TreatmentRoomRow> {
+    return this.api.post('/api/v1/clinic/treatment-rooms', payload, query);
+  }
+
+  updateTreatmentRoom(
+    roomId: string,
+    payload: Partial<CreateTreatmentRoomPayload>,
+    query: ClinicPatientQuery = {},
+  ): Promise<TreatmentRoomRow> {
+    return this.api.patch(`/api/v1/clinic/treatment-rooms/${encodeURIComponent(roomId)}`, payload, query);
+  }
+
+  deleteTreatmentRoom(roomId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(`/api/v1/clinic/treatment-rooms/${encodeURIComponent(roomId)}`, query);
+  }
+
+  // ---- Requirement 5: Dental Imaging & Preferred External Labs -------------
+
+  imagingLabs(query: ClinicPatientQuery & { clinicId?: string } = {}): Promise<ImagingLabRow[]> {
+    return this.api.get('/api/v1/clinic/imaging/labs', query);
+  }
+
+  createImagingLab(
+    payload: CreateImagingLabPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<ImagingLabRow> {
+    return this.api.post('/api/v1/clinic/imaging/labs', payload, query);
+  }
+
+  updateImagingLab(
+    labId: string,
+    payload: Partial<CreateImagingLabPayload>,
+    query: ClinicPatientQuery = {},
+  ): Promise<ImagingLabRow> {
+    return this.api.patch(`/api/v1/clinic/imaging/labs/${encodeURIComponent(labId)}`, payload, query);
+  }
+
+  deleteImagingLab(labId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(`/api/v1/clinic/imaging/labs/${encodeURIComponent(labId)}`, query);
+  }
+
+  imagingRequests(
+    query: ClinicPatientQuery & { patientId?: string; status?: string; imagingType?: string } = {},
+  ): Promise<ImagingRequestRow[]> {
+    return this.api.get('/api/v1/clinic/imaging/requests', query);
+  }
+
+  imagingAnalytics(query: ClinicPatientQuery = {}): Promise<ImagingSummaryAnalytics> {
+    return this.api.get('/api/v1/clinic/imaging/analytics', query);
+  }
+
+  createImagingRequest(
+    payload: CreateImagingRequestPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<ImagingRequestRow> {
+    return this.api.post('/api/v1/clinic/imaging/requests', payload, query);
+  }
+
+  updateImagingRequest(
+    requestId: string,
+    payload: UpdateImagingRequestPayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<ImagingRequestRow> {
+    return this.api.patch(`/api/v1/clinic/imaging/requests/${encodeURIComponent(requestId)}`, payload, query);
+  }
+
+  deleteImagingRequest(requestId: string, query: ClinicPatientQuery = {}): Promise<boolean> {
+    return this.api.delete(`/api/v1/clinic/imaging/requests/${encodeURIComponent(requestId)}`, query);
   }
 }
 
@@ -2417,6 +2706,7 @@ export interface CreateAppointmentPayload {
   readonly medicalReportUrl?: string;
   readonly resourceId?: string | null;
   readonly notes?: string;
+  readonly treatmentRoomId?: string | null;
 }
 
 export interface UpdateAppointmentStatusPayload {
@@ -2895,4 +3185,428 @@ export interface CreateDoctorPayoutPayload {
   readonly periodEnd: string;
   readonly notes?: string;
   readonly projectId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Five Requirements Expansion Interfaces
+// ---------------------------------------------------------------------------
+
+export interface InventoryItemRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly name: string;
+  readonly sku?: string | null;
+  readonly category: string;
+  readonly unitOfMeasure: string;
+  readonly unitCost: number;
+  readonly quantityOnHand: number;
+  readonly minStockThreshold: number;
+  readonly lowStock: boolean;
+  readonly isActive: boolean;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+export interface CreateInventoryItemPayload {
+  readonly name: string;
+  readonly sku?: string | null;
+  readonly category?: string;
+  readonly unitOfMeasure?: string;
+  readonly unitCost?: number;
+  readonly quantityOnHand?: number;
+  readonly minStockThreshold?: number;
+  readonly clinicId?: string | null;
+  readonly recordPurchaseExpense?: boolean;
+  readonly projectId?: string;
+}
+
+export interface UpdateInventoryItemPayload {
+  readonly name?: string;
+  readonly sku?: string | null;
+  readonly category?: string;
+  readonly unitOfMeasure?: string;
+  readonly unitCost?: number;
+  readonly minStockThreshold?: number;
+  readonly clinicId?: string | null;
+  readonly isActive?: boolean;
+}
+
+export interface AdjustInventoryStockPayload {
+  readonly transactionType: 'MANUAL_PURCHASE' | 'MANUAL_ADJUSTMENT' | string;
+  readonly quantity: number;
+  readonly unitCost?: number;
+  readonly notes?: string;
+  readonly recordPurchaseExpense?: boolean;
+  readonly projectId?: string;
+}
+
+export interface ServiceMaterialRow {
+  readonly id: string;
+  readonly procedureId: string;
+  readonly procedureName: string;
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly unitOfMeasure: string;
+  readonly unitCost: number;
+  readonly quantityRequired: number;
+  readonly quantityOnHand: number;
+}
+
+export interface ServiceMaterialInput {
+  readonly itemId: string;
+  readonly quantityRequired: number;
+}
+
+export interface InventoryTransactionRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly transactionType: string;
+  readonly quantity: number;
+  readonly quantityBefore: number;
+  readonly quantityAfter: number;
+  readonly shortfallQuantity: number;
+  readonly unitCost: number;
+  readonly referenceType?: string | null;
+  readonly referenceId?: string | null;
+  readonly notes?: string | null;
+  readonly createdAt?: string;
+}
+
+export interface InventoryStockWarning {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly quantityRequired: number;
+  readonly quantityAvailable: number;
+  readonly shortfallQuantity: number;
+  readonly message: string;
+}
+
+export interface ConsolidatedInventoryRow {
+  readonly itemName: string;
+  readonly sku?: string | null;
+  readonly category: string;
+  readonly unitOfMeasure: string;
+  readonly totalQuantityOnHand: number;
+  readonly branchesCount: number;
+  readonly lowStockBranchesCount: number;
+  readonly totalValuation: number;
+}
+
+export interface StaffScheduleRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly userId?: string | null;
+  readonly doctorId?: string | null;
+  readonly staffName: string;
+  readonly staffRole: string;
+  readonly scheduleType: 'WEEKLY_TEMPLATE' | 'DATE_ROSTER' | string;
+  readonly weekday?: number | null;
+  readonly shiftDate?: string | null;
+  readonly startTime: string;
+  readonly endTime: string;
+  readonly notes?: string | null;
+  readonly isActive: boolean;
+  readonly createdAt?: string;
+}
+
+export interface CreateStaffSchedulePayload {
+  readonly userId?: string | null;
+  readonly doctorId?: string | null;
+  readonly staffName: string;
+  readonly staffRole?: string;
+  readonly scheduleType: 'WEEKLY_TEMPLATE' | 'DATE_ROSTER' | string;
+  readonly weekday?: number | null;
+  readonly shiftDate?: string | null;
+  readonly startTime: string;
+  readonly endTime: string;
+  readonly clinicId?: string | null;
+  readonly notes?: string | null;
+  readonly projectId?: string;
+}
+
+export interface LeaveRequestRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly userId?: string | null;
+  readonly doctorId?: string | null;
+  readonly staffName: string;
+  readonly staffRole: string;
+  readonly leaveType: 'ANNUAL_VACATION' | 'SICK_LEAVE' | 'EMERGENCY_LEAVE' | 'UNPAID_LEAVE' | string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly reason?: string | null;
+  readonly status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  readonly reviewedByUserId?: string | null;
+  readonly reviewedByName?: string | null;
+  readonly reviewedAt?: string | null;
+  readonly reviewNotes?: string | null;
+  readonly createdAt?: string;
+}
+
+export interface CreateLeaveRequestPayload {
+  readonly userId?: string | null;
+  readonly doctorId?: string | null;
+  readonly staffName?: string;
+  readonly staffRole?: string;
+  readonly leaveType: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly clinicId?: string | null;
+  readonly reason?: string;
+  readonly projectId?: string;
+}
+
+export interface ReviewLeaveRequestPayload {
+  readonly status: 'APPROVED' | 'REJECTED';
+  readonly reviewNotes?: string;
+}
+
+export interface LeaveConflictReport {
+  readonly impactedAppointmentsCount: number;
+  readonly impactedShiftsCount: number;
+  readonly impactedDetails: readonly string[];
+  readonly warningMessage?: string | null;
+}
+
+export interface ClinicExpenseRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly category: string;
+  readonly title: string;
+  readonly amount: number;
+  readonly currency: string;
+  readonly expenseFrequency: string;
+  readonly paymentDate: string;
+  readonly templateId?: string | null;
+  readonly notes?: string | null;
+  readonly createdAt?: string;
+}
+
+export interface CreateClinicExpensePayload {
+  readonly category: string;
+  readonly title: string;
+  readonly amount: number;
+  readonly expenseFrequency?: string;
+  readonly paymentDate?: string;
+  readonly clinicId?: string | null;
+  readonly notes?: string;
+  readonly projectId?: string;
+}
+
+export interface RecurringExpenseTemplateRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly category: string;
+  readonly title: string;
+  readonly defaultAmount: number;
+  readonly dayOfMonth: number;
+  readonly lastConfirmedMonth?: string | null;
+  readonly dueThisMonth: boolean;
+  readonly notes?: string | null;
+  readonly isActive: boolean;
+}
+
+export interface CreateRecurringTemplatePayload {
+  readonly category: string;
+  readonly title: string;
+  readonly defaultAmount: number;
+  readonly dayOfMonth?: number;
+  readonly clinicId?: string | null;
+  readonly notes?: string;
+  readonly projectId?: string;
+}
+
+export interface ConfirmRecurringTemplatePayload {
+  readonly amount?: number;
+  readonly paymentDate?: string;
+  readonly monthKey?: string;
+  readonly notes?: string;
+}
+
+export interface PeriodFinancialBucket {
+  readonly periodKey: string;
+  readonly periodLabel: string;
+  readonly totalRevenue: number;
+  readonly operationalExpenses: number;
+  readonly doctorPayouts: number;
+  readonly totalExpenses: number;
+  readonly netProfit: number;
+}
+
+export interface BranchFinancialBreakdown {
+  readonly clinicId?: string | null;
+  readonly branchName: string;
+  readonly totalRevenue: number;
+  readonly totalExpenses: number;
+  readonly netProfit: number;
+}
+
+export interface FinancialAnalyticsReport {
+  readonly year: number;
+  readonly periodType: string;
+  readonly totalRevenue: number;
+  readonly operationalExpenses: number;
+  readonly doctorPayouts: number;
+  readonly totalExpenses: number;
+  readonly netProfit: number;
+  readonly expensesByCategory: Record<string, number>;
+  readonly quarterlyBreakdown: readonly PeriodFinancialBucket[];
+  readonly monthlyBreakdown: readonly PeriodFinancialBucket[];
+  readonly branchBreakdown: readonly BranchFinancialBreakdown[];
+}
+
+export interface TreatmentRoomRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly name: string;
+  readonly roomNumber?: string | null;
+  readonly roomType: string;
+  readonly assignedDoctorId?: string | null;
+  readonly assignedDoctorName?: string | null;
+  readonly operationalStartHour: string;
+  readonly operationalEndHour: string;
+  readonly isActive: boolean;
+  readonly currentStatus: 'AVAILABLE' | 'OCCUPIED' | 'INACTIVE' | string;
+  readonly currentOccupiedByDoctor?: string | null;
+  readonly totalAppointmentsCount: number;
+  readonly completedProceduresCount: number;
+  readonly bookedMinutes: number;
+  readonly utilizationPercent: number;
+  readonly roomRevenue: number;
+}
+
+export interface CreateTreatmentRoomPayload {
+  readonly name: string;
+  readonly roomNumber?: string | null;
+  readonly roomType?: string;
+  readonly clinicId?: string | null;
+  readonly assignedDoctorId?: string | null;
+  readonly operationalStartHour?: string;
+  readonly operationalEndHour?: string;
+  readonly isActive?: boolean;
+  readonly projectId?: string;
+}
+
+export interface ImagingLabRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly name: string;
+  readonly contactPhone?: string | null;
+  readonly contactEmail?: string | null;
+  readonly address?: string | null;
+  readonly integrationMode: 'MANUAL' | 'DIRECT_CLOUD_API' | string;
+  readonly apiEndpointUrl?: string | null;
+  readonly notes?: string | null;
+  readonly isActive: boolean;
+}
+
+export interface CreateImagingLabPayload {
+  readonly name: string;
+  readonly contactPhone?: string | null;
+  readonly contactEmail?: string | null;
+  readonly address?: string | null;
+  readonly integrationMode?: string;
+  readonly apiEndpointUrl?: string | null;
+  readonly clinicId?: string | null;
+  readonly notes?: string | null;
+  readonly projectId?: string;
+}
+
+export interface ImagingRequestRow {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly clinicId?: string | null;
+  readonly clinicName?: string;
+  readonly patientId: string;
+  readonly patientName?: string;
+  readonly doctorId?: string | null;
+  readonly doctorName?: string | null;
+  readonly labId?: string | null;
+  readonly labName?: string | null;
+  readonly imagingType: string;
+  readonly proceduresCount: number;
+  readonly toothFdi?: number | null;
+  readonly teethSummary?: string | null;
+  readonly clinicalIndication?: string | null;
+  readonly status: string;
+  readonly requestDate: string;
+  readonly completionDate?: string | null;
+  readonly costToClinic: number;
+  readonly amountChargedToPatient: number;
+  readonly netProfit: number;
+  readonly invoiceId?: string | null;
+  readonly expenseId?: string | null;
+  readonly cloudStorageUrl?: string | null;
+  readonly relatedFiles?: readonly string[];
+  readonly findingsNotes?: string | null;
+  readonly createdAt?: string;
+}
+
+export interface CreateImagingRequestPayload {
+  readonly patientId: string;
+  readonly doctorId?: string | null;
+  readonly labId?: string | null;
+  readonly labName?: string | null;
+  readonly imagingType: string;
+  readonly proceduresCount?: number;
+  readonly toothFdi?: number | null;
+  readonly teethSummary?: string | null;
+  readonly clinicalIndication?: string | null;
+  readonly status?: string;
+  readonly requestDate?: string;
+  readonly completionDate?: string | null;
+  readonly costToClinic?: number;
+  readonly amountChargedToPatient?: number;
+  readonly cloudStorageUrl?: string | null;
+  readonly relatedFiles?: readonly string[];
+  readonly findingsNotes?: string | null;
+  readonly clinicId?: string | null;
+  readonly projectId?: string;
+}
+
+export interface UpdateImagingRequestPayload {
+  readonly status?: string;
+  readonly completionDate?: string | null;
+  readonly costToClinic?: number;
+  readonly amountChargedToPatient?: number;
+  readonly cloudStorageUrl?: string | null;
+  readonly relatedFiles?: readonly string[];
+  readonly findingsNotes?: string | null;
+  readonly labId?: string | null;
+  readonly labName?: string | null;
+}
+
+export interface ImagingSummaryAnalytics {
+  readonly totalRequests: number;
+  readonly totalProceduresCount: number;
+  readonly totalCostToClinic: number;
+  readonly totalChargedToPatient: number;
+  readonly netProfit: number;
 }

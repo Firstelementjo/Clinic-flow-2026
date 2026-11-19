@@ -733,6 +733,11 @@ public class ScheduleRepository {
                 }
             }
 
+            UUID treatmentRoomId = resolveTreatmentRoomId(scope, clinicId, req.treatmentRoomId());
+            if (treatmentRoomId != null) {
+                assertTreatmentRoomAvailable(scope, treatmentRoomId, req.appointmentDate(), duration, null);
+            }
+
             String paymentStatus = java.util.Optional.ofNullable(
                             com.firstelement.crm.clinic.ClinicModels.PaymentStatus.parse(
                                 req.paymentStatus()))
@@ -751,6 +756,7 @@ public class ScheduleRepository {
                     .addValue("doctorId", req.doctorId())
                     .addValue("procedureId", procedureId)
                     .addValue("resourceId", req.resourceId())
+                    .addValue("treatmentRoomId", treatmentRoomId)
                     .addValue("title", title)
                     .addValue("patientName", patientName)
                     .addValue("patientPhone", patientPhone)
@@ -776,7 +782,7 @@ public class ScheduleRepository {
             jdbc.update("""
                     insert into "appointments"
                         ("id", "organizationId", "projectId", "patientId", "clinicId",
-                         "doctorId", "procedureId", "resourceId", "title", "patientName",
+                         "doctorId", "procedureId", "resourceId", "treatmentRoomId", "title", "patientName",
                          "patientPhone", "patientEmail", "appointmentDate", "durationMinutes",
                          "bufferMinutes", "status", "service", "doctorName", "price",
                          "quantity", "paymentStatus", "medicalReportName",
@@ -784,7 +790,7 @@ public class ScheduleRepository {
                          "notes", "ticketNumber", "createdById", "createdAt", "updatedAt")
                     values
                         (:id, :org, :proj, :patientId, :clinicId,
-                         :doctorId, :procedureId, :resourceId, :title, :patientName,
+                         :doctorId, :procedureId, :resourceId, :treatmentRoomId, :title, :patientName,
                          :patientPhone, :patientEmail, :appointmentDate, :durationMinutes,
                          :bufferMinutes, :status, :service, :doctorName, :price,
                          :quantity, :paymentStatus, :medicalReportName,
@@ -797,6 +803,65 @@ public class ScheduleRepository {
             return new ScheduleModels.AppointmentCreatedResponse(
                     id, ticket, "CONFIRMED", req.appointmentDate());
         });
+    }
+
+    private UUID resolveTreatmentRoomId(ClinicScope scope, UUID clinicId, UUID requestedRoomId) {
+        if (requestedRoomId != null) {
+            Integer found = jdbc.queryForObject("""
+                    select count(*) from "treatment_rooms" tr
+                     where tr."organizationId" = :org and tr."projectId" = :proj and tr."id" = :roomId
+                    """,
+                    new MapSqlParameterSource()
+                            .addValue("org", scope.queryScope().organizationId())
+                            .addValue("proj", scope.projectId())
+                            .addValue("roomId", requestedRoomId),
+                    Integer.class);
+            if (found == null || found == 0) {
+                throw new com.firstelement.crm.error.ValidationFailedException(
+                        "treatmentRoomId does not name a treatment room in this clinic",
+                        java.util.Map.of("field", "treatmentRoomId"));
+            }
+            return requestedRoomId;
+        }
+        // Single-room fallback: if only 1 active treatment room exists for the clinic/project, default to it
+        List<UUID> rooms = jdbc.query("""
+                select tr."id" from "treatment_rooms" tr
+                 where tr."organizationId" = :org
+                   and tr."projectId" = :proj
+                   and tr."isActive" = true
+                   and (cast(:clinicId as uuid) is null or tr."clinicId" = cast(:clinicId as uuid) or tr."clinicId" is null)
+                 limit 2
+                """,
+                new MapSqlParameterSource()
+                        .addValue("org", scope.queryScope().organizationId())
+                        .addValue("proj", scope.projectId())
+                        .addValue("clinicId", clinicId),
+                (rs, n) -> rs.getObject("id", UUID.class));
+        return rooms.size() == 1 ? rooms.get(0) : null;
+    }
+
+    private void assertTreatmentRoomAvailable(
+            ClinicScope scope, UUID roomId, LocalDateTime start, int durationMinutes, UUID excludeAppointmentId) {
+        LocalDateTime end = start.plusMinutes(Math.max(durationMinutes, 5));
+        Integer overlaps = jdbc.queryForObject("""
+                select count(*) from "appointments" a
+                 where %s
+                   and a."treatmentRoomId" = :roomId
+                   and a."status" not in ('CANCELLED', 'NO_SHOW')
+                   and (cast(:excludeId as uuid) is null or a."id" <> cast(:excludeId as uuid))
+                   and a."appointmentDate" < :endTime
+                   and (a."appointmentDate" + (a."durationMinutes" * interval '1 minute')) > :startTime
+                """.formatted(scope.predicate("a")),
+                scope.bind()
+                        .addValue("roomId", roomId)
+                        .addValue("excludeId", excludeAppointmentId)
+                        .addValue("startTime", start)
+                        .addValue("endTime", end),
+                Integer.class);
+        if (overlaps != null && overlaps > 0) {
+            throw new org.springframework.dao.DataIntegrityViolationException(
+                    "Conflicting booking: treatment room is already occupied in this time slot");
+        }
     }
 
     private record ProcedureSnapshot(
@@ -861,10 +926,33 @@ public class ScheduleRepository {
     public int updateAppointment(
             ClinicScope scope, UUID appointmentId, ScheduleModels.CreateAppointmentRequest req) {
         return scope.read(() -> {
+            var existingRows = jdbc.query("""
+                    select a."treatmentRoomId", a."appointmentDate", a."durationMinutes"
+                      from "appointments" a
+                     where %s and a."id" = :id
+                     limit 1
+                    """.formatted(scope.predicate("a")),
+                    scope.bind().addValue("id", appointmentId),
+                    (rs, n) -> new Object[] {
+                        rs.getObject("treatmentRoomId", UUID.class),
+                        rs.getObject("appointmentDate", LocalDateTime.class),
+                        rs.getInt("durationMinutes")
+                    });
+            if (!existingRows.isEmpty()) {
+                Object[] cur = existingRows.get(0);
+                UUID effectiveRoomId = req.treatmentRoomId() != null ? req.treatmentRoomId() : (UUID) cur[0];
+                LocalDateTime effectiveDate = req.appointmentDate() != null ? req.appointmentDate() : (LocalDateTime) cur[1];
+                int effectiveDuration = req.durationMinutes() != null ? req.durationMinutes() : (Integer) cur[2];
+                if (effectiveRoomId != null && effectiveDate != null) {
+                    assertTreatmentRoomAvailable(scope, effectiveRoomId, effectiveDate, effectiveDuration, appointmentId);
+                }
+            }
+
             MapSqlParameterSource bound = scope.bind()
                     .addValue("id", appointmentId)
                     .addValue("doctorId", req.doctorId())
                     .addValue("resourceId", req.resourceId())
+                    .addValue("treatmentRoomId", req.treatmentRoomId())
                     .addValue("appointmentDate", req.appointmentDate())
                     .addValue("durationMinutes", req.durationMinutes())
                     .addValue("bufferMinutes", req.bufferMinutes())
@@ -874,6 +962,7 @@ public class ScheduleRepository {
                     update "appointments" a
                        set "doctorId" = coalesce(:doctorId, a."doctorId"),
                            "resourceId" = coalesce(:resourceId, a."resourceId"),
+                           "treatmentRoomId" = coalesce(:treatmentRoomId, a."treatmentRoomId"),
                            "appointmentDate" = coalesce(:appointmentDate, a."appointmentDate"),
                            "durationMinutes" = coalesce(:durationMinutes, a."durationMinutes"),
                            "bufferMinutes" = coalesce(:bufferMinutes, a."bufferMinutes"),
@@ -883,6 +972,58 @@ public class ScheduleRepository {
                        and a."id" = :id
                     """.formatted(scope.predicate("a")), bound);
         });
+    }
+
+    public int assignTreatmentRoom(ClinicScope scope, UUID appointmentId, UUID treatmentRoomId) {
+        return scope.read(() -> {
+            var existingRows = jdbc.query("""
+                    select a."appointmentDate", a."durationMinutes"
+                      from "appointments" a
+                     where %s and a."id" = :id
+                     limit 1
+                    """.formatted(scope.predicate("a")),
+                    scope.bind().addValue("id", appointmentId),
+                    (rs, n) -> new Object[] {
+                        rs.getObject("appointmentDate", LocalDateTime.class),
+                        rs.getInt("durationMinutes")
+                    });
+            if (existingRows.isEmpty()) {
+                return 0;
+            }
+            if (treatmentRoomId != null) {
+                Object[] cur = existingRows.get(0);
+                assertTreatmentRoomAvailable(
+                        scope, treatmentRoomId, (LocalDateTime) cur[0], (Integer) cur[1], appointmentId);
+            }
+            return jdbc.update("""
+                    update "appointments" a
+                       set "treatmentRoomId" = :treatmentRoomId,
+                           "updatedAt" = (current_timestamp at time zone 'utc')
+                     where %s
+                       and a."id" = :id
+                    """.formatted(scope.predicate("a")),
+                    scope.bind().addValue("id", appointmentId).addValue("treatmentRoomId", treatmentRoomId));
+        });
+    }
+
+    public record AppointmentProcedureContext(UUID appointmentId, UUID projectId, UUID clinicId, UUID procedureId, int quantity) {
+    }
+
+    public java.util.Optional<AppointmentProcedureContext> findAppointmentProcedureContext(
+            ClinicScope scope, UUID appointmentId) {
+        return scope.read(() -> jdbc.query("""
+                select a."id", a."projectId", a."clinicId", a."procedureId", coalesce(a."quantity", 1) as "quantity"
+                  from "appointments" a
+                 where %s and a."id" = :id
+                 limit 1
+                """.formatted(scope.predicate("a")),
+                scope.bind().addValue("id", appointmentId),
+                (rs, n) -> new AppointmentProcedureContext(
+                        rs.getObject("id", UUID.class),
+                        rs.getObject("projectId", UUID.class),
+                        rs.getObject("clinicId", UUID.class),
+                        rs.getObject("procedureId", UUID.class),
+                        rs.getInt("quantity"))).stream().findFirst());
     }
 
     private static ScheduleModels.Window window(ResultSet rs, int n) throws SQLException {

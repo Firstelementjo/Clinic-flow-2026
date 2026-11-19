@@ -30,8 +30,12 @@ import {
   type ClinicTreatmentPlanHeader,
   type ClinicTreatmentPlanItem,
   type CreateEncounterPayload,
+  type CreateImagingRequestPayload,
   type CreatePrescriptionPayload,
   type EncounterStatus,
+  type ImagingLabRow,
+  type ImagingRequestRow,
+  type InventoryStockWarning,
   type UpdateDiagnosisPayload,
 } from './clinic-patient.api';
 import { clinicStrings } from './clinic.strings';
@@ -503,12 +507,48 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                 <span class="tl-section-counter">({{ radiographRecords().length }})</span>
               </div>
               @if (canWriteClinical()) {
-                <button type="button" class="tl-btn tl-btn-teal tl-btn-add" (click)="openAddRecordModal()">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  + Add Patient Record
-                </button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <button type="button" class="tl-btn tl-btn-outline" (click)="openOrderImagingModal()">
+                    + Order Dental Imaging
+                  </button>
+                  <button type="button" class="tl-btn tl-btn-teal tl-btn-add" (click)="openAddRecordModal()">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    + Add Patient Record
+                  </button>
+                </div>
               }
             </div>
+
+            @if (patientImagingRequests().length > 0) {
+              <div style="margin-bottom:12px;padding:10px 12px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;">
+                <div style="font-size:12px;font-weight:700;color:#0f766e;margin-bottom:6px;">
+                  External &amp; Cloud Imaging Orders ({{ patientImagingRequests().length }})
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  @for (imgReq of patientImagingRequests(); track imgReq.id) {
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;background:#ffffff;padding:6px 10px;border-radius:6px;border:1px solid var(--line);">
+                      <div>
+                        <strong>{{ imgReq.imagingType }}</strong> × {{ imgReq.proceduresCount }}
+                        · {{ imgReq.requestDate }}
+                        @if (imgReq.labName) { · Lab: {{ imgReq.labName }} }
+                        @if (imgReq.teethSummary) { · Teeth: {{ imgReq.teethSummary }} }
+                      </div>
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <span class="tl-badge-type">{{ imgReq.status }}</span>
+                        @if (imgReq.cloudStorageUrl) {
+                          <a [href]="imgReq.cloudStorageUrl" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">
+                            Cloud Study ↗
+                          </a>
+                          <button type="button" class="tl-btn tl-btn-outline" style="padding:2px 8px;font-size:11px;" (click)="openCloudImagingInViewer(imgReq)">
+                            Inspect in MPR
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
 
             @if (radiographRecords().length === 0) {
               <div class="tl-empty-records">
@@ -1681,7 +1721,36 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                 </div>
               </div>
               <div class="tl-viewer-tools">
-                @if (is3DFile(viewRec.fileName)) {
+                <div class="tl-viewer-mode-group">
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
+                    [class.is-active]="viewerMode === '2D'"
+                    (click)="setViewerMode('2D')"
+                  >
+                    2D X-Ray
+                  </button>
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
+                    [class.is-active]="viewerMode === 'CBCT_MPR'"
+                    (click)="setViewerMode('CBCT_MPR')"
+                  >
+                    CBCT MPR
+                  </button>
+                  @if (is3DFile(viewRec.fileName)) {
+                    <button
+                      type="button"
+                      class="tl-tool-btn"
+                      [class.is-active]="viewerMode === '3D'"
+                      (click)="setViewerMode('3D')"
+                    >
+                      3D Mesh
+                    </button>
+                  }
+                </div>
+
+                @if (viewerMode === '3D' && is3DFile(viewRec.fileName)) {
                   <!-- 3D Specific Perspective & Render Tools -->
                   <button
                     type="button"
@@ -1745,14 +1814,53 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                   <button
                     type="button"
                     class="tl-tool-btn"
+                    [class.is-active]="measureTool === 'DISTANCE'"
+                    (click)="toggleMeasureTool('DISTANCE')"
+                    title="Distance Caliper (mm)"
+                  >
+                    Caliper (mm)
+                  </button>
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
+                    [class.is-active]="measureTool === 'ANGLE'"
+                    (click)="toggleMeasureTool('ANGLE')"
+                    title="3-Point Angle Tool (°)"
+                  >
+                    Angle (°)
+                  </button>
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
+                    [class.is-active]="measureTool === 'NERVE_CANAL'"
+                    (click)="toggleMeasureTool('NERVE_CANAL')"
+                    title="Mandibular Nerve Canal Tracing"
+                  >
+                    Nerve Canal
+                  </button>
+                  @if (distanceLines.length > 0 || angleShapes.length > 0 || nervePoints.length > 0) {
+                    <button type="button" class="tl-tool-btn" (click)="clearViewerMeasurements()" title="Clear Measurements">
+                      Clear
+                    </button>
+                  }
+                  <select
+                    class="tl-tool-select"
+                    [(ngModel)]="huPreset"
+                    aria-label="HU Window Preset"
+                  >
+                    <option value="BONE">HU: Bone (W:2000)</option>
+                    <option value="ENAMEL">HU: Enamel (W:3500)</option>
+                    <option value="SOFT">HU: Soft Tissue</option>
+                    <option value="MIP">MIP Projection</option>
+                  </select>
+                  <button
+                    type="button"
+                    class="tl-tool-btn"
                     [class.is-active]="radiographInverted"
                     (click)="toggleRadiographInvert()"
                     title="Invert Colors (Dental X-Ray Contrast)"
                   >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                      <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 0 1 0-16z"/>
-                    </svg>
-                    <span>Invert X-Ray</span>
+                    <span>Invert</span>
                   </button>
                   <button type="button" class="tl-tool-btn" (click)="zoomOutRadiograph()" title="Zoom Out">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
@@ -1775,7 +1883,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
               </div>
             </div>
             <div class="tl-viewer-viewport">
-              @if (is3DFile(viewRec.fileName)) {
+              @if (viewerMode === '3D' && is3DFile(viewRec.fileName)) {
                 <div class="tl-3d-viewport-container" id="dental3dContainer">
                   <canvas id="dental3dCanvas" class="tl-3d-canvas"></canvas>
                   @if (is3DLoading) {
@@ -1804,25 +1912,263 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                   <div class="tl-spinner"></div>
                   <p>Processing DICOM Radiograph Scan...</p>
                 </div>
+              } @else if (viewerMode === 'CBCT_MPR') {
+                <div class="tl-mpr-grid">
+                  <!-- Axial Plane -->
+                  <div class="tl-mpr-pane" (click)="onViewportClick($event)">
+                    <div class="tl-mpr-pane-head">
+                      <span>AXIAL (Z: {{ axialSlice }} mm)</span>
+                      <input type="range" min="0" max="100" [(ngModel)]="axialSlice" (click)="$event.stopPropagation()" aria-label="Axial Slice" />
+                    </div>
+                    <div class="tl-mpr-canvas">
+                      @if (viewRec.fileUrl || viewRec.thumbnailUrl) {
+                        <img
+                          [src]="viewRec.fileUrl || viewRec.thumbnailUrl"
+                          alt="Axial MPR"
+                          class="tl-mpr-img"
+                          [class]="'tl-mpr-img hu-' + huPreset + (radiographInverted ? ' is-inverted' : '')"
+                          [style.transform]="'scale(' + (radiographZoom * (0.9 + axialSlice * 0.002)) + ')'"
+                        />
+                      }
+                      <div class="tl-crosshair-h" [style.top.%]="coronalSlice" style="border-color:#22d3ee;"></div>
+                      <div class="tl-crosshair-v" [style.left.%]="sagittalSlice" style="border-color:#facc15;"></div>
+                      <svg class="tl-measure-svg" viewBox="0 0 1000 700" preserveAspectRatio="none">
+                        @for (line of distanceLines; track $index) {
+                          <line [attr.x1]="line.x1" [attr.y1]="line.y1" [attr.x2]="line.x2" [attr.y2]="line.y2" class="tl-caliper-line" />
+                          <text [attr.x]="(line.x1 + line.x2) / 2" [attr.y]="(line.y1 + line.y2) / 2 - 10" class="tl-caliper-label">{{ line.mm }} mm</text>
+                        }
+                        @if (nervePoints.length > 1) {
+                          <polyline [attr.points]="nervePolylineAttr()" class="tl-nerve-path" />
+                        }
+                      </svg>
+                    </div>
+                  </div>
+
+                  <!-- Coronal Plane -->
+                  <div class="tl-mpr-pane">
+                    <div class="tl-mpr-pane-head">
+                      <span>CORONAL (Y: {{ coronalSlice }} mm)</span>
+                      <input type="range" min="0" max="100" [(ngModel)]="coronalSlice" aria-label="Coronal Slice" />
+                    </div>
+                    <div class="tl-mpr-canvas">
+                      @if (viewRec.fileUrl || viewRec.thumbnailUrl) {
+                        <img
+                          [src]="viewRec.fileUrl || viewRec.thumbnailUrl"
+                          alt="Coronal MPR"
+                          class="tl-mpr-img"
+                          [class]="'tl-mpr-img hu-' + huPreset + (radiographInverted ? ' is-inverted' : '')"
+                          [style.transform]="'scale(' + radiographZoom + ') scaleY(' + (0.85 + coronalSlice * 0.003) + ')'"
+                        />
+                      }
+                      <div class="tl-crosshair-h" [style.top.%]="axialSlice" style="border-color:#ef4444;"></div>
+                      <div class="tl-crosshair-v" [style.left.%]="sagittalSlice" style="border-color:#facc15;"></div>
+                    </div>
+                  </div>
+
+                  <!-- Sagittal / Cross-Sectional Plane -->
+                  <div class="tl-mpr-pane">
+                    <div class="tl-mpr-pane-head">
+                      <span>SAGITTAL / CROSS-SECTION (X: {{ sagittalSlice }} mm)</span>
+                      <input type="range" min="0" max="100" [(ngModel)]="sagittalSlice" aria-label="Sagittal Slice" />
+                    </div>
+                    <div class="tl-mpr-canvas">
+                      @if (viewRec.fileUrl || viewRec.thumbnailUrl) {
+                        <img
+                          [src]="viewRec.fileUrl || viewRec.thumbnailUrl"
+                          alt="Sagittal MPR"
+                          class="tl-mpr-img"
+                          [class]="'tl-mpr-img hu-' + huPreset + (radiographInverted ? ' is-inverted' : '')"
+                          [style.transform]="'scale(' + radiographZoom + ') scaleX(' + (0.85 + sagittalSlice * 0.003) + ')'"
+                        />
+                      }
+                      <div class="tl-crosshair-h" [style.top.%]="axialSlice" style="border-color:#ef4444;"></div>
+                      <div class="tl-crosshair-v" [style.left.%]="coronalSlice" style="border-color:#22d3ee;"></div>
+                    </div>
+                  </div>
+
+                  <!-- Panoramic Arch Curve & 3D Volume Summary -->
+                  <div class="tl-mpr-pane">
+                    <div class="tl-mpr-pane-head">
+                      <span>PANORAMIC ARCH RECONSTRUCTION (Slab: {{ panArchDepth }} mm)</span>
+                      <input type="range" min="2" max="40" [(ngModel)]="panArchDepth" aria-label="Panoramic Arch Depth" />
+                    </div>
+                    <div class="tl-mpr-canvas">
+                      @if (viewRec.fileUrl || viewRec.thumbnailUrl) {
+                        <img
+                          [src]="viewRec.fileUrl || viewRec.thumbnailUrl"
+                          alt="Panoramic Arch"
+                          class="tl-mpr-img"
+                          [class]="'tl-mpr-img hu-' + huPreset + (radiographInverted ? ' is-inverted' : '')"
+                          [style.transform]="'scale(' + (radiographZoom * (0.95 + panArchDepth * 0.004)) + ')'"
+                        />
+                      }
+                      <svg class="tl-measure-svg" viewBox="0 0 1000 700" preserveAspectRatio="none">
+                        <path d="M 160 540 Q 500 120 840 540" fill="none" stroke="#14b8a6" stroke-width="4" stroke-dasharray="10 6" opacity="0.8" />
+                        @for (ang of angleShapes; track $index) {
+                          <polyline [attr.points]="ang.pointsAttr" class="tl-angle-line" />
+                          <text [attr.x]="ang.bx + 12" [attr.y]="ang.by - 10" class="tl-caliper-label">{{ ang.deg }}°</text>
+                        }
+                      </svg>
+                    </div>
+                  </div>
+                </div>
               } @else if (viewRec.fileUrl || viewRec.thumbnailUrl) {
-                <img
-                  [src]="viewRec.fileUrl || viewRec.thumbnailUrl"
-                  [alt]="viewRec.fileName"
-                  class="tl-viewer-img"
-                  [style.transform]="'scale(' + radiographZoom + ')'"
-                  [class.is-inverted]="radiographInverted"
-                />
+                <div class="tl-2d-stage" [class.has-tool]="measureTool !== 'NONE'" (click)="onViewportClick($event)">
+                  <img
+                    [src]="viewRec.fileUrl || viewRec.thumbnailUrl"
+                    [alt]="viewRec.fileName"
+                    class="tl-viewer-img"
+                    [class]="'tl-viewer-img hu-' + huPreset + (radiographInverted ? ' is-inverted' : '')"
+                    [style.transform]="'scale(' + radiographZoom + ')'"
+                  />
+                  <svg class="tl-measure-svg" viewBox="0 0 1000 700" preserveAspectRatio="none">
+                    @for (line of distanceLines; track $index) {
+                      <line [attr.x1]="line.x1" [attr.y1]="line.y1" [attr.x2]="line.x2" [attr.y2]="line.y2" class="tl-caliper-line" />
+                      <circle [attr.cx]="line.x1" [attr.cy]="line.y1" r="5" fill="#14b8a6" />
+                      <circle [attr.cx]="line.x2" [attr.cy]="line.y2" r="5" fill="#14b8a6" />
+                      <text [attr.x]="(line.x1 + line.x2) / 2" [attr.y]="(line.y1 + line.y2) / 2 - 12" class="tl-caliper-label">{{ line.mm }} mm</text>
+                    }
+                    @if (distanceStart; as ds) {
+                      <circle [attr.cx]="ds.x" [attr.cy]="ds.y" r="6" fill="#22d3ee" />
+                    }
+                    @for (ang of angleShapes; track $index) {
+                      <polyline [attr.points]="ang.pointsAttr" class="tl-angle-line" />
+                      <text [attr.x]="ang.bx + 12" [attr.y]="ang.by - 10" class="tl-caliper-label">{{ ang.deg }}°</text>
+                    }
+                    @for (pt of anglePoints; track $index) {
+                      <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="5" fill="#38bdf8" />
+                    }
+                    @if (nervePoints.length > 0) {
+                      <polyline [attr.points]="nervePolylineAttr()" class="tl-nerve-path" />
+                      @for (np of nervePoints; track $index) {
+                        <circle [attr.cx]="np.x" [attr.cy]="np.y" r="5" fill="#ff6d00" />
+                      }
+                    }
+                  </svg>
+                </div>
               } @else {
                 <div class="tl-viewer-fallback">
-                  <p>Preview not available for this format. You can download the file directly.</p>
+                  <p>Cloud or DICOM file is not rendered locally yet. Switch to <strong>CBCT MPR</strong> for slice planning or download the external study.</p>
                 </div>
               }
             </div>
+            @if (measureTool !== 'NONE' || distanceLines.length > 0 || angleShapes.length > 0 || nervePoints.length > 0) {
+              <div class="tl-viewer-footer-notes" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <span>
+                  Active Tool: <strong>{{ measureTool === 'NONE' ? 'View Only' : measureTool }}</strong>
+                  @if (measureTool === 'DISTANCE') { (Click 2 points to measure distance in mm) }
+                  @if (measureTool === 'ANGLE') { (Click 3 points A→B→C to measure angle °) }
+                  @if (measureTool === 'NERVE_CANAL') { (Click along the inferior alveolar nerve canal to trace) }
+                </span>
+                <span>
+                  Calipers: {{ distanceLines.length }} · Angles: {{ angleShapes.length }} · Nerve Points: {{ nervePoints.length }}
+                </span>
+              </div>
+            }
             @if (viewRec.notes) {
               <div class="tl-viewer-footer-notes">
                 <strong>Clinical Notes:</strong> {{ viewRec.notes }}
               </div>
             }
+          </div>
+        </div>
+      }
+
+      @if (showOrderImagingModal()) {
+        <div class="modal-backdrop" (click)="showOrderImagingModal.set(false)">
+          <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Order External / Cloud Dental Imaging</h3>
+              <button type="button" class="modal-close" (click)="showOrderImagingModal.set(false)">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-row">
+                <label class="form-field">
+                  <span>Modality *</span>
+                  <select class="fe-select" [(ngModel)]="orderImgType">
+                    <option value="CBCT">3D CBCT Scan</option>
+                    <option value="PANORAMIC">Panoramic (OPG)</option>
+                    <option value="PERIAPICAL">Periapical X-Ray</option>
+                    <option value="BITEWING">Bitewing</option>
+                    <option value="CEPHALOMETRIC">Cephalometric</option>
+                    <option value="OTHER">Other Imaging</option>
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span>Procedures / Views Count</span>
+                  <input class="fe-input" type="number" min="1" [(ngModel)]="orderImgCount" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="form-field">
+                  <span>Preferred External Lab</span>
+                  <select class="fe-select" [(ngModel)]="orderImgLabId" (ngModelChange)="onOrderImgLabSelected($event)">
+                    <option value="">Custom / Any Lab</option>
+                    @for (lab of imagingLabsList(); track lab.id) {
+                      <option [value]="lab.id">{{ lab.name }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span>Lab Name</span>
+                  <input class="fe-input" [(ngModel)]="orderImgLabName" placeholder="External center name" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="form-field">
+                  <span>Cost to Clinic (JOD)</span>
+                  <input class="fe-input" type="number" min="0" step="0.001" [(ngModel)]="orderImgCost" />
+                </label>
+                <label class="form-field">
+                  <span>Charge to Patient (JOD)</span>
+                  <input class="fe-input" type="number" min="0" step="0.001" [(ngModel)]="orderImgCharge" />
+                </label>
+              </div>
+              <label class="form-field">
+                <span>Teeth / Anatomical Region</span>
+                <input class="fe-input" [(ngModel)]="orderImgTeeth" placeholder="e.g., Mandible #36-#38" />
+              </label>
+              <label class="form-field">
+                <span>Clinical Indication</span>
+                <input class="fe-input" [(ngModel)]="orderImgIndication" placeholder="Implant planning, nerve canal proximity" />
+              </label>
+              <label class="form-field">
+                <span>Cloud Storage / DICOM URL (Optional)</span>
+                <input class="fe-input" [(ngModel)]="orderImgCloudUrl" placeholder="https://..." />
+              </label>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="fe-btn fe-btn--secondary" (click)="showOrderImagingModal.set(false)">Cancel</button>
+              <button type="button" class="fe-btn fe-btn--primary" (click)="submitOrderImaging()">Submit Order</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (inventoryWarningsModal().length > 0) {
+        <div class="modal-backdrop" (click)="inventoryWarningsModal.set([])">
+          <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3 style="color:#b45309;">Insufficient Inventory Warning</h3>
+              <button type="button" class="modal-close" (click)="inventoryWarningsModal.set([])">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p style="margin:0;font-size:0.88rem;color:var(--ink);">
+                The clinical encounter was saved as <strong>Completed</strong>, but branch inventory was below required quantities for:
+              </p>
+              <ul style="margin:0;padding-left:1.2rem;font-size:0.84rem;color:#991b1b;">
+                @for (w of inventoryWarningsModal(); track w.itemId) {
+                  <li>
+                    <strong>{{ w.itemName }}</strong>: required {{ w.quantityRequired }}, available {{ w.quantityAvailable }} (shortfall {{ w.shortfallQuantity }})
+                  </li>
+                }
+              </ul>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="fe-btn fe-btn--primary" (click)="inventoryWarningsModal.set([])">
+                Acknowledge &amp; Continue
+              </button>
+            </div>
           </div>
         </div>
       }
@@ -3812,6 +4158,115 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         color: var(--ink);
         box-sizing: border-box;
       }
+      .tl-viewer-mode-group {
+        display: inline-flex;
+        gap: 4px;
+        padding-right: 8px;
+        border-right: 1px solid rgba(255, 255, 255, 0.16);
+      }
+      .tl-tool-select {
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #0f172a;
+        color: #f8fafc;
+        font-size: 12px;
+      }
+      .tl-2d-stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .tl-2d-stage.has-tool { cursor: crosshair; }
+      .tl-measure-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .tl-caliper-line { stroke: #14b8a6; stroke-width: 3; }
+      .tl-angle-line { fill: none; stroke: #38bdf8; stroke-width: 3; }
+      .tl-nerve-path {
+        fill: none;
+        stroke: #ff6d00;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .tl-caliper-label {
+        fill: #facc15;
+        font-size: 18px;
+        font-weight: 700;
+        text-anchor: middle;
+      }
+      .tl-mpr-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 6px;
+        width: 100%;
+        height: 100%;
+        padding: 6px;
+        box-sizing: border-box;
+      }
+      .tl-mpr-pane {
+        position: relative;
+        background: #000000;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 6px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .tl-mpr-pane-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 8px;
+        background: rgba(15, 23, 42, 0.88);
+        color: #cbd5e1;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .tl-mpr-pane-head input[type="range"] { width: 110px; accent-color: #14b8a6; }
+      .tl-mpr-canvas {
+        position: relative;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .tl-mpr-img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        transition: filter 0.15s ease;
+      }
+      .hu-BONE { filter: contrast(1.45) brightness(1.05); }
+      .hu-ENAMEL { filter: contrast(1.85) brightness(0.95); }
+      .hu-SOFT { filter: contrast(0.9) brightness(1.18); }
+      .hu-MIP { filter: contrast(2.1) brightness(1.25); }
+      .tl-crosshair-h {
+        position: absolute;
+        left: 0;
+        right: 0;
+        border-top: 1px dashed #22d3ee;
+        pointer-events: none;
+      }
+      .tl-crosshair-v {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border-left: 1px dashed #facc15;
+        pointer-events: none;
+      }
     `,
   ],
 })
@@ -3993,6 +4448,34 @@ export class ClinicEncountersComponent {
   protected current3DColor: 'ceramic' | 'blue' | 'gold' = 'ceramic';
   private active3DScene: Dental3DScene | null = null;
   protected readonly is3DFile = is3DFile;
+
+  // Req 1 & Req 5: Inventory Warnings, Imaging Orders & CBCT MPR / Measurement Viewer State
+  protected readonly inventoryWarningsModal = signal<readonly InventoryStockWarning[]>([]);
+  protected readonly patientImagingRequests = signal<readonly ImagingRequestRow[]>([]);
+  protected readonly imagingLabsList = signal<readonly ImagingLabRow[]>([]);
+  protected readonly showOrderImagingModal = signal(false);
+  protected orderImgType = 'CBCT';
+  protected orderImgCount = 1;
+  protected orderImgLabId = '';
+  protected orderImgLabName = '';
+  protected orderImgCost = 0;
+  protected orderImgCharge = 0;
+  protected orderImgTeeth = '';
+  protected orderImgIndication = '';
+  protected orderImgCloudUrl = '';
+
+  protected viewerMode: '2D' | 'CBCT_MPR' | '3D' = '2D';
+  protected measureTool: 'NONE' | 'DISTANCE' | 'ANGLE' | 'NERVE_CANAL' = 'NONE';
+  protected huPreset: 'BONE' | 'ENAMEL' | 'SOFT' | 'MIP' = 'BONE';
+  protected axialSlice = 50;
+  protected coronalSlice = 50;
+  protected sagittalSlice = 50;
+  protected panArchDepth = 16;
+  protected distanceLines: Array<{ x1: number; y1: number; x2: number; y2: number; mm: string }> = [];
+  protected distanceStart: { x: number; y: number } | null = null;
+  protected angleShapes: Array<{ pointsAttr: string; bx: number; by: number; deg: string }> = [];
+  protected anglePoints: Array<{ x: number; y: number }> = [];
+  protected nervePoints: Array<{ x: number; y: number }> = [];
 
   protected readonly showAddFollowUpModal = signal<boolean>(false);
   protected newFollowUpTitle = '';
@@ -4201,10 +4684,12 @@ export class ClinicEncountersComponent {
         void this.reloadEncounters();
         void this.loadPatientPlans(pId);
         void this.loadPatientRadiographs(pId);
+        void this.loadPatientImagingRequests(pId);
       }
     });
 
     void this.loadDoctors();
+    void this.loadImagingLabs();
   }
 
   private createBlankHistory(): PatientHistoryRecord {
@@ -4671,6 +5156,14 @@ export class ClinicEncountersComponent {
   protected async viewRadiograph(rec: EncounterRadiographRow): Promise<void> {
     this.radiographZoom = 1;
     this.radiographInverted = false;
+    this.measureTool = 'NONE';
+    this.clearViewerMeasurements();
+    const upperType = (rec.radiographType || '').toUpperCase();
+    this.viewerMode = is3DFile(rec.fileName)
+      ? '3D'
+      : upperType.includes('CBCT') || upperType.includes('3D')
+        ? 'CBCT_MPR'
+        : '2D';
     this.viewingRadiograph.set(rec);
 
     // If it's an Interactive 3D dental model (.stl, .obj, .ply)
@@ -4837,6 +5330,159 @@ export class ClinicEncountersComponent {
 
   protected toggleRadiographInvert(): void {
     this.radiographInverted = !this.radiographInverted;
+  }
+
+  protected setViewerMode(mode: '2D' | 'CBCT_MPR' | '3D'): void {
+    this.viewerMode = mode;
+  }
+
+  protected toggleMeasureTool(tool: 'DISTANCE' | 'ANGLE' | 'NERVE_CANAL'): void {
+    this.measureTool = this.measureTool === tool ? 'NONE' : tool;
+    this.distanceStart = null;
+    this.anglePoints = [];
+  }
+
+  protected clearViewerMeasurements(): void {
+    this.distanceLines = [];
+    this.distanceStart = null;
+    this.angleShapes = [];
+    this.anglePoints = [];
+    this.nervePoints = [];
+  }
+
+  protected nervePolylineAttr(): string {
+    return this.nervePoints.map((p) => `${p.x},${p.y}`).join(' ');
+  }
+
+  protected onViewportClick(event: MouseEvent): void {
+    if (this.measureTool === 'NONE') return;
+    const host = event.currentTarget as HTMLElement | null;
+    if (!host) return;
+    const rect = host.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const x = Math.round(((event.clientX - rect.left) / rect.width) * 1000);
+    const y = Math.round(((event.clientY - rect.top) / rect.height) * 700);
+
+    if (this.measureTool === 'DISTANCE') {
+      if (!this.distanceStart) {
+        this.distanceStart = { x, y };
+      } else {
+        const dx = (x - this.distanceStart.x) * 0.085;
+        const dy = (y - this.distanceStart.y) * 0.085;
+        const mm = Math.hypot(dx, dy).toFixed(1);
+        this.distanceLines = [
+          ...this.distanceLines,
+          { x1: this.distanceStart.x, y1: this.distanceStart.y, x2: x, y2: y, mm },
+        ];
+        this.distanceStart = null;
+      }
+      return;
+    }
+
+    if (this.measureTool === 'ANGLE') {
+      const next = [...this.anglePoints, { x, y }];
+      if (next.length < 3) {
+        this.anglePoints = next;
+      } else {
+        const [a, b, c] = next;
+        const v1x = a.x - b.x;
+        const v1y = a.y - b.y;
+        const v2x = c.x - b.x;
+        const v2y = c.y - b.y;
+        const mag1 = Math.hypot(v1x, v1y);
+        const mag2 = Math.hypot(v2x, v2y);
+        const cos = mag1 > 0 && mag2 > 0 ? Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (mag1 * mag2))) : 1;
+        const deg = ((Math.acos(cos) * 180) / Math.PI).toFixed(1);
+        this.angleShapes = [
+          ...this.angleShapes,
+          { pointsAttr: `${a.x},${a.y} ${b.x},${b.y} ${c.x},${c.y}`, bx: b.x, by: b.y, deg },
+        ];
+        this.anglePoints = [];
+      }
+      return;
+    }
+
+    if (this.measureTool === 'NERVE_CANAL') {
+      this.nervePoints = [...this.nervePoints, { x, y }];
+    }
+  }
+
+  private async loadImagingLabs(): Promise<void> {
+    try {
+      const labs = await this.api.imagingLabs({ projectId: this.projectId() });
+      this.imagingLabsList.set(labs ?? []);
+    } catch {
+      this.imagingLabsList.set([]);
+    }
+  }
+
+  private async loadPatientImagingRequests(pId: string): Promise<void> {
+    try {
+      const list = await this.api.imagingRequests({ patientId: pId, projectId: this.projectId() });
+      this.patientImagingRequests.set(list ?? []);
+    } catch {
+      this.patientImagingRequests.set([]);
+    }
+  }
+
+  protected openOrderImagingModal(): void {
+    this.orderImgType = 'CBCT';
+    this.orderImgCount = 1;
+    const defaultLab = this.imagingLabsList()[0];
+    this.orderImgLabId = defaultLab?.id ?? '';
+    this.orderImgLabName = defaultLab?.name ?? '';
+    this.orderImgCost = 0;
+    this.orderImgCharge = 0;
+    this.orderImgTeeth = '';
+    this.orderImgIndication = '';
+    this.orderImgCloudUrl = '';
+    if (this.imagingLabsList().length === 0) void this.loadImagingLabs();
+    this.showOrderImagingModal.set(true);
+  }
+
+  protected onOrderImgLabSelected(labId: string): void {
+    const match = this.imagingLabsList().find((l) => l.id === labId);
+    if (match) this.orderImgLabName = match.name;
+  }
+
+  protected async submitOrderImaging(): Promise<void> {
+    const pId = this.patientId() || this.activeDetail()?.encounter.patientId;
+    if (!pId) return;
+    const payload: CreateImagingRequestPayload = {
+      patientId: pId,
+      doctorId: this.activeDetail()?.encounter.doctorId || this.doctorsList()[0]?.id || null,
+      labId: this.orderImgLabId || null,
+      labName: this.orderImgLabName.trim() || null,
+      imagingType: this.orderImgType,
+      proceduresCount: Math.max(1, Number(this.orderImgCount) || 1),
+      teethSummary: this.orderImgTeeth.trim() || null,
+      clinicalIndication: this.orderImgIndication.trim() || null,
+      costToClinic: Number(this.orderImgCost) || 0,
+      amountChargedToPatient: Number(this.orderImgCharge) || 0,
+      cloudStorageUrl: this.orderImgCloudUrl.trim() || null,
+      status: 'REQUESTED',
+    };
+    try {
+      await this.api.createImagingRequest(payload, { projectId: this.projectId() });
+      this.showOrderImagingModal.set(false);
+      await this.loadPatientImagingRequests(pId);
+    } catch {
+      this.showOrderImagingModal.set(false);
+    }
+  }
+
+  protected openCloudImagingInViewer(req: ImagingRequestRow): void {
+    const rec: EncounterRadiographRow = {
+      id: `img-${req.id}`,
+      date: req.requestDate,
+      radiographType: req.imagingType,
+      fileName: `${req.imagingType}_${req.requestDate}.dcm`,
+      fileUrl: req.cloudStorageUrl ?? undefined,
+      thumbnailUrl: req.cloudStorageUrl ?? undefined,
+      toothFdi: req.toothFdi ?? null,
+      notes: req.findingsNotes || req.clinicalIndication || '',
+    };
+    void this.viewRadiograph(rec);
   }
 
   protected async downloadRecordFile(rec: EncounterRadiographRow): Promise<void> {
@@ -5166,6 +5812,9 @@ export class ClinicEncountersComponent {
     try {
       const res = await this.api.createEncounter(pId, payload);
       this.closeCreateModal();
+      if (res.inventoryWarnings && res.inventoryWarnings.length > 0) {
+        this.inventoryWarningsModal.set(res.inventoryWarnings);
+      }
       this.selectedEncounterId.set(res.id);
       await this.reloadEncounters();
       await this.selectEncounter(res.id);

@@ -1,6 +1,8 @@
 package com.firstelement.inbox.web;
 
 import com.firstelement.crm.clinic.ClinicScope;
+import com.firstelement.crm.clinic.operations.ClinicOperationsModels;
+import com.firstelement.crm.clinic.operations.ClinicOperationsService;
 import com.firstelement.crm.clinic.schedule.ScheduleModels;
 import com.firstelement.crm.clinic.schedule.ScheduleRepository;
 import com.firstelement.security.TenantContext;
@@ -15,6 +17,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,10 +42,20 @@ public class ClinicScheduleController {
 
     private final ScheduleRepository scheduleRepository;
     private final TenantQueryGuard guard;
+    private final ClinicOperationsService operationsService;
 
     public ClinicScheduleController(ScheduleRepository scheduleRepository, TenantQueryGuard guard) {
+        this(scheduleRepository, guard, null);
+    }
+
+    @Autowired
+    public ClinicScheduleController(
+            ScheduleRepository scheduleRepository,
+            TenantQueryGuard guard,
+            ClinicOperationsService operationsService) {
         this.scheduleRepository = scheduleRepository;
         this.guard = guard;
+        this.operationsService = operationsService;
     }
 
     private ClinicScope scope(String projectId) {
@@ -202,9 +215,29 @@ public class ClinicScheduleController {
         return Map.of("id", id, "status", "CANCELLED", "cancelled", true);
     }
 
+    @PatchMapping("/appointments/{id}/assign-room")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Assign a treatment room to an appointment with conflict validation")
+    public Map<String, Object> assignTreatmentRoom(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String projectId,
+            @RequestBody Map<String, String> body) {
+        ClinicScope scope = scope(projectId);
+        UUID roomId = (body != null && body.get("treatmentRoomId") != null && !body.get("treatmentRoomId").isBlank())
+                ? UUID.fromString(body.get("treatmentRoomId"))
+                : null;
+        try {
+            int updated = scheduleRepository.assignTreatmentRoom(scope, id, roomId);
+            return Map.of("id", id, "treatmentRoomId", roomId != null ? roomId : "", "updated", updated > 0);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.CONFLICT, "Conflicting booking: treatment room is already occupied in this time slot", ex);
+        }
+    }
+
     @PatchMapping("/appointments/{id}/status")
     @RequirePermission(Permission.APPOINTMENT_READ)
-    @Operation(summary = "Update appointment status")
+    @Operation(summary = "Update appointment status and deduct inventory on completion")
     public Map<String, Object> updateAppointmentStatus(
             @PathVariable UUID id,
             @RequestParam(required = false) String projectId,
@@ -213,7 +246,22 @@ public class ClinicScheduleController {
         TenantContext ctx = TenantContextHolder.get();
         UUID userId = ctx != null ? (ctx.userId() != null ? ctx.userId() : ctx.principalId()) : null;
         int count = scheduleRepository.updateAppointmentStatus(scope, id, req.status(), req.cancelledReason(), userId);
-        return Map.of("id", id, "status", req.status(), "updated", count > 0);
+
+        List<ClinicOperationsModels.InventoryStockWarning> warnings = List.of();
+        if (count > 0 && "COMPLETED".equalsIgnoreCase(req.status()) && operationsService != null) {
+            var apptCtx = scheduleRepository.findAppointmentProcedureContext(scope, id);
+            if (apptCtx.isPresent() && apptCtx.get().procedureId() != null) {
+                var c = apptCtx.get();
+                var result = operationsService.deductMaterialsForCompletedAppointment(
+                        scope, id, c.procedureId(), c.quantity(), userId);
+                warnings = result.warnings();
+            }
+        }
+        return Map.of(
+                "id", id,
+                "status", req.status(),
+                "updated", count > 0,
+                "inventoryWarnings", warnings);
     }
 
     /**

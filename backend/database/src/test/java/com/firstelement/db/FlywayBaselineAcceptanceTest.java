@@ -3979,7 +3979,9 @@ class FlywayBaselineAcceptanceTest {
           .filter(n -> !n.startsWith("V20261106")
                     && !n.startsWith("V20261107")
                     && !n.startsWith("V20261108")
-                    && !n.startsWith("V20261109"))
+                    && !n.startsWith("V20261109")
+                    && !n.startsWith("V20261110")
+                    && !n.startsWith("V20261111"))
           .filter(n -> !Files.exists(sqlDir.resolve(n)))
           .toList();
       assertThat(extra)

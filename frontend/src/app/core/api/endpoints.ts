@@ -1274,6 +1274,7 @@ export interface ClinicLocationInput {
   readonly slotMinutes?: number | null;
   readonly brandImageUrl?: string | null;
   readonly isActive?: boolean | null;
+  readonly initialTreatmentRooms?: number | null;
 }
 
 /** The writable fields of the Create/Edit Service drawer. */
@@ -1469,6 +1470,8 @@ export interface ClinicAppointment {
   readonly medicalReportUrl?: string | null;
   readonly isAiProposed?: boolean;
   readonly ticketNumber?: string | null;
+  readonly treatmentRoomId?: string | null;
+  readonly treatmentRoomName?: string | null;
 }
 
 export interface ClinicCataloguePage<T> {

@@ -188,6 +188,305 @@ public class ClinicOperationsService {
     }
 
     // ------------------------------------------------------------------
+    // Requirement 1: Inventory Management & Automatic Material Deduction
+    // ------------------------------------------------------------------
+
+    public List<ClinicOperationsModels.InventoryItemRow> listInventoryItems(
+            ClinicScope scope, UUID clinicId, String q, boolean lowStockOnly) {
+        return repository.inventory().listItems(scope, clinicId, q, lowStockOnly);
+    }
+
+    public List<ClinicOperationsModels.ConsolidatedInventoryRow> listConsolidatedInventory(
+            ClinicScope scope, String q) {
+        return repository.inventory().listConsolidated(scope, q);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.InventoryItemRow createInventoryItem(
+            ClinicScope scope, ClinicOperationsModels.CreateInventoryItemRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        if (request == null || request.name() == null || request.name().trim().isBlank()) {
+            throw new ValidationFailedException("name is required.");
+        }
+        return repository.inventory().createItem(scope, request, caller.userId());
+    }
+
+    @Transactional
+    public ClinicOperationsModels.InventoryItemRow updateInventoryItem(
+            ClinicScope scope, UUID itemId, ClinicOperationsModels.UpdateInventoryItemRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.inventory().updateItem(scope, itemId, request);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.InventoryItemRow adjustInventoryStock(
+            ClinicScope scope, UUID itemId, ClinicOperationsModels.AdjustInventoryStockRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.inventory().adjustStock(scope, itemId, request, caller.userId());
+    }
+
+    @Transactional
+    public boolean deleteInventoryItem(ClinicScope scope, UUID itemId, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic administrator can delete or archive inventory items.");
+        return repository.inventory().deleteItem(scope, itemId);
+    }
+
+    public List<ClinicOperationsModels.InventoryTransactionRow> listInventoryTransactions(
+            ClinicScope scope, UUID itemId, String transactionType, int limit) {
+        return repository.inventory().listTransactions(scope, itemId, transactionType, limit);
+    }
+
+    public List<ClinicOperationsModels.ServiceMaterialRow> listServiceMaterials(
+            ClinicScope scope, UUID procedureId) {
+        return repository.inventory().listServiceMaterials(scope, procedureId);
+    }
+
+    @Transactional
+    public List<ClinicOperationsModels.ServiceMaterialRow> replaceServiceMaterials(
+            ClinicScope scope,
+            UUID procedureId,
+            List<ClinicOperationsModels.ServiceMaterialInput> materials,
+            TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.inventory().replaceServiceMaterials(scope, procedureId, materials);
+    }
+
+    public List<ClinicOperationsModels.InventoryStockWarning> checkProcedureAvailability(
+            ClinicScope scope, UUID procedureId, int quantity) {
+        return repository.inventory().checkProcedureAvailability(scope, procedureId, quantity);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.DeductionResult deductMaterialsForCompletedAppointment(
+            ClinicScope scope, UUID appointmentId, UUID procedureId, int quantity, UUID performedByUserId) {
+        return repository.inventory().deductMaterialsForProcedure(
+                scope, procedureId, quantity, "APPOINTMENT", appointmentId, null, performedByUserId);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.DeductionResult deductMaterialsForCompletedEncounter(
+            ClinicScope scope,
+            UUID encounterId,
+            UUID appointmentId,
+            UUID treatmentPlanItemId,
+            String performedProcedures,
+            UUID performedByUserId) {
+        UUID procedureId = repository.inventory().resolveProcedureIdForEncounter(
+                scope, appointmentId, treatmentPlanItemId, performedProcedures);
+        if (procedureId == null) {
+            return new ClinicOperationsModels.DeductionResult(false, List.of());
+        }
+        return repository.inventory().deductMaterialsForProcedure(
+                scope, procedureId, 1, "ENCOUNTER", encounterId, appointmentId, performedByUserId);
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 2: HR Lite — Staff Scheduling & Leave Management
+    // ------------------------------------------------------------------
+
+    public List<ClinicOperationsModels.StaffScheduleRow> listStaffSchedules(
+            ClinicScope scope, UUID userId, UUID doctorId, boolean mineOnly, String scheduleType, TenantContext caller) {
+        UUID callerId = caller != null ? caller.userId() : null;
+        return repository.hrLite().listSchedules(scope, userId, doctorId, mineOnly, callerId, scheduleType);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.StaffScheduleRow createStaffSchedule(
+            ClinicScope scope, ClinicOperationsModels.CreateStaffScheduleRequest request, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic manager can create staff schedules.");
+        return repository.hrLite().createSchedule(scope, request);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.StaffScheduleRow updateStaffSchedule(
+            ClinicScope scope, UUID scheduleId, ClinicOperationsModels.CreateStaffScheduleRequest request, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic manager can edit staff schedules.");
+        return repository.hrLite().updateSchedule(scope, scheduleId, request);
+    }
+
+    @Transactional
+    public boolean deleteStaffSchedule(ClinicScope scope, UUID scheduleId, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic manager can delete staff schedules.");
+        return repository.hrLite().deleteSchedule(scope, scheduleId);
+    }
+
+    public List<ClinicOperationsModels.LeaveRequestRow> listLeaveRequests(
+            ClinicScope scope, String status, boolean mineOnly, TenantContext caller) {
+        UUID callerId = caller != null ? caller.userId() : null;
+        return repository.hrLite().listLeaveRequests(scope, status, mineOnly, callerId);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.LeaveRequestRow createLeaveRequest(
+            ClinicScope scope, ClinicOperationsModels.CreateLeaveRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.hrLite().createLeaveRequest(
+                scope, request, caller.userId(), request.staffName());
+    }
+
+    public ClinicOperationsModels.LeaveConflictReport getLeaveConflicts(
+            ClinicScope scope, UUID requestId) {
+        return repository.hrLite().getLeaveConflicts(scope, requestId);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.LeaveRequestRow reviewLeaveRequest(
+            ClinicScope scope, UUID requestId, ClinicOperationsModels.ReviewLeaveRequest request, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic manager can approve or reject leave requests.");
+        return repository.hrLite().reviewLeaveRequest(
+                scope, requestId, request, caller.userId(), null);
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 3: Financial Management & Performance Analytics
+    // ------------------------------------------------------------------
+
+    public List<ClinicOperationsModels.ExpenseRow> listExpenses(
+            ClinicScope scope, UUID clinicId, String category, LocalDate from, LocalDate to) {
+        return repository.finance().listExpenses(scope, clinicId, category, from, to);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.ExpenseRow createExpense(
+            ClinicScope scope, ClinicOperationsModels.CreateExpenseRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.finance().createExpense(scope, request, caller.userId());
+    }
+
+    @Transactional
+    public boolean deleteExpense(ClinicScope scope, UUID expenseId, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic manager can delete operational expenses.");
+        return repository.finance().deleteExpense(scope, expenseId);
+    }
+
+    public List<ClinicOperationsModels.RecurringExpenseTemplateRow> listRecurringTemplates(
+            ClinicScope scope, UUID clinicId) {
+        return repository.finance().listRecurringTemplates(scope, clinicId);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.RecurringExpenseTemplateRow createRecurringTemplate(
+            ClinicScope scope, ClinicOperationsModels.CreateRecurringTemplateRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.finance().createRecurringTemplate(scope, request);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.ExpenseRow confirmRecurringTemplate(
+            ClinicScope scope,
+            UUID templateId,
+            ClinicOperationsModels.ConfirmRecurringTemplateRequest request,
+            TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.finance().confirmRecurringTemplate(scope, templateId, request, caller.userId());
+    }
+
+    @Transactional
+    public boolean deleteRecurringTemplate(ClinicScope scope, UUID templateId, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic manager can delete recurring expense templates.");
+        return repository.finance().deleteRecurringTemplate(scope, templateId);
+    }
+
+    public ClinicOperationsModels.FinancialAnalyticsReport getFinancialAnalytics(
+            ClinicScope scope, int year, String periodType, UUID clinicId) {
+        return repository.finance().getFinancialAnalytics(scope, year, periodType, clinicId);
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 4: Treatment Room Management
+    // ------------------------------------------------------------------
+
+    public List<ClinicOperationsModels.TreatmentRoomRow> listTreatmentRooms(ClinicScope scope, UUID clinicId) {
+        return repository.treatmentRooms().listRooms(scope, clinicId);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.TreatmentRoomRow createTreatmentRoom(
+            ClinicScope scope, ClinicOperationsModels.CreateTreatmentRoomRequest request, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic administrator can create treatment rooms.");
+        if (request == null || request.name() == null || request.name().trim().isBlank()) {
+            throw new ValidationFailedException("name is required.");
+        }
+        return repository.treatmentRooms().createRoom(scope, request);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.TreatmentRoomRow updateTreatmentRoom(
+            ClinicScope scope, UUID roomId, ClinicOperationsModels.CreateTreatmentRoomRequest request, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic administrator can edit treatment rooms.");
+        return repository.treatmentRooms().updateRoom(scope, roomId, request);
+    }
+
+    @Transactional
+    public boolean deleteTreatmentRoom(ClinicScope scope, UUID roomId, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic administrator can delete treatment rooms.");
+        return repository.treatmentRooms().deleteRoom(scope, roomId);
+    }
+
+    // ------------------------------------------------------------------
+    // Requirement 5: Dental Imaging Integration & External Labs
+    // ------------------------------------------------------------------
+
+    public List<ClinicOperationsModels.ImagingLabRow> listImagingLabs(ClinicScope scope, UUID clinicId) {
+        return repository.imaging().listLabs(scope, clinicId);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.ImagingLabRow createImagingLab(
+            ClinicScope scope, ClinicOperationsModels.CreateImagingLabRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        if (request == null || request.name() == null || request.name().trim().isBlank()) {
+            throw new ValidationFailedException("name is required.");
+        }
+        return repository.imaging().createLab(scope, request);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.ImagingLabRow updateImagingLab(
+            ClinicScope scope, UUID labId, ClinicOperationsModels.CreateImagingLabRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.imaging().updateLab(scope, labId, request);
+    }
+
+    @Transactional
+    public boolean deleteImagingLab(ClinicScope scope, UUID labId, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic administrator can delete external imaging laboratories.");
+        return repository.imaging().deleteLab(scope, labId);
+    }
+
+    public List<ClinicOperationsModels.ImagingRequestRow> listImagingRequests(
+            ClinicScope scope, UUID patientId, String status, String imagingType) {
+        return repository.imaging().listRequests(scope, patientId, status, imagingType);
+    }
+
+    public ClinicOperationsModels.ImagingSummaryAnalytics getImagingAnalytics(ClinicScope scope) {
+        return repository.imaging().getAnalytics(scope);
+    }
+
+    @Transactional
+    public ClinicOperationsModels.ImagingRequestRow createImagingRequest(
+            ClinicScope scope, ClinicOperationsModels.CreateImagingRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        if (request == null || request.patientId() == null) {
+            throw new ValidationFailedException("patientId is required.");
+        }
+        return repository.imaging().createRequest(scope, request, caller.userId());
+    }
+
+    @Transactional
+    public ClinicOperationsModels.ImagingRequestRow updateImagingRequest(
+            ClinicScope scope, UUID requestId, ClinicOperationsModels.UpdateImagingRequest request, TenantContext caller) {
+        requireClinicalWriter(caller);
+        return repository.imaging().updateRequest(scope, requestId, request, caller.userId());
+    }
+
+    @Transactional
+    public boolean deleteImagingRequest(ClinicScope scope, UUID requestId, TenantContext caller) {
+        requireAdmin(caller, "Only a clinic administrator can delete imaging requests.");
+        return repository.imaging().deleteRequest(scope, requestId);
+    }
+
+    // ------------------------------------------------------------------
     // Guards
     // ------------------------------------------------------------------
 

@@ -76,8 +76,27 @@ public final class ClinicLocationModels {
             String postalCode,
             Integer slotMinutes,
             String brandImageUrl,
-            Boolean isActive
+            Boolean isActive,
+            Integer initialTreatmentRooms
     ) {
+        public ClinicLocationInput(
+                String name,
+                UUID frontDeskOfficerId,
+                Boolean clearFrontDeskOfficer,
+                String contactNumber,
+                String description,
+                String addressLine,
+                String country,
+                String state,
+                String city,
+                String postalCode,
+                Integer slotMinutes,
+                String brandImageUrl,
+                Boolean isActive) {
+            this(name, frontDeskOfficerId, clearFrontDeskOfficer, contactNumber, description,
+                 addressLine, country, state, city, postalCode, slotMinutes, brandImageUrl,
+                 isActive, null);
+        }
     }
 
     /**

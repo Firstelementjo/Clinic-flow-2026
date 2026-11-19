@@ -227,7 +227,7 @@ export const NAV_ENTRIES: readonly NavEntry[] = [
     labelKey: 'shell.nav.doctorSession',
     icon: 'dashboard',
     permission: 'doctor:read',
-    roles: EMPLOYEE,
+    roles: FRONT_DESK,
     group: 'clinicCenters',
   },
   {

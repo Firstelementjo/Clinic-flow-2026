@@ -27,9 +27,39 @@ import org.springframework.stereotype.Repository;
 public class ClinicOperationsRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final InventoryOperationsStore inventoryStore;
+    private final HrLiteOperationsStore hrLiteStore;
+    private final FinanceOperationsStore financeStore;
+    private final TreatmentRoomOperationsStore treatmentRoomStore;
+    private final ImagingOperationsStore imagingStore;
 
     public ClinicOperationsRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        this.inventoryStore = new InventoryOperationsStore(jdbc);
+        this.hrLiteStore = new HrLiteOperationsStore(jdbc);
+        this.financeStore = new FinanceOperationsStore(jdbc);
+        this.treatmentRoomStore = new TreatmentRoomOperationsStore(jdbc);
+        this.imagingStore = new ImagingOperationsStore(jdbc);
+    }
+
+    InventoryOperationsStore inventory() {
+        return inventoryStore;
+    }
+
+    HrLiteOperationsStore hrLite() {
+        return hrLiteStore;
+    }
+
+    FinanceOperationsStore finance() {
+        return financeStore;
+    }
+
+    TreatmentRoomOperationsStore treatmentRooms() {
+        return treatmentRoomStore;
+    }
+
+    ImagingOperationsStore imaging() {
+        return imagingStore;
     }
 
     // ------------------------------------------------------------------

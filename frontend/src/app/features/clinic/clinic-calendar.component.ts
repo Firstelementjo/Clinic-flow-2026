@@ -32,7 +32,7 @@ import { ResourceStore } from '../../core/state/resource';
 import { AsyncStateComponent } from '../../ui/async-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
-import { ClinicPatientApi, type ClinicResourceDetail } from './clinic-patient.api';
+import { ClinicPatientApi, type ClinicResourceDetail, type InventoryStockWarning } from './clinic-patient.api';
 import { clinicAdminStrings } from './clinic-admin.strings';
 import { clinicStrings } from './clinic.strings';
 
@@ -629,6 +629,30 @@ export interface CalendarMonthDay {
         </div>
       }
 
+      @if (inventoryWarningsModal().length > 0) {
+        <div class="tl-modal-backdrop" (click)="inventoryWarningsModal.set([])">
+          <div class="tl-modal-card" (click)="$event.stopPropagation()">
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;color:#b45309;">
+              <strong>Insufficient Inventory Warning</strong>
+            </div>
+            <p style="margin:0 0 0.75rem;font-size:0.84rem;color:var(--ink);">
+              The appointment was marked Completed, but stock for these materials was below required quantities:
+            </p>
+            <ul style="margin:0 0 1rem;padding-left:1.25rem;font-size:0.82rem;color:#991b1b;">
+              @for (w of inventoryWarningsModal(); track w.itemId) {
+                <li style="margin-bottom:0.3rem;">
+                  <strong>{{ w.itemName }}</strong>: required {{ w.quantityRequired }}, available {{ w.quantityAvailable }} (shortfall {{ w.shortfallQuantity }})
+                </li>
+              }
+            </ul>
+            <div style="display:flex;justify-content:flex-end;">
+              <button type="button" class="tl-btn-teal" (click)="inventoryWarningsModal.set([])">
+                Acknowledge &amp; Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
   styles: [
@@ -1521,6 +1545,23 @@ export interface CalendarMonthDay {
       .tl-btn-teal:hover {
         background: #0f766e;
       }
+      .tl-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1200;
+        padding: 1rem;
+      }
+      .tl-modal-card {
+        background: var(--surf, #ffffff);
+        border-radius: 10px;
+        padding: 1.25rem;
+        width: min(500px, 100%);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+      }
     `
   ]
 })
@@ -1531,6 +1572,7 @@ export class ClinicCalendarComponent implements OnInit {
 
   protected readonly format = inject(FormatService);
   protected readonly projects = inject(ProjectContextService);
+  protected readonly inventoryWarningsModal = signal<readonly InventoryStockWarning[]>([]);
 
   /** Active view mode: month (default), agenda, chairs (operatory view), doctors */
   protected readonly viewMode = signal<'month' | 'agenda' | 'chairs' | 'doctors'>('month');
@@ -1890,7 +1932,7 @@ export class ClinicCalendarComponent implements OnInit {
   protected async updateStatus(row: ClinicAppointment, newStatus: string): Promise<void> {
     if (!row.id) return;
     try {
-      await this.patientApi.updateAppointmentStatus(
+      const res = await this.patientApi.updateAppointmentStatus(
         row.id,
         { status: newStatus },
         this.query().projectId ? { projectId: this.query().projectId } : {},
@@ -1898,6 +1940,9 @@ export class ClinicCalendarComponent implements OnInit {
       this.rows.update((all) =>
         all.map((item) => (item.id === row.id ? { ...item, status: newStatus } : item)),
       );
+      if (res?.inventoryWarnings && res.inventoryWarnings.length > 0) {
+        this.inventoryWarningsModal.set(res.inventoryWarnings);
+      }
     } catch (err: any) {
       console.error('Failed to update status:', err);
     }

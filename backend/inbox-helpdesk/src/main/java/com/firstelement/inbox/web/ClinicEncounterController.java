@@ -3,6 +3,8 @@ package com.firstelement.inbox.web;
 import com.firstelement.crm.clinic.ClinicScope;
 import com.firstelement.crm.clinic.encounter.EncounterModels;
 import com.firstelement.crm.clinic.encounter.EncounterService;
+import com.firstelement.crm.clinic.operations.ClinicOperationsModels;
+import com.firstelement.crm.clinic.operations.ClinicOperationsService;
 import com.firstelement.crm.error.ResourceNotFoundException;
 import com.firstelement.security.TenantContext;
 import com.firstelement.security.TenantContextHolder;
@@ -14,6 +16,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,10 +41,20 @@ public class ClinicEncounterController {
 
     private final EncounterService encounterService;
     private final TenantQueryGuard guard;
+    private final ClinicOperationsService operationsService;
 
     public ClinicEncounterController(EncounterService encounterService, TenantQueryGuard guard) {
+        this(encounterService, guard, null);
+    }
+
+    @Autowired
+    public ClinicEncounterController(
+            EncounterService encounterService,
+            TenantQueryGuard guard,
+            ClinicOperationsService operationsService) {
         this.encounterService = encounterService;
         this.guard = guard;
+        this.operationsService = operationsService;
     }
 
     /**
@@ -112,7 +125,19 @@ public class ClinicEncounterController {
         ClinicScope writeScope = writeScope(effectiveProj);
         UUID id = encounterService.createEncounter(
                 writeScope, RequestParams.requiredUuid(patientId, "patientId"), request, caller);
-        return Map.of("id", id, "created", true);
+        String effectiveStatus = request.status() != null ? request.status().toUpperCase() : "COMPLETED";
+        List<ClinicOperationsModels.InventoryStockWarning> warnings = List.of();
+        if ("COMPLETED".equals(effectiveStatus) && operationsService != null) {
+            var result = operationsService.deductMaterialsForCompletedEncounter(
+                    writeScope,
+                    id,
+                    request.appointmentId(),
+                    request.treatmentPlanItemId(),
+                    request.performedProcedures(),
+                    caller != null ? caller.userId() : null);
+            warnings = result.warnings();
+        }
+        return Map.of("id", id, "created", true, "inventoryWarnings", warnings);
     }
 
     /**

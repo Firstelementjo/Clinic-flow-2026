@@ -20,7 +20,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiError } from '../../core/api/api.service';
 import {
@@ -29,6 +29,15 @@ import {
   type ClinicProcedure,
   type ClinicProcedureInput,
 } from '../../core/api/endpoints';
+import {
+  ClinicPatientApi,
+  type AdjustInventoryStockPayload,
+  type ConsolidatedInventoryRow,
+  type CreateInventoryItemPayload,
+  type InventoryItemRow,
+  type InventoryTransactionRow,
+  type ServiceMaterialInput,
+} from './clinic-patient.api';
 import { PERMISSIONS } from '../../core/auth/permissions';
 import { SessionService } from '../../core/auth/session.service';
 import { ProjectContextService } from '../../core/context/project-context.service';
@@ -42,15 +51,17 @@ import { clinicAdminStrings } from './clinic-admin.strings';
 type StatusFilter = '' | 'ACTIVE' | 'INACTIVE';
 type BulkAction = '' | 'ACTIVE' | 'INACTIVE';
 type Toast = { readonly message: string; readonly error: boolean };
+type ServicePageTab = 'services' | 'inventory' | 'consolidated' | 'transactions';
 
 const SERVICE_TYPES = ['IN_CLINIC', 'ONLINE', 'HOME_VISIT'] as const;
 const SYSTEM_SERVICES = ['GENERAL', 'SCALING', 'ORTHODONTICS', 'IMPLANTS', 'ROOT_CANAL'] as const;
+const INVENTORY_CATEGORIES = ['CONSUMABLE', 'ANESTHETIC', 'FILLING', 'IMPLANT', 'ORTHO', 'OTHER'] as const;
 
 @Component({
   selector: 'fe-clinic-services-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink, TlDrawerComponent, TranslatePipe],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, TlDrawerComponent, TranslatePipe],
   template: `
     <div class="tl-page" data-testid="clinic-services">
       <div class="tl-page-top">
@@ -72,6 +83,42 @@ const SYSTEM_SERVICES = ['GENERAL', 'SCALING', 'ORTHODONTICS', 'IMPLANTS', 'ROOT
         </a>
       </div>
 
+      <nav class="tl-tabs-nav" aria-label="Services and Inventory Sections">
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="activeTab() === 'services'"
+          (click)="switchTab('services')"
+        >
+          Services Catalogue ({{ rows().length }})
+        </button>
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="activeTab() === 'inventory'"
+          (click)="switchTab('inventory')"
+        >
+          Branch Inventory ({{ inventoryItems().length }})
+        </button>
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="activeTab() === 'consolidated'"
+          (click)="switchTab('consolidated')"
+        >
+          Multi-Branch Consolidated
+        </button>
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="activeTab() === 'transactions'"
+          (click)="switchTab('transactions')"
+        >
+          Inventory Audit Log
+        </button>
+      </nav>
+
+      @if (activeTab() === 'services') {
       <div class="tl-toolbar">
         <div class="tl-toolbar-left">
           <select
@@ -300,6 +347,277 @@ const SYSTEM_SERVICES = ['GENERAL', 'SCALING', 'ORTHODONTICS', 'IMPLANTS', 'ROOT
           </div>
         }
       </div>
+      }
+
+      @if (activeTab() === 'inventory') {
+        <div class="tl-toolbar">
+          <div class="tl-toolbar-left">
+            <select
+              class="tl-select"
+              [ngModel]="inventoryClinicFilter()"
+              (ngModelChange)="inventoryClinicFilter.set($event); loadInventory()"
+              aria-label="Filter by Branch"
+            >
+              <option value="">All Branches in Scope</option>
+              @for (loc of locations(); track loc.id) {
+                <option [value]="loc.id">{{ loc.name }}</option>
+              }
+            </select>
+            <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.84rem;font-weight:600;color:var(--ink);">
+              <input
+                type="checkbox"
+                [ngModel]="inventoryLowStockOnly()"
+                (ngModelChange)="inventoryLowStockOnly.set($event); loadInventory()"
+              />
+              Low Stock Only
+            </label>
+          </div>
+
+          <div class="tl-toolbar-right">
+            <div class="tl-search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                type="search"
+                [ngModel]="inventorySearch()"
+                (ngModelChange)="inventorySearch.set($event); loadInventory()"
+                placeholder="Search material name or SKU..."
+                aria-label="Search Inventory"
+              />
+            </div>
+
+            <button
+              type="button"
+              class="tl-btn tl-btn-teal"
+              (click)="openCreateInventory()"
+              [disabled]="!canManage()"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New Material
+            </button>
+          </div>
+        </div>
+
+        <div class="tl-table-wrap">
+          @if (inventoryLoading()) {
+            <div class="tl-table-empty" role="status">Loading branch inventory...</div>
+          } @else if (inventoryItems().length === 0) {
+            <div class="tl-table-empty">
+              <strong>No inventory materials recorded yet</strong>
+              <span>Add consumables, anesthetics, filling materials, or implants to link them with dental services.</span>
+            </div>
+          } @else {
+            <table class="tl-table">
+              <thead>
+                <tr>
+                  <th>Material</th>
+                  <th>SKU / Category</th>
+                  <th>Branch</th>
+                  <th>On Hand</th>
+                  <th>Min Threshold</th>
+                  <th>Unit Cost</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of inventoryItems(); track item.id) {
+                  <tr>
+                    <td><strong>{{ item.name }}</strong></td>
+                    <td>
+                      <div>{{ item.sku || '—' }}</div>
+                      <small style="color:var(--mute);">{{ item.category }}</small>
+                    </td>
+                    <td>{{ item.clinicName || 'Project Wide' }}</td>
+                    <td>
+                      <strong>{{ item.quantityOnHand }}</strong> {{ item.unitOfMeasure }}
+                    </td>
+                    <td>{{ item.minStockThreshold }} {{ item.unitOfMeasure }}</td>
+                    <td>{{ format.currency(item.unitCost) }}</td>
+                    <td>
+                      @if (item.lowStock) {
+                        <span class="tl-pill tl-pill--warn">LOW STOCK</span>
+                      } @else {
+                        <span class="tl-pill tl-pill--ok">OK</span>
+                      }
+                    </td>
+                    <td>
+                      <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+                        <button
+                          type="button"
+                          class="tl-btn tl-btn-teal"
+                          style="padding:0.25rem 0.55rem;font-size:0.76rem;"
+                          (click)="openAdjustStock(item)"
+                          [disabled]="!canManage()"
+                        >
+                          Restock / Adjust
+                        </button>
+                        <button
+                          type="button"
+                          class="tl-btn tl-btn-gray"
+                          style="padding:0.25rem 0.55rem;font-size:0.76rem;"
+                          (click)="openEditInventory(item)"
+                          [disabled]="!canManage()"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          class="tl-btn tl-btn-gray"
+                          style="padding:0.25rem 0.55rem;font-size:0.76rem;color:#c62828;"
+                          (click)="deleteInventory(item)"
+                          [disabled]="!canManage()"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
+
+      @if (activeTab() === 'consolidated') {
+        <div class="tl-toolbar">
+          <div class="tl-toolbar-left">
+            <strong style="font-size:0.9rem;color:var(--ink);">Consolidated Multi-Branch Inventory Summary</strong>
+          </div>
+          <div class="tl-toolbar-right">
+            <div class="tl-search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                type="search"
+                [ngModel]="consolidatedSearch()"
+                (ngModelChange)="consolidatedSearch.set($event); loadConsolidated()"
+                placeholder="Search consolidated materials..."
+                aria-label="Search Consolidated"
+              />
+            </div>
+            <button type="button" class="tl-btn tl-btn-gray" (click)="loadConsolidated()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="tl-table-wrap">
+          @if (consolidatedLoading()) {
+            <div class="tl-table-empty">Loading consolidated inventory...</div>
+          } @else if (consolidatedItems().length === 0) {
+            <div class="tl-table-empty"><strong>No consolidated inventory items found</strong></div>
+          } @else {
+            <table class="tl-table">
+              <thead>
+                <tr>
+                  <th>Material</th>
+                  <th>SKU</th>
+                  <th>Category</th>
+                  <th>Total Qty On Hand</th>
+                  <th>Branches</th>
+                  <th>Low-Stock Branches</th>
+                  <th>Total Valuation</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of consolidatedItems(); track row.itemName + (row.sku || '')) {
+                  <tr>
+                    <td><strong>{{ row.itemName }}</strong></td>
+                    <td>{{ row.sku || '—' }}</td>
+                    <td>{{ row.category }}</td>
+                    <td><strong>{{ row.totalQuantityOnHand }}</strong> {{ row.unitOfMeasure }}</td>
+                    <td>{{ row.branchesCount }}</td>
+                    <td>
+                      @if (row.lowStockBranchesCount > 0) {
+                        <span class="tl-pill tl-pill--warn">{{ row.lowStockBranchesCount }} Low</span>
+                      } @else {
+                        <span class="tl-pill tl-pill--ok">0 Low</span>
+                      }
+                    </td>
+                    <td><strong>{{ format.currency(row.totalValuation) }}</strong></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
+
+      @if (activeTab() === 'transactions') {
+        <div class="tl-toolbar">
+          <div class="tl-toolbar-left">
+            <select
+              class="tl-select"
+              [ngModel]="transactionItemFilter()"
+              (ngModelChange)="transactionItemFilter.set($event); loadTransactions()"
+              aria-label="Filter by Material"
+            >
+              <option value="">All Materials</option>
+              @for (item of inventoryItems(); track item.id) {
+                <option [value]="item.id">{{ item.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="tl-toolbar-right">
+            <button type="button" class="tl-btn tl-btn-gray" (click)="loadTransactions()">Refresh Log</button>
+          </div>
+        </div>
+
+        <div class="tl-table-wrap">
+          @if (transactionsLoading()) {
+            <div class="tl-table-empty">Loading inventory transactions...</div>
+          } @else if (inventoryTxList().length === 0) {
+            <div class="tl-table-empty"><strong>No inventory transactions recorded yet</strong></div>
+          } @else {
+            <table class="tl-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Material</th>
+                  <th>Branch</th>
+                  <th>Type</th>
+                  <th>Qty Change</th>
+                  <th>Before → After</th>
+                  <th>Shortfall</th>
+                  <th>Unit Cost</th>
+                  <th>Reference / Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (tx of inventoryTxList(); track tx.id) {
+                  <tr>
+                    <td>{{ format.dateTime(tx.createdAt) }}</td>
+                    <td><strong>{{ tx.itemName }}</strong></td>
+                    <td>{{ tx.clinicName || '—' }}</td>
+                    <td><span class="tl-pill tl-pill--info">{{ tx.transactionType }}</span></td>
+                    <td [style.color]="tx.quantity < 0 ? '#c62828' : '#00796b'" style="font-weight:700;">
+                      {{ tx.quantity > 0 ? '+' + tx.quantity : tx.quantity }}
+                    </td>
+                    <td>{{ tx.quantityBefore }} → {{ tx.quantityAfter }}</td>
+                    <td>
+                      @if (tx.shortfallQuantity > 0) {
+                        <span class="tl-pill tl-pill--warn">{{ tx.shortfallQuantity }}</span>
+                      } @else {
+                        0
+                      }
+                    </td>
+                    <td>{{ format.currency(tx.unitCost) }}</td>
+                    <td>
+                      <small style="color:var(--mute);">{{ tx.referenceType || '' }} {{ tx.notes || '' }}</small>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
     </div>
 
     <fe-tl-drawer
@@ -482,6 +800,64 @@ const SYSTEM_SERVICES = ['GENERAL', 'SCALING', 'ORTHODONTICS', 'IMPLANTS', 'ROOT
           <label class="tl-label" for="service-description">{{ 'clinicAdmin.services.description' | t }}</label>
           <textarea id="service-description" class="tl-textarea" formControlName="description"></textarea>
         </div>
+
+        <div class="tl-field tl-field--full" style="border-top:1px solid var(--line);padding-top:0.75rem;margin-top:0.35rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.45rem;">
+            <div>
+              <span class="tl-label">Required Inventory Materials (BOM)</span>
+              <small style="display:block;color:var(--mute);font-size:0.74rem;">
+                Automatically deducted when a procedure or appointment is marked Completed.
+              </small>
+            </div>
+            <button type="button" class="tl-btn tl-btn-gray" style="padding:0.25rem 0.6rem;font-size:0.78rem;" (click)="addBomRow()">
+              + Add Material
+            </button>
+          </div>
+          @if (bomRows().length === 0) {
+            <div style="font-size:0.8rem;color:var(--mute);padding:0.45rem 0.6rem;background:var(--bg);border-radius:6px;">
+              No consumables linked to this service yet.
+            </div>
+          } @else {
+            <div style="display:flex;flex-direction:column;gap:0.45rem;">
+              @for (bom of bomRows(); track $index; let idx = $index) {
+                <div style="display:grid;grid-template-columns:1fr 110px auto;gap:0.45rem;align-items:center;">
+                  <select
+                    class="tl-select--field"
+                    [ngModel]="bom.itemId"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="updateBomItem(idx, $event)"
+                  >
+                    <option value="">Select inventory material...</option>
+                    @for (item of inventoryItems(); track item.id) {
+                      <option [value]="item.id">
+                        {{ item.name }} ({{ item.quantityOnHand }} {{ item.unitOfMeasure }})
+                      </option>
+                    }
+                  </select>
+                  <input
+                    type="number"
+                    class="tl-input"
+                    min="0.01"
+                    step="0.01"
+                    [ngModel]="bom.quantityRequired"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="updateBomQty(idx, $event)"
+                    placeholder="Qty"
+                  />
+                  <button
+                    type="button"
+                    class="tl-btn tl-btn-gray"
+                    style="padding:0.3rem 0.55rem;color:#c62828;"
+                    (click)="removeBomRow(idx)"
+                    aria-label="Remove material"
+                  >
+                    ✕
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
       </form>
 
       <div drawerFooter>
@@ -494,15 +870,193 @@ const SYSTEM_SERVICES = ['GENERAL', 'SCALING', 'ORTHODONTICS', 'IMPLANTS', 'ROOT
       </div>
     </fe-tl-drawer>
 
+    @if (inventoryModalOpen()) {
+      <div class="tl-modal-backdrop" (click)="inventoryModalOpen.set(false)">
+        <div class="tl-modal-card" (click)="$event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+            <h3 style="margin:0;font-size:1.05rem;">
+              {{ editingInventoryItem() ? 'Edit Inventory Material' : 'Add Branch Inventory Material' }}
+            </h3>
+            <button type="button" class="tl-btn tl-btn-gray" (click)="inventoryModalOpen.set(false)">✕</button>
+          </div>
+          <div class="tl-form-grid">
+            <div class="tl-field">
+              <label class="tl-label">Material Name *</label>
+              <input class="tl-input" [(ngModel)]="invFormName" placeholder="e.g., Septocaine 4% Carpule" />
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">SKU / Code</label>
+              <input class="tl-input" [(ngModel)]="invFormSku" placeholder="SKU-001" />
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Category</label>
+              <select class="tl-select--field" [(ngModel)]="invFormCategory">
+                @for (cat of inventoryCategories; track cat) {
+                  <option [value]="cat">{{ cat }}</option>
+                }
+              </select>
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Branch</label>
+              <select class="tl-select--field" [(ngModel)]="invFormClinicId">
+                <option value="">Project Default Branch</option>
+                @for (loc of locations(); track loc.id) {
+                  <option [value]="loc.id">{{ loc.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Unit of Measure</label>
+              <input class="tl-input" [(ngModel)]="invFormUnit" placeholder="pcs / ml / syringe / box" />
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Unit Cost (JOD)</label>
+              <input class="tl-input" type="number" min="0" step="0.001" [(ngModel)]="invFormUnitCost" />
+            </div>
+            @if (!editingInventoryItem()) {
+              <div class="tl-field">
+                <label class="tl-label">Initial Stock Quantity</label>
+                <input class="tl-input" type="number" min="0" step="0.01" [(ngModel)]="invFormQty" />
+              </div>
+            }
+            <div class="tl-field">
+              <label class="tl-label">Minimum Stock Alert Threshold</label>
+              <input class="tl-input" type="number" min="0" step="0.01" [(ngModel)]="invFormMinThreshold" />
+            </div>
+            @if (!editingInventoryItem() && invFormQty > 0 && invFormUnitCost > 0) {
+              <div class="tl-field tl-field--full">
+                <label style="display:inline-flex;align-items:center;gap:0.45rem;font-size:0.84rem;font-weight:600;">
+                  <input type="checkbox" [(ngModel)]="invFormRecordExpense" />
+                  Record initial stock purchase as Cash-Basis Branch Expense (INVENTORY_PURCHASE)
+                </label>
+              </div>
+            }
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1rem;">
+            <button type="button" class="tl-btn tl-btn-gray" (click)="inventoryModalOpen.set(false)">Cancel</button>
+            <button type="button" class="tl-btn tl-btn-teal" (click)="saveInventoryItem()" [disabled]="inventorySaving()">
+              {{ inventorySaving() ? 'Saving...' : 'Save Material' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (adjustModalOpen() && adjustingItem(); as targetItem) {
+      <div class="tl-modal-backdrop" (click)="adjustModalOpen.set(false)">
+        <div class="tl-modal-card" (click)="$event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+            <h3 style="margin:0;font-size:1.05rem;">Restock / Adjust: {{ targetItem.name }}</h3>
+            <button type="button" class="tl-btn tl-btn-gray" (click)="adjustModalOpen.set(false)">✕</button>
+          </div>
+          <p style="margin:0 0 0.75rem;font-size:0.84rem;color:var(--mute);">
+            Current Stock: <strong>{{ targetItem.quantityOnHand }} {{ targetItem.unitOfMeasure }}</strong>
+          </p>
+          <div class="tl-form-grid">
+            <div class="tl-field">
+              <label class="tl-label">Transaction Type</label>
+              <select class="tl-select--field" [(ngModel)]="adjFormType">
+                <option value="MANUAL_PURCHASE">Restock Purchase (+)</option>
+                <option value="MANUAL_ADJUSTMENT">Manual Stock Adjustment (+/-)</option>
+              </select>
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Quantity ({{ adjFormType === 'MANUAL_PURCHASE' ? 'Add' : 'Delta' }})</label>
+              <input class="tl-input" type="number" step="0.01" [(ngModel)]="adjFormQty" />
+            </div>
+            <div class="tl-field">
+              <label class="tl-label">Unit Cost (JOD)</label>
+              <input class="tl-input" type="number" min="0" step="0.001" [(ngModel)]="adjFormUnitCost" />
+            </div>
+            <div class="tl-field tl-field--full">
+              <label class="tl-label">Notes</label>
+              <input class="tl-input" [(ngModel)]="adjFormNotes" placeholder="Supplier invoice # or stock count reason" />
+            </div>
+            @if (adjFormType === 'MANUAL_PURCHASE') {
+              <div class="tl-field tl-field--full">
+                <label style="display:inline-flex;align-items:center;gap:0.45rem;font-size:0.84rem;font-weight:600;">
+                  <input type="checkbox" [(ngModel)]="adjFormRecordExpense" />
+                  Log purchase total as Cash-Basis Branch Expense
+                </label>
+              </div>
+            }
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1rem;">
+            <button type="button" class="tl-btn tl-btn-gray" (click)="adjustModalOpen.set(false)">Cancel</button>
+            <button type="button" class="tl-btn tl-btn-teal" (click)="submitAdjustStock()" [disabled]="inventorySaving()">
+              {{ inventorySaving() ? 'Applying...' : 'Apply Adjustment' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
     @if (toast(); as notice) {
       <div class="tl-toast" [class.tl-toast--error]="notice.error" role="status">
         {{ notice.message }}
       </div>
     }
   `,
+  styles: [`
+    .tl-tabs-nav {
+      display: flex;
+      gap: 0.4rem;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.35rem;
+      margin-bottom: 0.85rem;
+      overflow-x: auto;
+    }
+    .tl-tab-btn {
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--mute);
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tl-tab-btn:hover { background: var(--line); color: var(--ink); }
+    .tl-tab-btn--active {
+      background: rgba(0, 137, 123, 0.1);
+      color: #00796b;
+      border-color: rgba(0, 137, 123, 0.25);
+    }
+    .tl-pill {
+      display: inline-block;
+      padding: 0.16rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .tl-pill--ok { background: #e8f5e9; color: #2e7d32; }
+    .tl-pill--warn { background: #ffebee; color: #c62828; }
+    .tl-pill--info { background: #e3f2fd; color: #1565c0; }
+    .tl-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1200;
+      padding: 1rem;
+    }
+    .tl-modal-card {
+      background: var(--surf, #fff);
+      border-radius: 12px;
+      padding: 1.25rem;
+      width: min(560px, 100%);
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+    }
+  `],
 })
 export class ClinicServicesComponent implements OnInit {
   private readonly api = inject(ClinicApi);
+  private readonly patientsApi = inject(ClinicPatientApi);
   private readonly sessions = inject(SessionService);
   private readonly projects = inject(ProjectContextService);
   private readonly i18n = inject(I18nService);
@@ -514,7 +1068,9 @@ export class ClinicServicesComponent implements OnInit {
   protected readonly canManage = computed(() => this.sessions.can()(PERMISSIONS.procedureManage));
   protected readonly serviceTypes = SERVICE_TYPES;
   protected readonly systemServices = SYSTEM_SERVICES;
+  protected readonly inventoryCategories = INVENTORY_CATEGORIES;
 
+  protected readonly activeTab = signal<ServicePageTab>('services');
   protected readonly rows = signal<readonly ClinicProcedure[]>([]);
   protected readonly locations = signal<readonly ClinicLocation[]>([]);
   protected readonly loading = signal(false);
@@ -532,6 +1088,41 @@ export class ClinicServicesComponent implements OnInit {
   protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
   protected readonly page = signal(1);
   protected readonly pageSize = signal(10);
+
+  // Req 1: BOM & Branch Inventory State
+  protected readonly bomRows = signal<ServiceMaterialInput[]>([]);
+  protected readonly inventoryItems = signal<readonly InventoryItemRow[]>([]);
+  protected readonly inventoryLoading = signal(false);
+  protected readonly inventorySaving = signal(false);
+  protected readonly inventorySearch = signal('');
+  protected readonly inventoryClinicFilter = signal('');
+  protected readonly inventoryLowStockOnly = signal(false);
+  protected readonly consolidatedItems = signal<readonly ConsolidatedInventoryRow[]>([]);
+  protected readonly consolidatedLoading = signal(false);
+  protected readonly consolidatedSearch = signal('');
+  protected readonly inventoryTxList = signal<readonly InventoryTransactionRow[]>([]);
+  protected readonly transactionsLoading = signal(false);
+  protected readonly transactionItemFilter = signal('');
+
+  protected readonly inventoryModalOpen = signal(false);
+  protected readonly editingInventoryItem = signal<InventoryItemRow | null>(null);
+  protected invFormName = '';
+  protected invFormSku = '';
+  protected invFormCategory = 'CONSUMABLE';
+  protected invFormClinicId = '';
+  protected invFormUnit = 'pcs';
+  protected invFormUnitCost = 0;
+  protected invFormQty = 0;
+  protected invFormMinThreshold = 5;
+  protected invFormRecordExpense = true;
+
+  protected readonly adjustModalOpen = signal(false);
+  protected readonly adjustingItem = signal<InventoryItemRow | null>(null);
+  protected adjFormType = 'MANUAL_PURCHASE';
+  protected adjFormQty = 1;
+  protected adjFormUnitCost = 0;
+  protected adjFormNotes = '';
+  protected adjFormRecordExpense = true;
 
   protected readonly form = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(160)]],
@@ -606,12 +1197,14 @@ export class ClinicServicesComponent implements OnInit {
     this.loading.set(true);
     this.loadFailed.set(false);
     try {
-      const [procedures, locations] = await Promise.all([
+      const [procedures, locations, invItems] = await Promise.all([
         this.api.procedures({ projectId: this.projectId() }),
         this.api.locations({ projectId: this.projectId() }),
+        this.patientsApi.inventoryItems({ projectId: this.projectId() }).catch(() => []),
       ]);
       this.rows.set(procedures.items ?? []);
       this.locations.set(locations.items ?? []);
+      this.inventoryItems.set(invItems ?? []);
       this.page.set(1);
       this.selectedIds.set(new Set());
     } catch {
@@ -619,6 +1212,211 @@ export class ClinicServicesComponent implements OnInit {
       this.rows.set([]);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  protected switchTab(tab: ServicePageTab): void {
+    this.activeTab.set(tab);
+    if (tab === 'inventory') {
+      void this.loadInventory();
+    } else if (tab === 'consolidated') {
+      void this.loadConsolidated();
+    } else if (tab === 'transactions') {
+      void this.loadTransactions();
+    }
+  }
+
+  protected async loadInventory(): Promise<void> {
+    this.inventoryLoading.set(true);
+    try {
+      const items = await this.patientsApi.inventoryItems({
+        projectId: this.projectId(),
+        clinicId: this.inventoryClinicFilter() || undefined,
+        q: this.inventorySearch().trim() || undefined,
+        lowStockOnly: this.inventoryLowStockOnly() || undefined,
+      });
+      this.inventoryItems.set(items ?? []);
+    } catch {
+      this.showRawToast('Failed to load branch inventory.', true);
+    } finally {
+      this.inventoryLoading.set(false);
+    }
+  }
+
+  protected async loadConsolidated(): Promise<void> {
+    this.consolidatedLoading.set(true);
+    try {
+      const items = await this.patientsApi.consolidatedInventory({
+        projectId: this.projectId(),
+        q: this.consolidatedSearch().trim() || undefined,
+      });
+      this.consolidatedItems.set(items ?? []);
+    } catch {
+      this.showRawToast('Failed to load consolidated inventory.', true);
+    } finally {
+      this.consolidatedLoading.set(false);
+    }
+  }
+
+  protected async loadTransactions(): Promise<void> {
+    this.transactionsLoading.set(true);
+    try {
+      const txs = await this.patientsApi.inventoryTransactions({
+        projectId: this.projectId(),
+        itemId: this.transactionItemFilter() || undefined,
+      });
+      this.inventoryTxList.set(txs ?? []);
+    } catch {
+      this.showRawToast('Failed to load inventory audit log.', true);
+    } finally {
+      this.transactionsLoading.set(false);
+    }
+  }
+
+  protected addBomRow(): void {
+    const defaultItem = this.inventoryItems()[0]?.id ?? '';
+    this.bomRows.update((list) => [...list, { itemId: defaultItem, quantityRequired: 1 }]);
+  }
+
+  protected updateBomItem(index: number, itemId: string): void {
+    this.bomRows.update((list) =>
+      list.map((row, idx) => (idx === index ? { ...row, itemId } : row)),
+    );
+  }
+
+  protected updateBomQty(index: number, qty: number | string): void {
+    const parsed = Math.max(0.01, Number(qty) || 1);
+    this.bomRows.update((list) =>
+      list.map((row, idx) => (idx === index ? { ...row, quantityRequired: parsed } : row)),
+    );
+  }
+
+  protected removeBomRow(index: number): void {
+    this.bomRows.update((list) => list.filter((_, idx) => idx !== index));
+  }
+
+  protected openCreateInventory(): void {
+    if (!this.canManage()) return;
+    this.editingInventoryItem.set(null);
+    this.invFormName = '';
+    this.invFormSku = '';
+    this.invFormCategory = 'CONSUMABLE';
+    this.invFormClinicId = this.inventoryClinicFilter() || this.locations()[0]?.id || '';
+    this.invFormUnit = 'pcs';
+    this.invFormUnitCost = 0;
+    this.invFormQty = 0;
+    this.invFormMinThreshold = 5;
+    this.invFormRecordExpense = true;
+    this.inventoryModalOpen.set(true);
+  }
+
+  protected openEditInventory(item: InventoryItemRow): void {
+    if (!this.canManage()) return;
+    this.editingInventoryItem.set(item);
+    this.invFormName = item.name;
+    this.invFormSku = item.sku ?? '';
+    this.invFormCategory = item.category;
+    this.invFormClinicId = item.clinicId ?? '';
+    this.invFormUnit = item.unitOfMeasure;
+    this.invFormUnitCost = item.unitCost;
+    this.invFormQty = item.quantityOnHand;
+    this.invFormMinThreshold = item.minStockThreshold;
+    this.invFormRecordExpense = false;
+    this.inventoryModalOpen.set(true);
+  }
+
+  protected async saveInventoryItem(): Promise<void> {
+    const name = this.invFormName.trim();
+    if (!name) {
+      this.showRawToast('Material name is required.', true);
+      return;
+    }
+    this.inventorySaving.set(true);
+    try {
+      const current = this.editingInventoryItem();
+      if (current) {
+        await this.patientsApi.updateInventoryItem(
+          current.id,
+          {
+            name,
+            sku: this.invFormSku.trim() || null,
+            category: this.invFormCategory,
+            unitOfMeasure: this.invFormUnit.trim() || 'pcs',
+            unitCost: Number(this.invFormUnitCost) || 0,
+            minStockThreshold: Number(this.invFormMinThreshold) || 0,
+            clinicId: this.invFormClinicId || null,
+          },
+          { projectId: this.projectId() },
+        );
+        this.showRawToast('Inventory material updated.', false);
+      } else {
+        const payload: CreateInventoryItemPayload = {
+          name,
+          sku: this.invFormSku.trim() || null,
+          category: this.invFormCategory,
+          unitOfMeasure: this.invFormUnit.trim() || 'pcs',
+          unitCost: Number(this.invFormUnitCost) || 0,
+          quantityOnHand: Number(this.invFormQty) || 0,
+          minStockThreshold: Number(this.invFormMinThreshold) || 0,
+          clinicId: this.invFormClinicId || null,
+          recordPurchaseExpense: this.invFormRecordExpense,
+          projectId: this.projectId(),
+        };
+        await this.patientsApi.createInventoryItem(payload, { projectId: this.projectId() });
+        this.showRawToast('Inventory material created.', false);
+      }
+      this.inventoryModalOpen.set(false);
+      await this.loadInventory();
+    } catch (err) {
+      this.showRawToast(err instanceof Error ? err.message : 'Failed to save inventory item.', true);
+    } finally {
+      this.inventorySaving.set(false);
+    }
+  }
+
+  protected openAdjustStock(item: InventoryItemRow): void {
+    if (!this.canManage()) return;
+    this.adjustingItem.set(item);
+    this.adjFormType = 'MANUAL_PURCHASE';
+    this.adjFormQty = 1;
+    this.adjFormUnitCost = item.unitCost ?? 0;
+    this.adjFormNotes = '';
+    this.adjFormRecordExpense = true;
+    this.adjustModalOpen.set(true);
+  }
+
+  protected async submitAdjustStock(): Promise<void> {
+    const target = this.adjustingItem();
+    if (!target) return;
+    this.inventorySaving.set(true);
+    try {
+      const payload: AdjustInventoryStockPayload = {
+        transactionType: this.adjFormType,
+        quantity: Number(this.adjFormQty) || 0,
+        unitCost: Number(this.adjFormUnitCost) || 0,
+        notes: this.adjFormNotes.trim() || undefined,
+        recordPurchaseExpense: this.adjFormType === 'MANUAL_PURCHASE' ? this.adjFormRecordExpense : false,
+        projectId: this.projectId(),
+      };
+      await this.patientsApi.adjustInventoryStock(target.id, payload, { projectId: this.projectId() });
+      this.adjustModalOpen.set(false);
+      this.showRawToast('Stock updated successfully.', false);
+      await this.loadInventory();
+    } catch (err) {
+      this.showRawToast(err instanceof Error ? err.message : 'Failed to adjust stock.', true);
+    } finally {
+      this.inventorySaving.set(false);
+    }
+  }
+
+  protected async deleteInventory(item: InventoryItemRow): Promise<void> {
+    if (!this.canManage()) return;
+    try {
+      await this.patientsApi.deleteInventoryItem(item.id, { projectId: this.projectId() });
+      this.showRawToast('Inventory material deleted.', false);
+      await this.loadInventory();
+    } catch {
+      this.showRawToast('Failed to delete inventory material.', true);
     }
   }
 
@@ -642,6 +1440,10 @@ export class ClinicServicesComponent implements OnInit {
     this.saveFailed.set(false);
     this.saveRequestId.set(null);
     this.saveErrorMessage.set(null);
+    this.bomRows.set([]);
+    if (this.inventoryItems().length === 0) {
+      void this.loadInventory();
+    }
     this.form.reset({
       name: '',
       specialty: '',
@@ -669,6 +1471,21 @@ export class ClinicServicesComponent implements OnInit {
     this.saveFailed.set(false);
     this.saveRequestId.set(null);
     this.saveErrorMessage.set(null);
+    this.bomRows.set([]);
+    if (this.inventoryItems().length === 0) {
+      void this.loadInventory();
+    }
+    if (row.id) {
+      const projId = (row as any)?.projectId || this.projectId();
+      void this.patientsApi
+        .getProcedureMaterials(row.id, { projectId: projId })
+        .then((mats) =>
+          this.bomRows.set(
+            (mats ?? []).map((m) => ({ itemId: m.itemId, quantityRequired: m.quantityRequired })),
+          ),
+        )
+        .catch(() => this.bomRows.set([]));
+    }
     this.form.reset({
       name: row.name ?? '',
       specialty: row.specialty ?? '',
@@ -712,10 +1529,13 @@ export class ClinicServicesComponent implements OnInit {
     try {
       const current = this.editing();
       const projId = (current as any)?.projectId || this.projectId();
-      if (current?.id) {
-        await this.api.updateProcedure(current.id, payload, projId);
-      } else {
-        await this.api.createProcedure(payload, projId);
+      const savedProc = current?.id
+        ? await this.api.updateProcedure(current.id, payload, projId)
+        : await this.api.createProcedure(payload, projId);
+      const procId = savedProc?.id || current?.id;
+      if (procId) {
+        const cleanBom = this.bomRows().filter((b) => b.itemId && b.quantityRequired > 0);
+        await this.patientsApi.saveProcedureMaterials(procId, cleanBom, { projectId: projId });
       }
       this.drawerOpen.set(false);
       await this.load();
@@ -913,6 +1733,12 @@ export class ClinicServicesComponent implements OnInit {
     this.toast.set({ message: this.i18n.t(messageKey), error });
     if (this.toastTimer) clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => this.toast.set(null), 3200);
+  }
+
+  private showRawToast(message: string, error: boolean): void {
+    this.toast.set({ message, error });
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toast.set(null), 3400);
   }
 }
 

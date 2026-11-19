@@ -17,7 +17,8 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { ClinicApi, type ClinicDoctor } from '../../core/api/endpoints';
+import { ClinicApi, type ClinicDoctor, type ClinicLocation } from '../../core/api/endpoints';
+import { PERMISSIONS } from '../../core/auth/permissions';
 import { SessionService } from '../../core/auth/session.service';
 import { ProjectContextService } from '../../core/context/project-context.service';
 import { FormatService } from '../../core/format/format.service';
@@ -26,7 +27,14 @@ import type { Namespace } from '../../core/i18n/i18n.types';
 import { TranslatePipe } from '../../core/i18n/translate.pipe';
 import { ResourceStore } from '../../core/state/resource';
 import { AsyncStateComponent } from '../../ui/async-state.component';
-import { ClinicPatientApi, type ClinicSlot } from './clinic-patient.api';
+import {
+  ClinicPatientApi,
+  type ClinicSlot,
+  type CreateStaffSchedulePayload,
+  type LeaveConflictReport,
+  type LeaveRequestRow,
+  type StaffScheduleRow,
+} from './clinic-patient.api';
 import { clinicStrings } from './clinic.strings';
 
 /** The grant `/clinic/availability` declares. Named here because it is not in `PERMISSIONS`. */
@@ -48,9 +56,37 @@ const APPOINTMENT_READ = 'appointment:read';
       <div class="tl-breadcrumbs">
         <a routerLink="/app/dashboard">Home</a>
         <span>»</span>
-        <span class="active">Doctor Sessions</span>
+        <span class="active">HR Lite &amp; Scheduling</span>
       </div>
 
+      <nav class="fe-tabs" aria-label="HR Lite Sections" style="margin-bottom: 14px;">
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="hrActiveTab() === 'doctorSessions'"
+          (click)="switchHrTab('doctorSessions')"
+        >
+          Doctor Sessions ({{ doctors().length }})
+        </button>
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="hrActiveTab() === 'staffSchedules'"
+          (click)="switchHrTab('staffSchedules')"
+        >
+          All-Staff Work Schedules ({{ staffSchedules().length }})
+        </button>
+        <button
+          type="button"
+          class="tl-tab-btn"
+          [class.tl-tab-btn--active]="hrActiveTab() === 'leaveRequests'"
+          (click)="switchHrTab('leaveRequests')"
+        >
+          Leave Requests &amp; Approvals ({{ leaveRequests().length }})
+        </button>
+      </nav>
+
+      @if (hrActiveTab() === 'doctorSessions') {
       <!-- Action Toolbar matching ToothLogic-Role-based-access.png -->
       <div class="tl-toolbar">
         <div class="tl-toolbar-left">
@@ -307,6 +343,215 @@ const APPOINTMENT_READ = 'appointment:read';
           </div>
         </div>
       </div>
+      }
+
+      @if (hrActiveTab() === 'staffSchedules') {
+        <div class="tl-toolbar">
+          <div class="tl-toolbar-left">
+            <button
+              type="button"
+              class="tl-btn"
+              [class.tl-btn-teal]="!hrMyOnly()"
+              [class.tl-btn-gray]="hrMyOnly()"
+              (click)="hrMyOnly.set(false); loadStaffSchedules()"
+            >
+              All Staff Schedules
+            </button>
+            <button
+              type="button"
+              class="tl-btn"
+              [class.tl-btn-teal]="hrMyOnly()"
+              [class.tl-btn-gray]="!hrMyOnly()"
+              (click)="hrMyOnly.set(true); loadStaffSchedules()"
+            >
+              My Work Schedule
+            </button>
+            <select
+              class="tl-select"
+              [ngModel]="hrRoleFilter()"
+              (ngModelChange)="hrRoleFilter.set($event); loadStaffSchedules()"
+              aria-label="Filter by Staff Role"
+            >
+              <option value="">All Roles</option>
+              <option value="DOCTOR">Doctors</option>
+              <option value="FRONT_DESK">Front Desk</option>
+              <option value="ASSISTANT">Assistants</option>
+              <option value="STAFF">Other Staff</option>
+            </select>
+            <select
+              class="tl-select"
+              [ngModel]="hrTypeFilter()"
+              (ngModelChange)="hrTypeFilter.set($event); loadStaffSchedules()"
+              aria-label="Filter by Schedule Model"
+            >
+              <option value="">All Models</option>
+              <option value="WEEKLY_TEMPLATE">Weekly Recurring</option>
+              <option value="DATE_ROSTER">Date-Specific Roster</option>
+            </select>
+          </div>
+          @if (canManageHr()) {
+            <div class="tl-toolbar-right">
+              <button type="button" class="tl-btn tl-btn-teal" (click)="openCreateScheduleModal()">
+                + Add Staff Shift / Template
+              </button>
+            </div>
+          }
+        </div>
+
+        <div class="tl-table-wrap">
+          @if (hrLoading()) {
+            <div class="tl-table-empty" role="status">Loading staff schedules...</div>
+          } @else if (staffSchedules().length === 0) {
+            <div class="tl-table-empty">
+              <strong>No staff schedules found</strong>
+              <span>Managers can assign weekly recurring shifts or specific calendar dates across doctors, front desk, and assistants.</span>
+            </div>
+          } @else {
+            <table class="tl-table">
+              <thead>
+                <tr>
+                  <th>Staff Member</th>
+                  <th>Role</th>
+                  <th>Branch</th>
+                  <th>Model</th>
+                  <th>Day / Shift Date</th>
+                  <th>Hours</th>
+                  <th>Notes</th>
+                  @if (canManageHr()) {
+                    <th>Actions</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (sched of staffSchedules(); track sched.id) {
+                  <tr>
+                    <td><strong>{{ sched.staffName }}</strong></td>
+                    <td><span class="hr-badge hr-badge--role">{{ sched.staffRole }}</span></td>
+                    <td>{{ sched.clinicName || 'Project Wide' }}</td>
+                    <td>{{ sched.scheduleType === 'WEEKLY_TEMPLATE' ? 'Weekly Template' : 'Date Roster' }}</td>
+                    <td>
+                      @if (sched.scheduleType === 'WEEKLY_TEMPLATE') {
+                        {{ weekdayLabel(sched.weekday) }}
+                      } @else {
+                        {{ sched.shiftDate }}
+                      }
+                    </td>
+                    <td><strong>{{ sched.startTime }} – {{ sched.endTime }}</strong></td>
+                    <td><small style="color:var(--mute);">{{ sched.notes || '—' }}</small></td>
+                    @if (canManageHr()) {
+                      <td>
+                        <button
+                          type="button"
+                          class="tl-btn tl-btn-gray"
+                          style="padding:0.25rem 0.55rem;font-size:0.76rem;color:#c62828;"
+                          (click)="deleteStaffSchedule(sched.id)"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
+
+      @if (hrActiveTab() === 'leaveRequests') {
+        <div class="tl-toolbar">
+          <div class="tl-toolbar-left">
+            <select
+              class="tl-select"
+              [ngModel]="leaveStatusFilter()"
+              (ngModelChange)="leaveStatusFilter.set($event); loadLeaveRequests()"
+              aria-label="Filter Leave Requests by Status"
+            >
+              <option value="">All Statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+            <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.84rem;font-weight:600;">
+              <input
+                type="checkbox"
+                [ngModel]="leaveMyOnly()"
+                (ngModelChange)="leaveMyOnly.set($event); loadLeaveRequests()"
+              />
+              My Requests Only
+            </label>
+          </div>
+          <div class="tl-toolbar-right">
+            <button type="button" class="tl-btn tl-btn-teal" (click)="openLeaveRequestModal()">
+              + Submit Leave Request
+            </button>
+          </div>
+        </div>
+
+        <div class="tl-table-wrap">
+          @if (hrLoading()) {
+            <div class="tl-table-empty" role="status">Loading leave requests...</div>
+          } @else if (leaveRequests().length === 0) {
+            <div class="tl-table-empty">
+              <strong>No leave requests submitted</strong>
+            </div>
+          } @else {
+            <table class="tl-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Leave Type</th>
+                  <th>Date Range</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Reviewer Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (req of leaveRequests(); track req.id) {
+                  <tr>
+                    <td>
+                      <strong>{{ req.staffName }}</strong>
+                      <div style="font-size:0.74rem;color:var(--mute);">{{ req.staffRole }}</div>
+                    </td>
+                    <td><span class="hr-badge">{{ leaveTypeLabel(req.leaveType) }}</span></td>
+                    <td><strong>{{ req.startDate }}</strong> → <strong>{{ req.endDate }}</strong></td>
+                    <td>{{ req.reason || '—' }}</td>
+                    <td>
+                      <span
+                        class="hr-badge"
+                        [class.hr-badge--pending]="req.status === 'PENDING'"
+                        [class.hr-badge--approved]="req.status === 'APPROVED'"
+                        [class.hr-badge--rejected]="req.status === 'REJECTED'"
+                      >
+                        {{ req.status }}
+                      </span>
+                    </td>
+                    <td><small style="color:var(--mute);">{{ req.reviewNotes || '—' }}</small></td>
+                    <td>
+                      @if (canManageHr() && req.status === 'PENDING') {
+                        <button
+                          type="button"
+                          class="tl-btn tl-btn-teal"
+                          style="padding:0.25rem 0.6rem;font-size:0.78rem;"
+                          (click)="openReviewLeaveModal(req)"
+                        >
+                          Review &amp; Check Conflicts
+                        </button>
+                      } @else {
+                        <span style="font-size:0.76rem;color:var(--mute);">
+                          {{ req.reviewedAt ? format.dateTime(req.reviewedAt) : '—' }}
+                        </span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      }
 
       <!-- Slide-Out Drawer for Doctor Session & Bookable Slots -->
       <div
@@ -518,10 +763,285 @@ const APPOINTMENT_READ = 'appointment:read';
           }
         </footer>
       </aside>
+
+      @if (scheduleModalOpen()) {
+        <div class="tl-modal-backdrop" (click)="scheduleModalOpen.set(false)">
+          <div class="tl-modal-card" (click)="$event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <h3 style="margin:0;font-size:1.05rem;">Add Staff Work Schedule</h3>
+              <button type="button" class="tl-btn tl-btn-gray" (click)="scheduleModalOpen.set(false)">✕</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+              <label class="tl-field">
+                <span>Role</span>
+                <select class="tl-input" [(ngModel)]="schedFormRole">
+                  <option value="DOCTOR">Doctor</option>
+                  <option value="FRONT_DESK">Front Desk</option>
+                  <option value="ASSISTANT">Dental Assistant</option>
+                  <option value="STAFF">Other Staff</option>
+                </select>
+              </label>
+              @if (schedFormRole === 'DOCTOR') {
+                <label class="tl-field">
+                  <span>Doctor Profile</span>
+                  <select
+                    class="tl-input"
+                    [(ngModel)]="schedFormDoctorId"
+                    (ngModelChange)="onSchedDoctorSelected($event)"
+                  >
+                    <option value="">Custom Name / Unlinked</option>
+                    @for (doc of doctors(); track doc.id) {
+                      <option [value]="doc.id">{{ doc.name }}</option>
+                    }
+                  </select>
+                </label>
+              } @else {
+                <label class="tl-field">
+                  <span>Branch</span>
+                  <select class="tl-input" [(ngModel)]="schedFormClinicId">
+                    <option value="">Project Default</option>
+                    @for (loc of hrLocations(); track loc.id) {
+                      <option [value]="loc.id">{{ loc.name }}</option>
+                    }
+                  </select>
+                </label>
+              }
+              <label class="tl-field">
+                <span>Staff Member Name *</span>
+                <input class="tl-input" [(ngModel)]="schedFormName" placeholder="Employee full name" />
+              </label>
+              @if (schedFormRole === 'DOCTOR') {
+                <label class="tl-field">
+                  <span>Branch</span>
+                  <select class="tl-input" [(ngModel)]="schedFormClinicId">
+                    <option value="">Project Default</option>
+                    @for (loc of hrLocations(); track loc.id) {
+                      <option [value]="loc.id">{{ loc.name }}</option>
+                    }
+                  </select>
+                </label>
+              }
+              <label class="tl-field">
+                <span>Schedule Model</span>
+                <select class="tl-input" [(ngModel)]="schedFormType">
+                  <option value="WEEKLY_TEMPLATE">Weekly Recurring Template</option>
+                  <option value="DATE_ROSTER">Specific Date Shift Roster</option>
+                </select>
+              </label>
+              @if (schedFormType === 'WEEKLY_TEMPLATE') {
+                <label class="tl-field">
+                  <span>Day of Week</span>
+                  <select class="tl-input" [(ngModel)]="schedFormWeekday">
+                    <option [ngValue]="0">Sunday</option>
+                    <option [ngValue]="1">Monday</option>
+                    <option [ngValue]="2">Tuesday</option>
+                    <option [ngValue]="3">Wednesday</option>
+                    <option [ngValue]="4">Thursday</option>
+                    <option [ngValue]="5">Friday</option>
+                    <option [ngValue]="6">Saturday</option>
+                  </select>
+                </label>
+              } @else {
+                <label class="tl-field">
+                  <span>Shift Date *</span>
+                  <input type="date" class="tl-input" [(ngModel)]="schedFormShiftDate" />
+                </label>
+              }
+              <label class="tl-field">
+                <span>Start Time *</span>
+                <input type="time" class="tl-input" [(ngModel)]="schedFormStart" />
+              </label>
+              <label class="tl-field">
+                <span>End Time *</span>
+                <input type="time" class="tl-input" [(ngModel)]="schedFormEnd" />
+              </label>
+              <label class="tl-field" style="grid-column:1 / -1;">
+                <span>Notes</span>
+                <input class="tl-input" [(ngModel)]="schedFormNotes" placeholder="Shift duties or room notes" />
+              </label>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1rem;">
+              <button type="button" class="tl-btn tl-btn-gray" (click)="scheduleModalOpen.set(false)">Cancel</button>
+              <button type="button" class="tl-btn tl-btn-teal" (click)="submitStaffSchedule()" [disabled]="hrSaving()">
+                {{ hrSaving() ? 'Saving...' : 'Save Work Schedule' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (leaveModalOpen()) {
+        <div class="tl-modal-backdrop" (click)="leaveModalOpen.set(false)">
+          <div class="tl-modal-card" (click)="$event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <h3 style="margin:0;font-size:1.05rem;">Submit Leave Request</h3>
+              <button type="button" class="tl-btn tl-btn-gray" (click)="leaveModalOpen.set(false)">✕</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+              <label class="tl-field" style="grid-column:1 / -1;">
+                <span>Leave Type *</span>
+                <select class="tl-input" [(ngModel)]="leaveFormType">
+                  <option value="ANNUAL_VACATION">Annual Vacation</option>
+                  <option value="SICK_LEAVE">Sick Leave</option>
+                  <option value="EMERGENCY_LEAVE">Emergency Leave</option>
+                  <option value="UNPAID_LEAVE">Unpaid Leave</option>
+                </select>
+              </label>
+              <label class="tl-field">
+                <span>Start Date *</span>
+                <input type="date" class="tl-input" [(ngModel)]="leaveFormStart" />
+              </label>
+              <label class="tl-field">
+                <span>End Date *</span>
+                <input type="date" class="tl-input" [(ngModel)]="leaveFormEnd" />
+              </label>
+              <label class="tl-field" style="grid-column:1 / -1;">
+                <span>Reason / Coverage Details</span>
+                <textarea class="tl-input" rows="3" [(ngModel)]="leaveFormReason" placeholder="Brief reason or coverage notes"></textarea>
+              </label>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1rem;">
+              <button type="button" class="tl-btn tl-btn-gray" (click)="leaveModalOpen.set(false)">Cancel</button>
+              <button type="button" class="tl-btn tl-btn-teal" (click)="submitLeaveRequest()" [disabled]="hrSaving()">
+                {{ hrSaving() ? 'Submitting...' : 'Submit Request' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (reviewLeaveTarget(); as req) {
+        <div class="tl-modal-backdrop" (click)="reviewLeaveTarget.set(null)">
+          <div class="tl-modal-card" (click)="$event.stopPropagation()" style="max-width:600px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <h3 style="margin:0;font-size:1.05rem;">Review Leave Request — {{ req.staffName }}</h3>
+              <button type="button" class="tl-btn tl-btn-gray" (click)="reviewLeaveTarget.set(null)">✕</button>
+            </div>
+            <p style="margin:0 0 0.75rem;font-size:0.86rem;">
+              <strong>{{ leaveTypeLabel(req.leaveType) }}</strong> · {{ req.startDate }} to {{ req.endDate }}
+              @if (req.reason) {
+                <span style="display:block;color:var(--mute);margin-top:0.25rem;">Reason: {{ req.reason }}</span>
+              }
+            </p>
+
+            @if (reviewConflictsLoading()) {
+              <div style="padding:0.75rem;background:var(--surf2);border-radius:8px;font-size:0.84rem;">
+                Checking impacted appointments &amp; shifts...
+              </div>
+            } @else if (reviewConflicts(); as conflicts) {
+              @if (conflicts.impactedAppointmentsCount + conflicts.impactedShiftsCount > 0) {
+                <div class="hr-conflict-banner">
+                  <strong>⚠ Scheduling Conflict Warning (Coverage Recommended)</strong>
+                  <p style="margin:0.35rem 0 0.5rem;font-size:0.82rem;">
+                    {{ conflicts.warningMessage || 'This employee has overlapping work or patient appointments during the requested dates. Approval is allowed so another team member can cover.' }}
+                  </p>
+                  <div style="font-size:0.8rem;margin-bottom:0.4rem;">
+                    <strong>Impacted Appointments: {{ conflicts.impactedAppointmentsCount }}</strong> ·
+                    <strong>Impacted Shifts: {{ conflicts.impactedShiftsCount }}</strong>
+                  </div>
+                  @if (conflicts.impactedDetails.length > 0) {
+                    <ul style="margin:0.25rem 0;padding-left:1.2rem;font-size:0.8rem;">
+                      @for (detail of conflicts.impactedDetails; track detail) {
+                        <li>{{ detail }}</li>
+                      }
+                    </ul>
+                  }
+                </div>
+              } @else {
+                <div style="padding:0.65rem 0.85rem;background:#e8f5e9;color:#2e7d32;border-radius:8px;font-size:0.84rem;margin-bottom:0.75rem;">
+                  No conflicting appointments or scheduled shifts detected for this period.
+                </div>
+              }
+            }
+
+            <label class="tl-field" style="margin-top:0.75rem;">
+              <span>Manager / Coverage Notes</span>
+              <input class="tl-input" [(ngModel)]="reviewNotesInput" placeholder="e.g., Covered by Dr. Sara / Approved" />
+            </label>
+
+            <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1rem;">
+              <button type="button" class="tl-btn tl-btn-gray" (click)="reviewLeaveTarget.set(null)">Cancel</button>
+              <button
+                type="button"
+                class="tl-btn tl-btn-gray"
+                style="color:#c62828;border-color:#ef9a9a;"
+                (click)="submitLeaveDecision('REJECTED')"
+                [disabled]="hrSaving()"
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                class="tl-btn tl-btn-teal"
+                (click)="submitLeaveDecision('APPROVED')"
+                [disabled]="hrSaving()"
+              >
+                {{ (reviewConflicts()?.impactedAppointmentsCount ?? 0) + (reviewConflicts()?.impactedShiftsCount ?? 0) > 0 ? 'Approve Despite Conflict' : 'Approve Leave' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
   styles: [
     `
+      .tl-tab-btn {
+        padding: 0.45rem 0.9rem;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--mute);
+        font-size: 0.84rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .tl-tab-btn:hover { background: var(--line); color: var(--ink); }
+      .tl-tab-btn--active {
+        background: rgba(0, 137, 123, 0.1);
+        color: #00796b;
+        border-color: rgba(0, 137, 123, 0.25);
+      }
+      .hr-badge {
+        display: inline-block;
+        padding: 0.18rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        background: #eceff1;
+        color: #37474f;
+      }
+      .hr-badge--role { background: #e3f2fd; color: #1565c0; }
+      .hr-badge--pending { background: #fff8e1; color: #f57f17; }
+      .hr-badge--approved { background: #e8f5e9; color: #2e7d32; }
+      .hr-badge--rejected { background: #ffebee; color: #c62828; }
+      .hr-conflict-banner {
+        padding: 0.85rem 1rem;
+        background: #fffbeb;
+        border: 1px solid #f59e0b;
+        color: #92400e;
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
+      }
+      .tl-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1200;
+        padding: 1rem;
+      }
+      .tl-modal-card {
+        background: var(--surf, #ffffff);
+        border-radius: 12px;
+        padding: 1.25rem;
+        width: min(560px, 100%);
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+      }
       .fe-tabs {
         display: flex;
         flex-wrap: wrap;
@@ -982,6 +1502,43 @@ export class ClinicSchedulesComponent implements OnInit {
   });
   protected readonly slotRows = computed(() => this.slots.value() ?? []);
   protected readonly canReadAppointments = computed(() => this.sessions.can()(APPOINTMENT_READ));
+  protected readonly canManageHr = computed(() => this.sessions.can()(PERMISSIONS.clinicManage));
+
+  // HR Lite State (Req 2)
+  protected readonly hrActiveTab = signal<'doctorSessions' | 'staffSchedules' | 'leaveRequests'>('doctorSessions');
+  protected readonly hrLoading = signal(false);
+  protected readonly hrSaving = signal(false);
+  protected readonly hrLocations = signal<readonly ClinicLocation[]>([]);
+  protected readonly staffSchedules = signal<readonly StaffScheduleRow[]>([]);
+  protected readonly leaveRequests = signal<readonly LeaveRequestRow[]>([]);
+  protected readonly hrMyOnly = signal(false);
+  protected readonly hrRoleFilter = signal('');
+  protected readonly hrTypeFilter = signal('');
+  protected readonly leaveStatusFilter = signal('');
+  protected readonly leaveMyOnly = signal(false);
+
+  protected readonly scheduleModalOpen = signal(false);
+  protected schedFormRole = 'DOCTOR';
+  protected schedFormDoctorId = '';
+  protected schedFormName = '';
+  protected schedFormClinicId = '';
+  protected schedFormType = 'WEEKLY_TEMPLATE';
+  protected schedFormWeekday = 1;
+  protected schedFormShiftDate = new Date().toISOString().slice(0, 10);
+  protected schedFormStart = '09:00';
+  protected schedFormEnd = '17:00';
+  protected schedFormNotes = '';
+
+  protected readonly leaveModalOpen = signal(false);
+  protected leaveFormType = 'ANNUAL_VACATION';
+  protected leaveFormStart = new Date().toISOString().slice(0, 10);
+  protected leaveFormEnd = new Date().toISOString().slice(0, 10);
+  protected leaveFormReason = '';
+
+  protected readonly reviewLeaveTarget = signal<LeaveRequestRow | null>(null);
+  protected readonly reviewConflicts = signal<LeaveConflictReport | null>(null);
+  protected readonly reviewConflictsLoading = signal(false);
+  protected reviewNotesInput = '';
 
   protected get doctorId(): string | null {
     const id = this.clinician.value.trim();
@@ -998,6 +1555,222 @@ export class ClinicSchedulesComponent implements OnInit {
 
   ngOnInit(): void {
     void this.loadRoster();
+    void this.loadHrLocations();
+    void this.loadStaffSchedules();
+    void this.loadLeaveRequests();
+  }
+
+  protected switchHrTab(tab: 'doctorSessions' | 'staffSchedules' | 'leaveRequests'): void {
+    this.hrActiveTab.set(tab);
+    if (tab === 'staffSchedules') {
+      void this.loadStaffSchedules();
+    } else if (tab === 'leaveRequests') {
+      void this.loadLeaveRequests();
+    }
+  }
+
+  private async loadHrLocations(): Promise<void> {
+    try {
+      const page = await this.clinic.locations({
+        projectId: this.projects.selectedProjectId() ?? undefined,
+        limit: 100,
+      });
+      this.hrLocations.set(page.items ?? []);
+    } catch {
+      this.hrLocations.set([]);
+    }
+  }
+
+  protected async loadStaffSchedules(): Promise<void> {
+    this.hrLoading.set(true);
+    try {
+      const list = await this.availabilityApi.hrSchedules({
+        projectId: this.projects.selectedProjectId() ?? undefined,
+        scheduleType: this.hrTypeFilter() || undefined,
+        mineOnly: this.hrMyOnly() || undefined,
+      });
+      const role = this.hrRoleFilter();
+      this.staffSchedules.set(
+        (list ?? []).filter((s) => !role || s.staffRole === role),
+      );
+    } catch {
+      this.staffSchedules.set([]);
+    } finally {
+      this.hrLoading.set(false);
+    }
+  }
+
+  protected async loadLeaveRequests(): Promise<void> {
+    this.hrLoading.set(true);
+    try {
+      const list = await this.availabilityApi.hrLeaveRequests({
+        projectId: this.projects.selectedProjectId() ?? undefined,
+        status: this.leaveStatusFilter() || undefined,
+        mineOnly: this.leaveMyOnly() || undefined,
+      });
+      this.leaveRequests.set(list ?? []);
+    } catch {
+      this.leaveRequests.set([]);
+    } finally {
+      this.hrLoading.set(false);
+    }
+  }
+
+  protected openCreateScheduleModal(): void {
+    this.schedFormRole = 'DOCTOR';
+    this.schedFormDoctorId = this.doctors()[0]?.id ?? '';
+    this.schedFormName = this.doctors()[0]?.name ?? '';
+    this.schedFormClinicId = this.hrLocations()[0]?.id ?? '';
+    this.schedFormType = 'WEEKLY_TEMPLATE';
+    this.schedFormWeekday = 1;
+    this.schedFormShiftDate = new Date().toISOString().slice(0, 10);
+    this.schedFormStart = '09:00';
+    this.schedFormEnd = '17:00';
+    this.schedFormNotes = '';
+    this.scheduleModalOpen.set(true);
+  }
+
+  protected onSchedDoctorSelected(doctorId: string): void {
+    this.schedFormDoctorId = doctorId;
+    const match = this.doctors().find((d) => d.id === doctorId);
+    if (match?.name) this.schedFormName = match.name;
+  }
+
+  protected async submitStaffSchedule(): Promise<void> {
+    const staffName = this.schedFormName.trim();
+    if (!staffName) {
+      this.notify('Staff member name is required.');
+      return;
+    }
+    this.hrSaving.set(true);
+    try {
+      const payload: CreateStaffSchedulePayload = {
+        clinicId: this.schedFormClinicId || null,
+        doctorId: this.schedFormRole === 'DOCTOR' && this.schedFormDoctorId ? this.schedFormDoctorId : null,
+        staffName,
+        staffRole: this.schedFormRole,
+        scheduleType: this.schedFormType,
+        weekday: this.schedFormType === 'WEEKLY_TEMPLATE' ? this.schedFormWeekday : null,
+        shiftDate: this.schedFormType === 'DATE_ROSTER' ? this.schedFormShiftDate : null,
+        startTime: this.schedFormStart,
+        endTime: this.schedFormEnd,
+        notes: this.schedFormNotes.trim() || undefined,
+      };
+      await this.availabilityApi.createHrSchedule(payload, {
+        projectId: this.projects.selectedProjectId() ?? undefined,
+      });
+      this.scheduleModalOpen.set(false);
+      this.notify('Staff work schedule saved.');
+      await this.loadStaffSchedules();
+    } catch (err) {
+      this.notify(err instanceof Error ? err.message : 'Failed to save work schedule.');
+    } finally {
+      this.hrSaving.set(false);
+    }
+  }
+
+  protected async deleteStaffSchedule(scheduleId: string): Promise<void> {
+    try {
+      await this.availabilityApi.deleteHrSchedule(scheduleId, {
+        projectId: this.projects.selectedProjectId() ?? undefined,
+      });
+      this.notify('Work schedule removed.');
+      await this.loadStaffSchedules();
+    } catch {
+      this.notify('Failed to remove schedule.');
+    }
+  }
+
+  protected openLeaveRequestModal(): void {
+    this.leaveFormType = 'ANNUAL_VACATION';
+    const today = new Date().toISOString().slice(0, 10);
+    this.leaveFormStart = today;
+    this.leaveFormEnd = today;
+    this.leaveFormReason = '';
+    this.leaveModalOpen.set(true);
+  }
+
+  protected async submitLeaveRequest(): Promise<void> {
+    if (!this.leaveFormStart || !this.leaveFormEnd) {
+      this.notify('Start and end dates are required.');
+      return;
+    }
+    this.hrSaving.set(true);
+    try {
+      await this.availabilityApi.createHrLeaveRequest(
+        {
+          leaveType: this.leaveFormType,
+          startDate: this.leaveFormStart,
+          endDate: this.leaveFormEnd,
+          reason: this.leaveFormReason.trim() || undefined,
+        },
+        { projectId: this.projects.selectedProjectId() ?? undefined },
+      );
+      this.leaveModalOpen.set(false);
+      this.notify('Leave request submitted.');
+      await this.loadLeaveRequests();
+    } catch (err) {
+      this.notify(err instanceof Error ? err.message : 'Failed to submit leave request.');
+    } finally {
+      this.hrSaving.set(false);
+    }
+  }
+
+  protected async openReviewLeaveModal(req: LeaveRequestRow): Promise<void> {
+    this.reviewLeaveTarget.set(req);
+    this.reviewConflicts.set(null);
+    this.reviewNotesInput = '';
+    this.reviewConflictsLoading.set(true);
+    try {
+      const conflicts = await this.availabilityApi.hrLeaveConflicts(req.id, {
+        projectId: this.projects.selectedProjectId() ?? undefined,
+      });
+      this.reviewConflicts.set(conflicts);
+    } catch {
+      this.reviewConflicts.set(null);
+    } finally {
+      this.reviewConflictsLoading.set(false);
+    }
+  }
+
+  protected async submitLeaveDecision(status: 'APPROVED' | 'REJECTED'): Promise<void> {
+    const req = this.reviewLeaveTarget();
+    if (!req) return;
+    this.hrSaving.set(true);
+    try {
+      await this.availabilityApi.reviewHrLeaveRequest(
+        req.id,
+        { status, reviewNotes: this.reviewNotesInput.trim() || undefined },
+        { projectId: this.projects.selectedProjectId() ?? undefined },
+      );
+      this.reviewLeaveTarget.set(null);
+      this.notify(`Leave request ${status.toLowerCase()}.`);
+      await this.loadLeaveRequests();
+    } catch (err) {
+      this.notify(err instanceof Error ? err.message : 'Failed to review leave request.');
+    } finally {
+      this.hrSaving.set(false);
+    }
+  }
+
+  protected weekdayLabel(day: number | null | undefined): string {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return day != null && day >= 0 && day < days.length ? days[day] : '—';
+  }
+
+  protected leaveTypeLabel(type: string): string {
+    switch (type) {
+      case 'ANNUAL_VACATION':
+        return 'Annual Vacation';
+      case 'SICK_LEAVE':
+        return 'Sick Leave';
+      case 'EMERGENCY_LEAVE':
+        return 'Emergency Leave';
+      case 'UNPAID_LEAVE':
+        return 'Unpaid Leave';
+      default:
+        return type;
+    }
   }
 
   protected async loadRoster(): Promise<void> {

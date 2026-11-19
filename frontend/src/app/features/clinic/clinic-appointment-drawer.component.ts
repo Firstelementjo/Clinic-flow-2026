@@ -52,6 +52,7 @@ import {
   ClinicPatientApi,
   type ClinicPatient,
   type ClinicSlot,
+  type TreatmentRoomRow,
 } from './clinic-patient.api';
 import { clinicAdminStrings } from './clinic-admin.strings';
 
@@ -90,7 +91,7 @@ const DEFAULT_SLOTS: readonly ClinicSlot[] = [
       <form id="clinic-appointment-form" class="tl-form-grid" [formGroup]="form" (ngSubmit)="save()">
         @if (saveFailed()) {
           <div class="tl-form-error" role="alert">
-            {{ 'clinicAdmin.appointments.saveFailed' | t }}
+            {{ saveErrorMessage() || ('clinicAdmin.appointments.saveFailed' | t) }}
             @if (requestId()) {
               <span class="tl-muted">({{ requestId() }})</span>
             }
@@ -240,6 +241,22 @@ const DEFAULT_SLOTS: readonly ClinicSlot[] = [
             <option value="">{{ 'clinicAdmin.appointments.chooseDoctor' | t }}</option>
             @for (doctor of doctors(); track doctor.id) {
               <option [value]="doctor.id">{{ doctor.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="tl-field">
+          <span class="tl-label">
+            Treatment Room
+          </span>
+          <select class="tl-select" formControlName="treatmentRoomId">
+            <option value="">
+              {{ activeRooms().length === 1 ? activeRooms()[0].name : 'Assign Room Later (Optional)' }}
+            </option>
+            @for (room of activeRooms(); track room.id) {
+              <option [value]="room.id">
+                {{ room.name }}{{ room.currentStatus === 'OCCUPIED' ? ' (Occupied)' : '' }}
+              </option>
             }
           </select>
         </label>
@@ -641,12 +658,17 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   protected readonly clinics = signal<readonly ClinicLocation[]>([]);
   protected readonly doctors = signal<readonly ClinicDoctor[]>([]);
   protected readonly procedures = signal<readonly ClinicProcedure[]>([]);
+  protected readonly treatmentRooms = signal<readonly TreatmentRoomRow[]>([]);
   protected readonly selectedProcedure = signal<ClinicProcedure | null>(null);
 
   protected readonly slots = signal<readonly ClinicSlot[]>(DEFAULT_SLOTS);
   protected readonly displaySlots = computed(() =>
     this.slots().length > 0 ? this.slots() : DEFAULT_SLOTS,
   );
+  protected readonly activeRooms = computed(() => {
+    const cid = this.form.controls.clinicId.value;
+    return this.treatmentRooms().filter((r) => r.isActive && (!cid || !r.clinicId || r.clinicId === cid));
+  });
   protected readonly slotsLoading = signal(false);
   protected readonly slotsError = signal(false);
 
@@ -656,6 +678,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
 
   protected readonly saving = signal(false);
   protected readonly saveFailed = signal(false);
+  protected readonly saveErrorMessage = signal<string | null>(null);
   protected readonly attemptedSubmit = signal(false);
   protected readonly requestId = signal<string | null>(null);
   protected readonly reportError = signal<string | null>(null);
@@ -668,6 +691,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     walkInPhone: [''],
     clinicId: [''],
     doctorId: [''],
+    treatmentRoomId: [''],
     procedureId: [''],
     quantity: [1, [Validators.required, Validators.min(1), Validators.max(999)]],
     date: [''],
@@ -716,6 +740,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     this.slots.set(DEFAULT_SLOTS);
     this.slotsLoading.set(false);
     this.slotsError.set(false);
+    this.saveErrorMessage.set(null);
     this.slotRequest += 1;
     this.form.reset({
       bookingFor: 'EXISTING',
@@ -725,6 +750,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
       walkInPhone: '',
       clinicId: '',
       doctorId: '',
+      treatmentRoomId: '',
       procedureId: '',
       quantity: 1,
       date: this.initialDate() ?? this.today,
@@ -742,10 +768,11 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
 
   private async loadCatalogue(): Promise<void> {
     const projectId = this.effectiveProjectId();
-    const [locations, doctors, procedures] = await Promise.allSettled([
+    const [locations, doctors, procedures, rooms] = await Promise.allSettled([
       this.clinic.locations({ projectId, limit: 100 }),
       this.clinic.doctors({ projectId, limit: 100 }),
       this.clinic.procedures({ projectId, limit: 200 }),
+      this.patientsApi.treatmentRooms({ projectId }),
     ]);
     if (locations.status === 'fulfilled') {
       const items = locations.value.items ?? [];
@@ -753,6 +780,10 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
       if (!this.form.controls.clinicId.value && items.length > 0 && items[0].id) {
         this.form.controls.clinicId.setValue(items[0].id);
       }
+    }
+    if (rooms.status === 'fulfilled') {
+      this.treatmentRooms.set(rooms.value ?? []);
+      this.syncDefaultRoomForClinic();
     }
     if (doctors.status === 'fulfilled') {
       const items = doctors.value.items ?? [];
@@ -816,6 +847,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
   }
 
   protected onClinicChange(): void {
+    this.syncDefaultRoomForClinic();
     const selected = this.selectedProcedure();
     if (selected?.clinicId && selected.clinicId !== this.form.controls.clinicId.value) {
       const valid = this.filteredProcedures();
@@ -1019,6 +1051,7 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
           clinicId: clinicId || undefined,
           doctorId: doctorId || undefined,
           doctorName: doctorName || undefined,
+          treatmentRoomId: value.treatmentRoomId || undefined,
           procedureId: procedureId || undefined,
           service: serviceName,
           appointmentDate,
@@ -1039,8 +1072,27 @@ export class ClinicAppointmentDrawerComponent implements OnChanges {
     } catch (cause) {
       this.saveFailed.set(true);
       this.requestId.set(cause instanceof ApiError ? cause.requestId : null);
+      this.saveErrorMessage.set(
+        cause instanceof ApiError
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : null,
+      );
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  private syncDefaultRoomForClinic(): void {
+    const rooms = this.activeRooms();
+    if (rooms.length === 1) {
+      this.form.controls.treatmentRoomId.setValue(rooms[0].id);
+    } else {
+      const current = this.form.controls.treatmentRoomId.value;
+      if (current && !rooms.some((r) => r.id === current)) {
+        this.form.controls.treatmentRoomId.setValue('');
+      }
     }
   }
 
