@@ -29,6 +29,7 @@ public final class PatientModels {
             String primaryPhone,
             String primaryEmail,
             String cnic,
+            String occupation,
             String profileImageUrl,
             String addressLine,
             String country,
@@ -40,6 +41,33 @@ public final class PatientModels {
             UUID customerId,
             LocalDateTime createdAt,
             boolean deleted) {
+
+        public PatientRow(
+                UUID id,
+                String patientNo,
+                String displayName,
+                String givenName,
+                String familyName,
+                String gender,
+                LocalDate dateOfBirth,
+                String primaryPhone,
+                String primaryEmail,
+                String cnic,
+                String profileImageUrl,
+                String addressLine,
+                String country,
+                String state,
+                String city,
+                String postalCode,
+                boolean isActive,
+                String locale,
+                UUID customerId,
+                LocalDateTime createdAt,
+                boolean deleted) {
+            this(id, patientNo, displayName, givenName, familyName, gender, dateOfBirth,
+                    primaryPhone, primaryEmail, cnic, null, profileImageUrl, addressLine, country,
+                    state, city, postalCode, isActive, locale, customerId, createdAt, deleted);
+        }
     }
 
     /**
@@ -59,6 +87,7 @@ public final class PatientModels {
             String phone,
             String email,
             String cnic,
+            String occupation,
             String profileImageUrl,
             String addressLine,
             String country,
@@ -69,6 +98,31 @@ public final class PatientModels {
             String locale,
             UUID customerId,
             String portalPasswordHash) {
+
+        public CreatePatientCommand(
+                String patientNo,
+                String displayName,
+                String givenName,
+                String familyName,
+                String gender,
+                LocalDate dateOfBirth,
+                String phone,
+                String email,
+                String cnic,
+                String profileImageUrl,
+                String addressLine,
+                String country,
+                String state,
+                String city,
+                String postalCode,
+                boolean isActive,
+                String locale,
+                UUID customerId,
+                String portalPasswordHash) {
+            this(patientNo, displayName, givenName, familyName, gender, dateOfBirth, phone, email,
+                    cnic, null, profileImageUrl, addressLine, country, state, city, postalCode,
+                    isActive, locale, customerId, portalPasswordHash);
+        }
     }
 
     /**

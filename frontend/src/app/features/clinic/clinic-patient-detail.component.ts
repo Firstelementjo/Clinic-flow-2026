@@ -6,6 +6,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -29,6 +30,7 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
 import { StatusChipComponent } from '../../ui/status-chip.component';
 import {
   ClinicPatientApi,
+  type ActiveIntakeCodeStatus,
   type ClinicConsent,
   type ClinicDisclosure,
   type ClinicMediaAccessAuditRow,
@@ -37,8 +39,10 @@ import {
   type ClinicMedicalHistory,
   type ClinicPatient,
   type ClinicRelationship,
+  type GeneratedIntakeCode,
   type MergePatientsResult,
 } from './clinic-patient.api';
+import { buildIntakePortalUrl } from '../../core/utils/qr-svg';
 import { clinicStrings } from './clinic.strings';
 
 @Component({
@@ -190,7 +194,58 @@ import { clinicStrings } from './clinic.strings';
                   الفواتير والمطالبات
                 </a>
               }
+              <button
+                type="button"
+                class="action-btn action-btn--intake"
+                data-testid="generate-intake-code-btn"
+                [disabled]="generatingIntakeCode()"
+                (click)="generatePatientIntakeCode()"
+              >
+                <fe-icon name="clipboard" class="action-btn-icon" />
+                {{ generatingIntakeCode() ? 'جاري التوليد...' : (activeIntakeCode() ? 'إعادة توليد كود البوابة' : 'توليد الكود (بوابة المريض)') }}
+              </button>
             </div>
+
+            @if (activeIntakeCode(); as codeInfo) {
+              <div class="intake-code-banner" data-testid="patient-intake-code-banner">
+                <div class="intake-code-banner__main">
+                  <span class="intake-code-label">كود دخول المريض للاستبيان (صالح لمدة ساعة واحدة):</span>
+                  <strong class="intake-code-value fe-mono" dir="ltr">{{ codeInfo.formattedCode }}</strong>
+                  <span class="intake-code-timer fe-mono">المتبقي: {{ countdownFormatted() }}</span>
+                </div>
+                <div class="intake-code-banner__actions">
+                  <button type="button" class="fe-btn fe-btn--ghost fe-btn--xs" (click)="copyIntakeCode(codeInfo.code)">
+                    {{ intakeCodeCopied() ? 'تم النسخ!' : 'نسخ الكود' }}
+                  </button>
+                  @if (clinicPortalUrl()) {
+                    <a class="fe-btn fe-btn--ghost fe-btn--xs" [href]="clinicPortalUrl()" target="_blank" rel="noopener">
+                      فتح البوابة
+                    </a>
+                  }
+                </div>
+              </div>
+            } @else if (intakeStatus()?.hasActiveCode && intakeStatus()?.remainingSeconds) {
+              <div class="intake-code-banner intake-code-banner--muted">
+                <span>يوجد كود دخول فعّال للمريض ({{ intakeStatus()?.codeHint }}) — المتبقي: <strong class="fe-mono">{{ countdownFormatted() }}</strong></span>
+                <button type="button" class="fe-btn fe-btn--ghost fe-btn--xs" (click)="generatePatientIntakeCode()">
+                  توليد كود جديد
+                </button>
+              </div>
+            }
+
+            @if (intakeStatus()?.latestIntakeStatus === 'PENDING_APPROVAL') {
+              <div class="intake-pending-banner" data-testid="patient-intake-pending-banner">
+                <div>
+                  <strong>نموذج المريض مُرسل من البوابة وبانتظار الاعتماد</strong>
+                  <span> — قام المريض بتعبئة بياناته والتاريخ الطبي والشكوى الرئيسية. يمكن للطبيب المراجعة والتعديل ثم الاعتماد.</span>
+                </div>
+                @if (canViewEncounters()) {
+                  <a class="fe-btn fe-btn--primary fe-btn--xs" [routerLink]="['/app/clinic/patients', patientId(), 'encounters']">
+                    مراجعة واعتماد في الـ Encounter
+                  </a>
+                }
+              </div>
+            }
           </div>
 
           <!-- Tabs Navigation -->
@@ -284,6 +339,12 @@ import { clinicStrings } from './clinic.strings';
                   <dt class="fe-eyebrow">{{ 'clinic.patients.col.contact' | t }}</dt>
                   <dd dir="ltr">{{ row.primaryPhone ?? row.primaryEmail ?? '—' }}</dd>
                 </div>
+                @if (row.occupation) {
+                  <div>
+                    <dt class="fe-eyebrow">المهنة / Occupation</dt>
+                    <dd>{{ row.occupation }}</dd>
+                  </div>
+                }
                 <div>
                   <dt class="fe-eyebrow">{{ 'clinic.patient.locale' | t }}</dt>
                   <dd class="fe-mono" dir="ltr">{{ row.locale ?? '—' }}</dd>
@@ -1834,6 +1895,69 @@ import { clinicStrings } from './clinic.strings';
         border: 1px solid var(--line);
         border-radius: var(--fe-radius-sm);
       }
+      .action-btn--intake {
+        background: var(--pri-soft);
+        border-color: var(--pri);
+        color: var(--pri);
+        font-weight: 700;
+      }
+      .intake-code-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--fe-space-3);
+        flex-wrap: wrap;
+        padding: var(--fe-space-3);
+        border-radius: var(--fe-radius);
+        background: var(--pri-soft);
+        border: 1px solid var(--pri);
+      }
+      .intake-code-banner--muted {
+        background: var(--surf2);
+        border-color: var(--line);
+      }
+      .intake-code-banner__main {
+        display: flex;
+        align-items: center;
+        gap: var(--fe-space-3);
+        flex-wrap: wrap;
+      }
+      .intake-code-label {
+        font-size: 0.88rem;
+        font-weight: 600;
+      }
+      .intake-code-value {
+        font-size: 1.35rem;
+        letter-spacing: 0.12em;
+        padding: 4px 14px;
+        border-radius: var(--fe-radius);
+        background: var(--surf);
+        border: 1px solid var(--pri);
+        color: var(--pri);
+      }
+      .intake-code-timer {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: var(--ok);
+      }
+      .intake-code-banner__actions {
+        display: flex;
+        align-items: center;
+        gap: var(--fe-space-2);
+      }
+      .intake-pending-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--fe-space-3);
+        flex-wrap: wrap;
+        padding: var(--fe-space-3);
+        border-radius: var(--fe-radius);
+        background: #fef3c7;
+        border: 1px solid #f59e0b;
+        color: #78350f;
+        font-size: 0.9rem;
+      }
     `,
   ],
 })
@@ -1841,6 +1965,7 @@ export class ClinicPatientDetailComponent {
   private readonly api = inject(ClinicPatientApi);
   private readonly route = inject(ActivatedRoute);
   private readonly projects = inject(ProjectContextService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly rbac = inject(ClinicRbacService);
 
   protected readonly canViewOdontogram = computed(() =>
@@ -1941,6 +2066,21 @@ export class ClinicPatientDetailComponent {
   protected readonly loadingData = signal(false);
   protected readonly actionPending = signal(false);
 
+  // Patient Intake 1-hour code state
+  protected readonly generatingIntakeCode = signal(false);
+  protected readonly activeIntakeCode = signal<GeneratedIntakeCode | null>(null);
+  protected readonly intakeStatus = signal<ActiveIntakeCodeStatus | null>(null);
+  protected readonly remainingCodeSeconds = signal<number>(0);
+  protected readonly intakeCodeCopied = signal(false);
+  protected readonly clinicPortalUrl = signal<string | null>(null);
+  private countdownTimerId: ReturnType<typeof setInterval> | null = null;
+  protected readonly countdownFormatted = computed(() => {
+    const secs = Math.max(0, this.remainingCodeSeconds());
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    return `${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+  });
+
   // Medical history form state (Slice S3)
   protected medAllergies = '';
   protected medConditions = '';
@@ -1994,6 +2134,13 @@ export class ClinicPatientDetailComponent {
   constructor() {
     inject(I18nService).register({ clinic: clinicStrings as Namespace });
 
+    this.destroyRef.onDestroy(() => {
+      if (this.countdownTimerId) {
+        clearInterval(this.countdownTimerId);
+        this.countdownTimerId = null;
+      }
+    });
+
     effect(() => {
       const id = this.patientId();
       untracked(() => {
@@ -2004,6 +2151,9 @@ export class ClinicPatientDetailComponent {
           this.disclosures.set([]);
           this.medicalHistory.set(null);
           this.mediaItems.set([]);
+          this.activeIntakeCode.set(null);
+          this.intakeStatus.set(null);
+          this.stopCountdownTimer();
           return;
         }
         void this.load(id);
@@ -2029,7 +2179,10 @@ export class ClinicPatientDetailComponent {
 
       // Pre-fill signer name if empty
       const p = this.patient.value();
-      if (p && !this.consentSignedBy) {
+      if (!p) {
+        return;
+      }
+      if (!this.consentSignedBy) {
         this.consentSignedBy = p.displayName || '';
       }
 
@@ -2038,6 +2191,12 @@ export class ClinicPatientDetailComponent {
         this.api.consents(patientId, { projectId: this.projectId() }).then((c) => this.consents.set(c)),
         this.api.disclosures(patientId, { projectId: this.projectId() }).then((d) => this.disclosures.set(d)),
         this.api.patientMedia(patientId, { projectId: this.projectId() }).then((m) => this.mediaItems.set(m)),
+        this.api.getIntakeStatus(patientId, { projectId: this.projectId() }).then((st) => {
+          this.intakeStatus.set(st);
+          if (st.hasActiveCode && st.remainingSeconds > 0 && !this.activeIntakeCode()) {
+            this.startCountdown(st.remainingSeconds);
+          }
+        }),
         this.api.medicalHistory(patientId, { projectId: this.projectId() }).then((m) => {
           this.medicalHistory.set(m);
           if (m) {
@@ -2057,6 +2216,59 @@ export class ClinicPatientDetailComponent {
   }
 
   // --- Actions ---
+
+  protected async generatePatientIntakeCode(): Promise<void> {
+    const id = this.patientId();
+    if (!id || this.generatingIntakeCode()) return;
+
+    this.generatingIntakeCode.set(true);
+    try {
+      const generated = await this.api.generateIntakeCode(id, { projectId: this.projectId() });
+      this.activeIntakeCode.set(generated);
+      this.startCountdown(generated.expiresInSeconds || 3600);
+
+      try {
+        const qr = await this.api.getClinicIntakeQr({ projectId: this.projectId() });
+        if (qr.intakePortalKey) {
+          this.clinicPortalUrl.set(buildIntakePortalUrl(qr.intakePortalKey));
+        }
+      } catch {
+        // Optional link shortcut
+      }
+    } finally {
+      this.generatingIntakeCode.set(false);
+    }
+  }
+
+  protected copyIntakeCode(code: string): void {
+    navigator.clipboard.writeText(code).then(() => {
+      this.intakeCodeCopied.set(true);
+      setTimeout(() => this.intakeCodeCopied.set(false), 2000);
+    });
+  }
+
+  private startCountdown(seconds: number): void {
+    this.stopCountdownTimer();
+    this.remainingCodeSeconds.set(Math.max(0, Math.floor(seconds)));
+    if (seconds <= 0) return;
+    this.countdownTimerId = setInterval(() => {
+      const next = this.remainingCodeSeconds() - 1;
+      if (next <= 0) {
+        this.remainingCodeSeconds.set(0);
+        this.activeIntakeCode.set(null);
+        this.stopCountdownTimer();
+      } else {
+        this.remainingCodeSeconds.set(next);
+      }
+    }, 1000);
+  }
+
+  private stopCountdownTimer(): void {
+    if (this.countdownTimerId) {
+      clearInterval(this.countdownTimerId);
+      this.countdownTimerId = null;
+    }
+  }
 
   protected async saveRelationship(): Promise<void> {
     const id = this.patientId();

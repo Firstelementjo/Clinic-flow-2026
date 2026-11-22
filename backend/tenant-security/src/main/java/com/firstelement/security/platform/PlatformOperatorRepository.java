@@ -237,6 +237,8 @@ public class PlatformOperatorRepository {
                    o."name"            as "organizationName",
                    p."name"            as "clinicName",
                    p."slug"            as "slug",
+                   coalesce(p."intakePortalKey", p."slug") as "intakePortalKey",
+                   coalesce(p."intakePortalEnabled", true) as "intakePortalEnabled",
                    coalesce(p."city", 'Amman') as "city",
                    p."contactNumber"   as "contactNumber",
                    p."timezone"        as "timezone",

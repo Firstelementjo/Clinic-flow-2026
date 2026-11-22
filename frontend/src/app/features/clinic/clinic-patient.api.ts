@@ -52,6 +52,7 @@ export interface ClinicPatient {
   readonly primaryPhone?: string;
   readonly primaryEmail?: string;
   readonly cnic?: string | null;
+  readonly occupation?: string | null;
   readonly profileImageUrl?: string | null;
   readonly addressLine?: string | null;
   readonly country?: string | null;
@@ -912,6 +913,43 @@ export class ClinicPatientApi {
   /** `POST /api/v1/clinic/patients` â€” register a new patient in the clinic. */
   createPatient(payload: CreatePatientPayload, query: ClinicPatientQuery = {}): Promise<ClinicPatient> {
     return this.api.post('/api/v1/clinic/patients', payload, query);
+  }
+
+  // ---- Patient Intake Portal & 9-Step History -----------------------------
+
+  getClinicIntakeQr(query: ClinicPatientQuery = {}): Promise<ClinicIntakeQrInfo> {
+    return this.api.get('/api/v1/clinic/settings/intake-qr', query);
+  }
+
+  generateIntakeCode(patientId: string, query: ClinicPatientQuery = {}): Promise<GeneratedIntakeCode> {
+    return this.api.post(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/intake-code`, {}, query);
+  }
+
+  getIntakeStatus(patientId: string, query: ClinicPatientQuery = {}): Promise<ActiveIntakeCodeStatus> {
+    return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/intake-status`, query);
+  }
+
+  listHistoryRecords(patientId: string, query: ClinicPatientQuery = {}): Promise<PatientHistoryIntakeRecord[]> {
+    return this.api.get(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/history-records`, query);
+  }
+
+  saveHistoryRecord(
+    patientId: string,
+    payload: SavePatientHistoryIntakePayload,
+    query: ClinicPatientQuery = {},
+  ): Promise<PatientHistoryIntakeRecord> {
+    return this.api.post(`/api/v1/clinic/patients/${encodeURIComponent(patientId)}/history-records`, payload, query);
+  }
+
+  deleteHistoryRecord(
+    patientId: string,
+    recordId: string,
+    query: ClinicPatientQuery = {},
+  ): Promise<{ id: string; deleted: boolean }> {
+    return this.api.delete(
+      `/api/v1/clinic/patients/${encodeURIComponent(patientId)}/history-records/${encodeURIComponent(recordId)}`,
+      query,
+    );
   }
 
   // ---- S1: Relationships, Consents, Disclosures, Record Actions -----------
@@ -2637,6 +2675,7 @@ export interface CreatePatientPayload {
   readonly phone: string;
   readonly email?: string;
   readonly cnic?: string;
+  readonly occupation?: string;
   readonly password?: string;
   readonly confirmPassword?: string;
   readonly profileImageUrl?: string;
@@ -2647,6 +2686,7 @@ export interface CreatePatientPayload {
   readonly postalCode?: string;
   readonly isActive?: boolean;
   readonly locale?: string;
+  readonly quickRegister?: boolean;
 }
 
 export interface ClinicResourceDetail {
@@ -3609,4 +3649,75 @@ export interface ImagingSummaryAnalytics {
   readonly totalCostToClinic: number;
   readonly totalChargedToPatient: number;
   readonly netProfit: number;
+}
+
+export interface ClinicIntakeQrInfo {
+  readonly projectId: string;
+  readonly organizationId: string;
+  readonly clinicName: string;
+  readonly clinicSlug: string;
+  readonly intakePortalKey: string;
+  readonly enabled: boolean;
+  readonly defaultLocale?: string;
+}
+
+export interface GeneratedIntakeCode {
+  readonly code: string;
+  readonly formattedCode: string;
+  readonly expiresAt: string;
+  readonly expiresInSeconds: number;
+  readonly patientId: string;
+  readonly patientName: string;
+}
+
+export interface ActiveIntakeCodeStatus {
+  readonly hasActiveCode: boolean;
+  readonly codeHint?: string | null;
+  readonly expiresAt?: string | null;
+  readonly remainingSeconds: number;
+  readonly latestIntakeStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'COMPLETED' | string | null;
+  readonly latestIntakeId?: string | null;
+  readonly lastSubmittedAt?: string | null;
+}
+
+export interface PatientHistoryIntakeRecord {
+  readonly id: string;
+  readonly patientId: string;
+  readonly encounterId?: string | null;
+  readonly status: 'PENDING_APPROVAL' | 'APPROVED' | 'COMPLETED' | string;
+  readonly source: 'PATIENT_PORTAL' | 'CLINIC_STAFF' | string;
+  readonly isComplete: boolean;
+  readonly date: string;
+  readonly name: string;
+  readonly demographics: Record<string, any>;
+  readonly medicalHistory: Record<string, any>;
+  readonly dentalHistory: Record<string, any>;
+  readonly chiefComplaint: Record<string, any>;
+  readonly clinicalExam: Record<string, any>;
+  readonly radiographs: Record<string, any>;
+  readonly diagnosisAndPlan: Record<string, any>;
+  readonly dentalChart: Record<string, any>;
+  readonly informedConsent: Record<string, any>;
+  readonly submittedAt?: string | null;
+  readonly approvedAt?: string | null;
+  readonly approvedByUserId?: string | null;
+}
+
+export interface SavePatientHistoryIntakePayload {
+  readonly id?: string | null;
+  readonly encounterId?: string | null;
+  readonly status?: string;
+  readonly isComplete?: boolean;
+  readonly approve?: boolean;
+  readonly date?: string;
+  readonly name?: string;
+  readonly demographics?: Record<string, any>;
+  readonly medicalHistory?: Record<string, any>;
+  readonly dentalHistory?: Record<string, any>;
+  readonly chiefComplaint?: Record<string, any>;
+  readonly clinicalExam?: Record<string, any>;
+  readonly radiographs?: Record<string, any>;
+  readonly diagnosisAndPlan?: Record<string, any>;
+  readonly dentalChart?: Record<string, any>;
+  readonly informedConsent?: Record<string, any>;
 }

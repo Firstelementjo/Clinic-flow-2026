@@ -31,7 +31,7 @@ export interface NavEntry {
   readonly queryTab?: string;
 }
 
-export type NavGroup = 'main' | 'clinicCenters' | 'users' | 'finance' | 'platform';
+export type NavGroup = 'main' | 'clinicCenters' | 'users' | 'finance' | 'system' | 'platform';
 
 export type NavIcon =
   | 'dashboard'
@@ -52,6 +52,7 @@ export const NAV_GROUPS: readonly { id: NavGroup; labelKey: string }[] = [
   { id: 'clinicCenters', labelKey: 'shell.nav.groupClinicCenters' },
   { id: 'users', labelKey: 'shell.nav.groupUsers' },
   { id: 'finance', labelKey: 'shell.nav.groupFinance' },
+  { id: 'system', labelKey: 'shell.nav.groupSystem' },
   { id: 'platform', labelKey: 'shell.nav.groupPlatform' },
 ];
 
@@ -139,10 +140,18 @@ export const NAV_ENTRIES: readonly NavEntry[] = [
     group: 'finance',
   },
   {
+    path: '/app/clinic/commission',
+    labelKey: 'shell.nav.doctorCommission',
+    icon: 'finance',
+    permission: 'report:manage',
+    roles: ADMIN,
+    group: 'finance',
+  },
+  {
     path: '/app/clinic/payouts',
     labelKey: 'shell.nav.doctorPayout',
     icon: 'exports',
-    permission: 'doctor:read',
+    permission: 'report:manage',
     roles: ADMIN,
     group: 'finance',
   },
@@ -157,6 +166,30 @@ export const NAV_ENTRIES: readonly NavEntry[] = [
     permission: 'appointment:read',
     roles: ADMIN,
     group: 'finance',
+  },
+  {
+    path: '/app/clinic/appointments-overview',
+    labelKey: 'shell.nav.appointmentOverview',
+    icon: 'dashboard',
+    permission: 'appointment:read',
+    roles: ADMIN,
+    group: 'finance',
+  },
+  {
+    path: '/app/clinic/overview',
+    labelKey: 'shell.nav.clinicOverview',
+    icon: 'clinic',
+    permission: 'appointment:read',
+    roles: ADMIN,
+    group: 'finance',
+  },
+  {
+    path: '/app/settings',
+    labelKey: 'shell.nav.systemSetting',
+    icon: 'settings',
+    permission: 'conversation:read',
+    roles: ADMIN,
+    group: 'system',
   },
 
   // ══════════════════════════════════════════════

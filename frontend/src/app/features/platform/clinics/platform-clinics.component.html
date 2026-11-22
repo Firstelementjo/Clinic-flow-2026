@@ -201,6 +201,21 @@
                     <button
                       type="button"
                       class="btn-icon"
+                      [title]="i18n.locale() === 'ar' ? 'رمز QR بوابة المرضى' : 'Patient Intake QR Code'"
+                      data-testid="platform-clinic-qr-btn"
+                      (click)="openIntakeQr(clinic)"
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2"/>
+                      </svg>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn-icon"
                       [title]="i18n.locale() === 'ar' ? 'تعديل بيانات العيادة' : 'Edit Clinic Profile'"
                       (click)="openEdit(clinic)"
                     >
@@ -850,6 +865,78 @@
               <p class="token-expiry-hint">
                 A new secure token has been hashed and stored. Any prior invite token has been invalidated.
               </p>
+            </div>
+          }
+
+          <!-- PATIENT INTAKE QR ACTION -->
+          @if (actionType() === 'INTAKE_QR') {
+            <div class="qr-drawer-panel">
+              <div class="qr-preview-card">
+                @if (intakeQrSvg(); as svg) {
+                  <svg
+                    class="qr-svg-box"
+                    [attr.viewBox]="'0 0 ' + svg.viewBoxSize + ' ' + svg.viewBoxSize"
+                    width="220"
+                    height="220"
+                    shape-rendering="crispEdges"
+                    role="img"
+                    [attr.aria-label]="'Patient Intake QR for ' + (selectedClinic()?.clinicName || 'Clinic')"
+                  >
+                    <rect [attr.width]="svg.viewBoxSize" [attr.height]="svg.viewBoxSize" fill="#ffffff" />
+                    <path [attr.d]="svg.path" fill="#0f172a" />
+                  </svg>
+                }
+                <div class="qr-clinic-caption">
+                  <strong>{{ intakeQrInfo()?.clinicName || selectedClinic()?.clinicName }}</strong>
+                  <span class="qr-key-badge">{{ intakeQrInfo()?.intakePortalKey || selectedClinic()?.intakePortalKey }}</span>
+                </div>
+              </div>
+
+              <div class="fe-field">
+                <label class="fe-label" for="platformQrBaseUrl">
+                  {{ i18n.locale() === 'ar' ? 'رابط استضافة بوابة المرضى (Base URL)' : 'Intake Portal Base URL' }}
+                </label>
+                <input
+                  id="platformQrBaseUrl"
+                  type="url"
+                  class="fe-input"
+                  dir="ltr"
+                  [ngModel]="intakeBaseUrl()"
+                  (ngModelChange)="updateIntakeBaseUrl($event)"
+                  placeholder="http://localhost:4300"
+                />
+                <span class="fe-hint">
+                  {{ i18n.locale() === 'ar'
+                    ? 'محلياً: http://localhost:4300 — أو ضع عنوان IP الجهاز على الواي فاي لتجربته بكاميرا الجوال، أو رابط الدومين عند النشر.'
+                    : 'Local: http://localhost:4300 — or your local Wi-Fi IP to scan with a phone, or production portal domain.' }}
+                </span>
+              </div>
+
+              <div class="token-display-box">
+                <span class="fe-label">{{ i18n.locale() === 'ar' ? 'الرابط الفريد للعيادة:' : 'Unique Clinic Intake Link:' }}</span>
+                <div class="token-copy-row">
+                  <input type="text" class="fe-input token-input" dir="ltr" readonly [value]="intakePortalUrl()" />
+                  <button type="button" class="btn btn--primary" (click)="copyLink(intakePortalUrl())">
+                    <fe-icon name="clipboard"></fe-icon>
+                    <span>{{ i18n.locale() === 'ar' ? 'نسخ' : 'Copy' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="qr-action-row">
+                <button type="button" class="btn btn--primary" (click)="printSelectedClinicQr()">
+                  {{ i18n.locale() === 'ar' ? 'طباعة ملصق الـ QR' : 'Print QR Poster' }}
+                </button>
+                <button type="button" class="btn btn--outline" (click)="downloadSelectedClinicQrSvg()">
+                  {{ i18n.locale() === 'ar' ? 'تحميل SVG' : 'Download SVG' }}
+                </button>
+                <button type="button" class="btn btn--outline" (click)="openIntakePortalTab()">
+                  {{ i18n.locale() === 'ar' ? 'فتح البوابة' : 'Open Portal' }}
+                </button>
+                <button type="button" class="btn btn--outline" [disabled]="actionSubmitting()" (click)="regenerateIntakeQr()">
+                  {{ i18n.locale() === 'ar' ? 'إعادة توليد المعرّف' : 'Regenerate Key' }}
+                </button>
+              </div>
             </div>
           }
     </div>

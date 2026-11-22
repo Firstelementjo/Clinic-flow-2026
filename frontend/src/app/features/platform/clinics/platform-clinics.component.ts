@@ -11,12 +11,21 @@ import { FormsModule } from '@angular/forms';
 import {
   PlatformApi,
   PlatformClinicSummary,
+  PlatformClinicIntakeQr,
   CreateClinicWizardInput,
   ClinicWizardResult,
   ClinicLimitsInput,
   EditClinicInput,
   AddClinicAdminInput,
 } from '../../../core/api/endpoints';
+import {
+  buildIntakePortalUrl,
+  generateQrSvgParts,
+  generateQrSvgString,
+  getSavedIntakePortalBaseUrl,
+  printIntakeQrPoster,
+  saveIntakePortalBaseUrl,
+} from '../../../core/utils/qr-svg';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { IconComponent } from '../../../ui/icon.component';
 import { StatusChipComponent, StatusTone } from '../../../ui/status-chip.component';
@@ -73,11 +82,24 @@ export class PlatformClinicsComponent implements OnInit {
 
   // Action modals
   protected readonly actionModalOpen = signal<boolean>(false);
-  protected readonly actionType = signal<'EXTEND' | 'LIMITS' | 'SUSPEND' | 'REACTIVATE' | 'EDIT' | 'INVITE_LINK' | 'ADD_ADMIN' | null>(null);
+  protected readonly actionType = signal<'EXTEND' | 'LIMITS' | 'SUSPEND' | 'REACTIVATE' | 'EDIT' | 'INVITE_LINK' | 'ADD_ADMIN' | 'INTAKE_QR' | null>(null);
   protected readonly selectedClinic = signal<PlatformClinicSummary | null>(null);
   protected readonly actionSubmitting = signal<boolean>(false);
   protected readonly actionError = signal<string | null>(null);
   protected readonly actionSuccessMessage = signal<string | null>(null);
+
+  // Clinic Intake QR state
+  protected readonly intakeQrInfo = signal<PlatformClinicIntakeQr | null>(null);
+  protected readonly intakeBaseUrl = signal<string>(getSavedIntakePortalBaseUrl());
+  protected readonly intakePortalUrl = computed(() => {
+    const info = this.intakeQrInfo();
+    const key = info?.intakePortalKey || this.selectedClinic()?.intakePortalKey || this.selectedClinic()?.slug || '';
+    return key ? buildIntakePortalUrl(key, this.intakeBaseUrl()) : '';
+  });
+  protected readonly intakeQrSvg = computed(() => {
+    const url = this.intakePortalUrl();
+    return url ? generateQrSvgParts(url) : null;
+  });
 
   // Extend form
   protected extendDays = 30;
@@ -127,6 +149,7 @@ export class PlatformClinicsComponent implements OnInit {
       case 'REACTIVATE': return isAr ? `إعادة تنشيط العيادة • ${name}` : `Reactivate Clinic Tenant • ${name}`;
       case 'INVITE_LINK': return isAr ? `رابط الدعوة المباشر • ${name}` : `Single-Use Invite Link • ${name}`;
       case 'ADD_ADMIN': return isAr ? `إضافة مدير عيادة جديد (Clinic Admin) • ${name}` : `Add Clinic Admin • ${name}`;
+      case 'INTAKE_QR': return isAr ? `رمز QR بوابة تعبئة المرضى • ${name}` : `Patient Intake Portal QR • ${name}`;
       default: return name;
     }
   });
@@ -141,6 +164,7 @@ export class PlatformClinicsComponent implements OnInit {
       case 'REACTIVATE': return isAr ? 'استعادة نشاط العيادة وتفعيل الحساب فوراً' : 'Restore full clinic access immediately';
       case 'INVITE_LINK': return isAr ? 'إعادة إنشاء رابط دعوة صالح لمرة واحدة للمشرف' : 'Regenerate one-time onboarding link';
       case 'ADD_ADMIN': return isAr ? 'منح صلاحية مدير عيادة (clinic_admin) وتنسيبه مباشرة لهذه العيادة (حصري لمدير المنصة)' : 'Provision and assign a new clinic_admin account to this clinic';
+      case 'INTAKE_QR': return isAr ? 'رابط ورمز QR فريد لهذه العيادة للوصول المباشر إلى بوابة المريض المستقلة' : 'Clinic-scoped QR code & link for the standalone Patient Intake Portal';
       default: return null;
     }
   });
@@ -412,6 +436,82 @@ export class PlatformClinicsComponent implements OnInit {
     this.actionModalOpen.set(false);
     this.actionType.set(null);
     this.selectedClinic.set(null);
+    this.intakeQrInfo.set(null);
+  }
+
+  async openIntakeQr(clinic: PlatformClinicSummary): Promise<void> {
+    this.selectedClinic.set(clinic);
+    this.intakeQrInfo.set({
+      projectId: clinic.projectId,
+      organizationId: clinic.organizationId,
+      clinicName: clinic.clinicName,
+      clinicSlug: clinic.slug,
+      intakePortalKey: clinic.intakePortalKey || clinic.slug,
+      enabled: clinic.intakePortalEnabled ?? true,
+      defaultLocale: clinic.defaultLocale,
+    });
+    this.actionType.set('INTAKE_QR');
+    this.actionError.set(null);
+    this.actionSuccessMessage.set(null);
+    this.actionModalOpen.set(true);
+    try {
+      const fresh = await this.platformApi.getClinicIntakeQr(clinic.projectId);
+      this.intakeQrInfo.set(fresh);
+    } catch {
+      // Keep fallback slug key if network call fails
+    }
+  }
+
+  updateIntakeBaseUrl(url: string): void {
+    const normalized = saveIntakePortalBaseUrl(url);
+    this.intakeBaseUrl.set(normalized);
+  }
+
+  async regenerateIntakeQr(): Promise<void> {
+    const c = this.selectedClinic();
+    if (!c) return;
+    this.actionSubmitting.set(true);
+    this.actionError.set(null);
+    this.actionSuccessMessage.set(null);
+    try {
+      const updated = await this.platformApi.regenerateClinicIntakeQr(c.projectId, 'Super Admin regenerated clinic QR');
+      this.intakeQrInfo.set(updated);
+      this.actionSuccessMessage.set(
+        this.i18n.locale() === 'ar'
+          ? 'تم توليد معرّف QR جديد لهذه العيادة بنجاح.'
+          : 'New clinic intake QR key generated.',
+      );
+      await this.loadClinics();
+    } catch (err: any) {
+      this.actionError.set(err?.message || 'Failed to regenerate QR key.');
+    } finally {
+      this.actionSubmitting.set(false);
+    }
+  }
+
+  printSelectedClinicQr(): void {
+    const clinicName = this.intakeQrInfo()?.clinicName || this.selectedClinic()?.clinicName || 'Clinic';
+    const url = this.intakePortalUrl();
+    if (url) printIntakeQrPoster(clinicName, url);
+  }
+
+  downloadSelectedClinicQrSvg(): void {
+    const url = this.intakePortalUrl();
+    const slug = this.intakeQrInfo()?.clinicSlug || this.selectedClinic()?.slug || 'clinic';
+    if (!url) return;
+    const svg = generateQrSvgString(url, 360);
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = `intake-qr-${slug}.svg`;
+    a.click();
+    URL.revokeObjectURL(objUrl);
+  }
+
+  openIntakePortalTab(): void {
+    const url = this.intakePortalUrl();
+    if (url) window.open(url, '_blank', 'noopener');
   }
 
   async executeAddAdmin(): Promise<void> {

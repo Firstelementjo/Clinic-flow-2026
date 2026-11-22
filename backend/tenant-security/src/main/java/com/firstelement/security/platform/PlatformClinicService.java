@@ -184,10 +184,12 @@ public class PlatformClinicService {
 
         jdbc.update("""
             insert into "public"."projects"
-                ("id", "organizationId", "name", "slug", "description", "defaultLocale",
+                ("id", "organizationId", "name", "slug", "intakePortalKey", "intakePortalEnabled",
+                 "description", "defaultLocale",
                  "timezone", "city", "contactNumber", "status", "isArchived", "version", "createdAt", "updatedAt")
             values
-                (:id, :organizationId, :name, :slug, :description, cast(:locale as "Locale"),
+                (:id, :organizationId, :name, :slug, :intakePortalKey, true,
+                 :description, cast(:locale as "Locale"),
                  :timezone, :city, :contactNumber, :status, false, 0, :now, :now)
             """,
             new MapSqlParameterSource()
@@ -195,6 +197,7 @@ public class PlatformClinicService {
                     .addValue("organizationId", orgId)
                     .addValue("name", request.clinicName().trim())
                     .addValue("slug", clinicSlug)
+                    .addValue("intakePortalKey", clinicSlug)
                     .addValue("description", "Provisioned via Platform Console Wizard.")
                     .addValue("locale", language)
                     .addValue("timezone", timezone)
@@ -759,6 +762,90 @@ public class PlatformClinicService {
         return rows.get(0);
     }
 
+    public Map<String, Object> getClinicIntakeQr(PlatformOperatorContext operator, UUID projectId) {
+        if (operator == null || !operator.permits(PlatformCapability.READ_PLATFORM_OVERVIEW, Instant.now())) {
+            throw new PlatformOperatorContextHolder.PlatformAccessDenied("READ_PLATFORM_OVERVIEW is required.");
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select p."id" as "projectId",
+                       p."organizationId" as "organizationId",
+                       p."name" as "clinicName",
+                       p."slug" as "clinicSlug",
+                       p."intakePortalKey" as "intakePortalKey",
+                       coalesce(p."intakePortalEnabled", true) as "enabled",
+                       cast(p."defaultLocale" as text) as "defaultLocale"
+                  from "public"."projects" p
+                 where p."id" = :id
+                """, new MapSqlParameterSource("id", projectId));
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException("Clinic not found: " + projectId);
+        }
+        Map<String, Object> row = new java.util.LinkedHashMap<>(rows.get(0));
+        String key = (String) row.get("intakePortalKey");
+        if (key == null || key.isBlank()) {
+            String slug = String.valueOf(row.getOrDefault("clinicSlug", "clinic"));
+            key = buildUniqueIntakeKey(slug);
+            jdbc.update("""
+                    update "public"."projects"
+                       set "intakePortalKey" = :key,
+                           "updatedAt" = :now
+                     where "id" = :id
+                    """, new MapSqlParameterSource()
+                    .addValue("id", projectId)
+                    .addValue("key", key)
+                    .addValue("now", Timestamp.from(Instant.now())));
+            row.put("intakePortalKey", key);
+        }
+        return row;
+    }
+
+    @Transactional
+    public Map<String, Object> regenerateClinicIntakeQr(
+            PlatformOperatorContext operator,
+            UUID projectId,
+            String reason,
+            String correlationId) {
+        if (operator == null || !operator.permits(PlatformCapability.CREATE_CLINIC, Instant.now())) {
+            throw new PlatformOperatorContextHolder.PlatformAccessDenied("CREATE_CLINIC is required.");
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select p."organizationId" as "organizationId", p."slug" as "slug"
+                  from "public"."projects" p
+                 where p."id" = :id
+                """, new MapSqlParameterSource("id", projectId));
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException("Clinic not found: " + projectId);
+        }
+        UUID orgId = (UUID) rows.get(0).get("organizationId");
+        String slug = String.valueOf(rows.get(0).getOrDefault("slug", "clinic"));
+        String newKey = buildUniqueIntakeKey(slug);
+        jdbc.update("""
+                update "public"."projects"
+                   set "intakePortalKey" = :key,
+                       "updatedAt" = :now
+                 where "id" = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", projectId)
+                .addValue("key", newKey)
+                .addValue("now", Timestamp.from(Instant.now())));
+
+        audit.record(PlatformAuditRepository.VIEWED, operator.operatorId(),
+                operator.sessionId(), orgId, projectId, "Project", projectId.toString(),
+                reason == null ? "Regenerated patient intake QR key" : reason,
+                "intakePortalKey=" + newKey,
+                PlatformAuditRepository.ALLOWED, correlationId, null);
+
+        return getClinicIntakeQr(operator, projectId);
+    }
+
+    private static String buildUniqueIntakeKey(String slug) {
+        String base = (slug == null || slug.isBlank()) ? "clinic" : slug.replaceAll("[^a-zA-Z0-9_-]+", "-");
+        if (base.length() > 48) {
+            base = base.substring(0, 48);
+        }
+        return base + "-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
     /** An organization that does not exist, or is deactivated. Refused, not created. */
     public static class UnknownOrganization extends RuntimeException {
 
@@ -822,12 +909,16 @@ public class PlatformClinicService {
         Timestamp now = Timestamp.from(Instant.now());
         String hash = new PasswordVerifier().hash(adminPassword);
 
+        String intakeKey = (clinicSlug == null || clinicSlug.isBlank() ? "clinic" : clinicSlug.trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]+", "-"))
+                + "-" + projectId.toString().substring(0, 8);
         jdbc.update("""
             insert into "projects"
-                ("id", "organizationId", "name", "slug", "description", "defaultLocale",
+                ("id", "organizationId", "name", "slug", "intakePortalKey", "intakePortalEnabled",
+                 "description", "defaultLocale",
                  "timezone", "isArchived", "createdAt", "updatedAt")
             values
-                (:id, :organizationId, :name, :slug, :description, cast(:locale as "Locale"), :timezone,
+                (:id, :organizationId, :name, :slug, :intakePortalKey, true,
+                 :description, cast(:locale as "Locale"), :timezone,
                  false, :now, :now)
             """,
             new MapSqlParameterSource()
@@ -835,6 +926,7 @@ public class PlatformClinicService {
                     .addValue("organizationId", organizationId)
                     .addValue("name", clinicName)
                     .addValue("slug", clinicSlug)
+                    .addValue("intakePortalKey", intakeKey)
                     .addValue("description", "Created by the platform console.")
                     .addValue("locale", "ar")
                     .addValue("timezone", "Asia/Riyadh")

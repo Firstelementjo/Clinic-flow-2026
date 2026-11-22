@@ -27,6 +27,7 @@ import {
   ClinicPatientApi,
   type ClinicEncounterDetail,
   type ClinicEncounterHeader,
+  type ClinicPatient,
   type ClinicTreatmentPlanHeader,
   type ClinicTreatmentPlanItem,
   type CreateEncounterPayload,
@@ -36,6 +37,7 @@ import {
   type ImagingLabRow,
   type ImagingRequestRow,
   type InventoryStockWarning,
+  type PatientHistoryIntakeRecord,
   type UpdateDiagnosisPayload,
 } from './clinic-patient.api';
 import { clinicStrings } from './clinic.strings';
@@ -47,6 +49,8 @@ export interface PatientHistoryRecord {
   date: string;
   name: string;
   isComplete: boolean;
+  status?: 'PENDING_APPROVAL' | 'APPROVED' | 'COMPLETED' | string;
+  source?: 'PATIENT_PORTAL' | 'CLINIC_STAFF' | string;
   demographics: {
     fullName: string;
     dob: string;
@@ -352,6 +356,26 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                 </button>
               }
             </div>
+            @if (pendingIntakeRecord(); as pending) {
+              <div class="tl-intake-pending-bar" data-testid="encounter-pending-intake-banner">
+                <div>
+                  <strong>استبيان المريض من البوابة بانتظار المراجعة والاعتماد / Patient Portal Intake Pending Approval</strong>
+                  <div class="tl-muted">
+                    {{ pending.name }} — {{ pending.chiefComplaint.primaryComplaint || 'تمت تعبئة الخطوات 1–4' }}
+                  </div>
+                </div>
+                @if (canWriteClinical()) {
+                  <button
+                    type="button"
+                    class="tl-btn tl-btn-teal"
+                    data-testid="review-pending-intake-btn"
+                    (click)="editHistoryRecord(pending)"
+                  >
+                    مراجعة واعتماد نموذج المريض / Review &amp; Approve
+                  </button>
+                }
+              </div>
+            }
             <div class="tl-table-wrap">
               <table class="tl-teal-table" data-testid="patient-history-table">
                 <thead>
@@ -361,7 +385,7 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                     <th>Treatment Details</th>
                     <th>Radiograph Type</th>
                     <th>Radiograph Findings</th>
-                    <th>Is Complete</th>
+                    <th>Status / Is Complete</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -373,15 +397,24 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                   } @else {
                     @for (rec of historyRecords(); track rec.id) {
                       <tr>
-                        <td>{{ rec.name }}</td>
+                        <td>
+                          {{ rec.name }}
+                          @if (rec.source === 'PATIENT_PORTAL') {
+                            <span class="tl-source-chip">Portal</span>
+                          }
+                        </td>
                         <td>{{ rec.date }}</td>
-                        <td>{{ rec.diagnosisAndPlan.proposedPlans.join(', ') || rec.dentalChart.toothCondition || '—' }}</td>
+                        <td>{{ rec.diagnosisAndPlan.proposedPlans.join(', ') || rec.chiefComplaint.primaryComplaint || rec.dentalChart.toothCondition || '—' }}</td>
                         <td>{{ rec.radiographs.types.join(', ') || '—' }}</td>
                         <td>{{ rec.radiographs.findings || '—' }}</td>
                         <td>
-                          <span class="tl-complete-badge" [class.is-yes]="rec.isComplete">
-                            {{ rec.isComplete ? 'Yes' : 'No' }}
-                          </span>
+                          @if (rec.status === 'PENDING_APPROVAL') {
+                            <span class="tl-complete-badge tl-badge-pending">Pending Approval</span>
+                          } @else {
+                            <span class="tl-complete-badge" [class.is-yes]="rec.isComplete">
+                              {{ rec.isComplete ? 'Complete' : 'Approved' }}
+                            </span>
+                          }
                         </td>
                         <td>
                           <div class="tl-row-actions">
@@ -765,6 +798,24 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
 
             <!-- Step Body -->
             <div class="tl-wizard-body">
+              @if (draftHistory.status === 'PENDING_APPROVAL') {
+                <div class="tl-wizard-intake-review-banner" data-testid="wizard-pending-review-banner">
+                  <div>
+                    <strong>بيانات مُعبأة من المريض عبر البوابة (بانتظار الاعتماد)</strong>
+                    <span> — يمكنك مراجعة الخطوات 1–4 وتعديل أي خانة، ثم الضغط على «اعتماد والمتابعة للفحص» لحفظها في ملف المريض والانتقال للخطوة 5.</span>
+                  </div>
+                  @if (wizardStep() <= 4) {
+                    <button
+                      type="button"
+                      class="tl-btn tl-btn-teal tl-btn-sm"
+                      [disabled]="savingHistory()"
+                      (click)="approveAndContinueWizard()"
+                    >
+                      اعتماد والمتابعة للفحص (Step 5)
+                    </button>
+                  }
+                </div>
+              }
               <!-- STEP 1: DEMOGRAPHICS (Screenshot 03) -->
               @if (wizardStep() === 1) {
                 <h4 class="tl-step-heading">I. Patient Demographic Information</h4>
@@ -1276,13 +1327,25 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
                 }
               </div>
               <div class="tl-wizard-footer-right">
+                @if (draftHistory.status === 'PENDING_APPROVAL' && wizardStep() <= 4) {
+                  <button
+                    type="button"
+                    class="tl-btn tl-btn-teal"
+                    data-testid="wizard-approve-continue-btn"
+                    [disabled]="savingHistory()"
+                    (click)="approveAndContinueWizard()"
+                  >
+                    {{ savingHistory() ? 'Saving...' : 'اعتماد والمتابعة (Approve & Next)' }}
+                  </button>
+                }
                 <button
                   type="button"
                   class="tl-btn tl-btn-green"
                   data-testid="wizard-save-btn"
+                  [disabled]="savingHistory()"
                   (click)="saveHistoryWizard(wizardStep() === 9)"
                 >
-                  Save
+                  {{ savingHistory() ? 'Saving...' : 'Save' }}
                 </button>
                 @if (wizardStep() < 9) {
                   <button
@@ -4267,6 +4330,48 @@ const LOWER_LEFT_TEETH = [31, 32, 33, 34, 35, 36, 37, 38];
         border-left: 1px dashed #facc15;
         pointer-events: none;
       }
+      .tl-intake-pending-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        border-radius: 8px;
+        background: #fef3c7;
+        border: 1px solid #f59e0b;
+        color: #78350f;
+      }
+      .tl-wizard-intake-review-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 10px 14px;
+        margin-bottom: 14px;
+        border-radius: 8px;
+        background: #ecfeff;
+        border: 1px solid #14b8a6;
+        color: #134e4a;
+        font-size: 0.88rem;
+      }
+      .tl-badge-pending {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #f59e0b;
+      }
+      .tl-source-chip {
+        display: inline-block;
+        margin-inline-start: 6px;
+        padding: 1px 7px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        border-radius: 999px;
+        background: #ccfbf1;
+        color: #0f766e;
+      }
     `,
   ],
 })
@@ -4377,10 +4482,18 @@ export class ClinicEncountersComponent {
   protected readonly encounterClosed = signal<boolean>(false);
 
   protected readonly currentPatientName = computed(
-    () => this.activeDetail()?.encounter.patientName || this.queryPatientName() || 'Ali Abbas',
+    () =>
+      this.activeDetail()?.encounter.patientName ||
+      this.loadedPatient()?.displayName ||
+      this.queryPatientName() ||
+      'Ali Abbas',
   );
-  protected readonly currentPatientEmail = computed(() => this.queryPatientEmail() || 'patient@clinicflow.com');
-  protected readonly currentPatientAddress = computed(() => this.queryPatientAddress() || '22 Park Lane, Gulberg II');
+  protected readonly currentPatientEmail = computed(
+    () => this.loadedPatient()?.primaryEmail || this.queryPatientEmail() || 'patient@clinicflow.com',
+  );
+  protected readonly currentPatientAddress = computed(
+    () => this.loadedPatient()?.addressLine || this.queryPatientAddress() || '22 Park Lane, Gulberg II',
+  );
   protected readonly currentDoctorName = computed(
     () => this.activeDetail()?.encounter.doctorName || this.queryDoctorName() || 'Dr. Eman Khan',
   );
@@ -4414,6 +4527,11 @@ export class ClinicEncountersComponent {
   protected readonly wizardStep = signal<number>(1);
   protected readonly editingHistoryId = signal<string | null>(null);
   protected readonly historyRecords = signal<PatientHistoryRecord[]>([]);
+  protected readonly loadedPatient = signal<ClinicPatient | null>(null);
+  protected readonly savingHistory = signal<boolean>(false);
+  protected readonly pendingIntakeRecord = computed(
+    () => this.historyRecords().find((r) => r.status === 'PENDING_APPROVAL') ?? null,
+  );
 
   protected draftHistory: PatientHistoryRecord = this.createBlankHistory();
 
@@ -4685,6 +4803,7 @@ export class ClinicEncountersComponent {
         void this.loadPatientPlans(pId);
         void this.loadPatientRadiographs(pId);
         void this.loadPatientImagingRequests(pId);
+        void this.loadPatientContextAndHistory(pId);
       }
     });
 
@@ -4693,20 +4812,26 @@ export class ClinicEncountersComponent {
   }
 
   private createBlankHistory(): PatientHistoryRecord {
-    const pName = this.currentPatientName();
+    const p = this.loadedPatient();
+    const pName = p?.displayName || this.currentPatientName();
+    const rawGender = (p?.gender || '').toUpperCase();
+    const wizGender: 'Male' | 'Female' | 'Other' =
+      rawGender === 'FEMALE' ? 'Female' : rawGender === 'OTHER' ? 'Other' : 'Male';
     return {
       id: `hist-${Date.now()}`,
       date: new Date().toISOString().slice(0, 10),
       name: pName,
       isComplete: false,
+      status: 'APPROVED',
+      source: 'CLINIC_STAFF',
       demographics: {
         fullName: pName,
-        dob: '1998-05-15',
-        gender: 'Male',
-        occupation: '',
-        address: this.currentPatientAddress(),
-        phone: '0325145256',
-        email: this.currentPatientEmail(),
+        dob: p?.dateOfBirth || '',
+        gender: wizGender,
+        occupation: p?.occupation || '',
+        address: p?.addressLine || this.currentPatientAddress(),
+        phone: p?.primaryPhone || '',
+        email: p?.primaryEmail || this.currentPatientEmail(),
         emergencyName: '',
         emergencyPhone: '',
       },
@@ -4867,39 +4992,67 @@ export class ClinicEncountersComponent {
     this.draftHistory.informedConsent.dentistSignatureSaved = true;
   }
 
-  protected async saveHistoryWizard(markComplete = false): Promise<void> {
-    const record: PatientHistoryRecord = {
+  protected async saveHistoryWizard(markComplete = false, approvePending = false): Promise<void> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(this.draftHistory.id || '');
+    const shouldApprove =
+      approvePending ||
+      markComplete ||
+      this.draftHistory.status !== 'PENDING_APPROVAL';
+    const nextIsComplete =
+      markComplete ||
+      this.draftHistory.isComplete ||
+      (this.draftHistory.informedConsent.patientSignatureSaved &&
+        this.draftHistory.informedConsent.dentistSignatureSaved);
+
+    let record: PatientHistoryRecord = {
       ...this.draftHistory,
       name: this.draftHistory.demographics.fullName || this.currentPatientName(),
-      isComplete:
-        markComplete ||
-        this.draftHistory.isComplete ||
-        (this.draftHistory.informedConsent.patientSignatureSaved &&
-          this.draftHistory.informedConsent.dentistSignatureSaved),
+      isComplete: nextIsComplete,
+      status: shouldApprove ? (nextIsComplete ? 'COMPLETED' : 'APPROVED') : 'PENDING_APPROVAL',
     };
-    const editingId = this.editingHistoryId();
-    if (editingId) {
-      this.historyRecords.update((list) => list.map((item) => (item.id === editingId ? record : item)));
-    } else {
-      this.historyRecords.update((list) => [record, ...list]);
-      this.editingHistoryId.set(record.id);
-    }
 
     const pId = this.patientId();
     if (pId) {
+      this.savingHistory.set(true);
       try {
-        await this.api.saveMedicalHistory(pId, {
-          allergies: record.medicalHistory.allergies.join(', '),
-          conditions: record.medicalHistory.conditions.join(', '),
-          currentMedications: record.medicalHistory.medications.join(', '),
-          bleedingDisorder: record.medicalHistory.conditions.includes('Bleeding Disorders'),
-          cardiacCondition: record.medicalHistory.conditions.includes('Heart Disease'),
-          diabetes: record.medicalHistory.conditions.includes('Diabetes'),
-          notes: record.diagnosisAndPlan.diagnosis || record.chiefComplaint.primaryComplaint,
-        });
+        const saved = await this.api.saveHistoryRecord(
+          pId,
+          {
+            id: isUuid ? this.draftHistory.id : undefined,
+            encounterId: this.selectedEncounterId() ?? undefined,
+            status: record.status,
+            isComplete: record.isComplete,
+            approve: shouldApprove,
+            date: record.date,
+            name: record.name,
+            demographics: record.demographics,
+            medicalHistory: record.medicalHistory,
+            dentalHistory: record.dentalHistory,
+            chiefComplaint: record.chiefComplaint,
+            clinicalExam: record.clinicalExam,
+            radiographs: record.radiographs,
+            diagnosisAndPlan: record.diagnosisAndPlan,
+            dentalChart: record.dentalChart,
+            informedConsent: record.informedConsent,
+          },
+          { projectId: this.projectId() },
+        );
+        record = this.mapBackendHistoryRecord(saved);
+        this.draftHistory = JSON.parse(JSON.stringify(record)) as PatientHistoryRecord;
       } catch {
-        // Keep local wizard record if backend medical-history call fails
+        // Keep local wizard record if backend save call fails
+      } finally {
+        this.savingHistory.set(false);
       }
+    }
+
+    const editingId = this.editingHistoryId();
+    if (editingId) {
+      this.historyRecords.update((list) => list.map((item) => (item.id === editingId ? record : item)));
+      this.editingHistoryId.set(record.id);
+    } else {
+      this.historyRecords.update((list) => [record, ...list]);
+      this.editingHistoryId.set(record.id);
     }
 
     if (markComplete) {
@@ -4907,8 +5060,109 @@ export class ClinicEncountersComponent {
     }
   }
 
-  protected deleteHistoryRecord(id: string): void {
+  protected async approveAndContinueWizard(): Promise<void> {
+    await this.saveHistoryWizard(false, true);
+    if (this.wizardStep() < 5) {
+      this.wizardStep.set(5);
+    } else {
+      this.nextWizardStep();
+    }
+  }
+
+  protected async deleteHistoryRecord(id: string): Promise<void> {
     this.historyRecords.update((list) => list.filter((item) => item.id !== id));
+    const pId = this.patientId();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (pId && isUuid) {
+      try {
+        await this.api.deleteHistoryRecord(pId, id, { projectId: this.projectId() });
+      } catch {
+        // Ignore delete failure
+      }
+    }
+  }
+
+  private async loadPatientContextAndHistory(pId: string): Promise<void> {
+    try {
+      const patient = await this.api.patient(pId, { projectId: this.projectId() });
+      this.loadedPatient.set(patient);
+    } catch {
+      // Ignore if unavailable
+    }
+
+    try {
+      const records = await this.api.listHistoryRecords(pId, { projectId: this.projectId() });
+      const mapped = records.map((r) => this.mapBackendHistoryRecord(r));
+      this.historyRecords.set(mapped);
+    } catch {
+      // Keep empty
+    }
+  }
+
+  private mapBackendHistoryRecord(r: PatientHistoryIntakeRecord): PatientHistoryRecord {
+    const blank = this.createBlankHistory();
+    const demo = r.demographics ?? {};
+    const med = r.medicalHistory ?? {};
+    const dent = r.dentalHistory ?? {};
+    const cc = r.chiefComplaint ?? {};
+    const exam = r.clinicalExam ?? {};
+    const rad = r.radiographs ?? {};
+    const dx = r.diagnosisAndPlan ?? {};
+    const chart = r.dentalChart ?? {};
+    const consent = r.informedConsent ?? {};
+
+    return {
+      id: r.id,
+      date: r.date || blank.date,
+      name: r.name || blank.name,
+      isComplete: Boolean(r.isComplete),
+      status: r.status,
+      source: r.source,
+      demographics: { ...blank.demographics, ...demo },
+      medicalHistory: {
+        ...blank.medicalHistory,
+        ...med,
+        conditions: Array.isArray(med['conditions']) ? [...med['conditions']] : [],
+        medications: Array.isArray(med['medications']) ? [...med['medications']] : [],
+        allergies: Array.isArray(med['allergies']) ? [...med['allergies']] : [],
+      },
+      dentalHistory: {
+        ...blank.dentalHistory,
+        ...dent,
+        symptoms: Array.isArray(dent['symptoms']) ? [...dent['symptoms']] : [],
+        anxietyLevel: typeof dent['anxietyLevel'] === 'number' ? dent['anxietyLevel'] : 1,
+      },
+      chiefComplaint: {
+        ...blank.chiefComplaint,
+        ...cc,
+        painScale: typeof cc['painScale'] === 'number' ? cc['painScale'] : 0,
+        triggers: Array.isArray(cc['triggers']) ? [...cc['triggers']] : [],
+      },
+      clinicalExam: {
+        ...blank.clinicalExam,
+        ...exam,
+        teethFindings: Array.isArray(exam['teethFindings']) ? [...exam['teethFindings']] : [],
+      },
+      radiographs: {
+        ...blank.radiographs,
+        ...rad,
+        types: Array.isArray(rad['types']) ? [...rad['types']] : [],
+      },
+      diagnosisAndPlan: {
+        ...blank.diagnosisAndPlan,
+        ...dx,
+        proposedPlans: Array.isArray(dx['proposedPlans']) ? [...dx['proposedPlans']] : [],
+      },
+      dentalChart: {
+        ...blank.dentalChart,
+        ...chart,
+        selectedTeeth: Array.isArray(chart['selectedTeeth']) ? [...chart['selectedTeeth']] : [],
+      },
+      informedConsent: {
+        ...blank.informedConsent,
+        ...consent,
+      },
+    };
   }
 
   protected printHistoryRecord(rec: PatientHistoryRecord): void {
@@ -5676,6 +5930,7 @@ export class ClinicEncountersComponent {
         if (detail.encounter.patientId) {
           void this.loadPatientPlans(detail.encounter.patientId);
           void this.loadPatientRadiographs(detail.encounter.patientId);
+          void this.loadPatientContextAndHistory(detail.encounter.patientId);
         }
         return [detail.encounter];
       } catch {

@@ -32,7 +32,7 @@ public class PatientRepository {
     private static final String COLUMNS = """
             p."id", p."patientNo", p."displayName", p."givenName", p."familyName",
             p."gender", p."dateOfBirth", p."primaryPhone", p."primaryEmail", p."cnic",
-            p."profileImageUrl", p."addressLine", p."country", p."state", p."city",
+            p."occupation", p."profileImageUrl", p."addressLine", p."country", p."state", p."city",
             p."postalCode", p."isActive", p."locale", p."customerId", p."createdAt",
             (p."deletedAt" is not null) as "deleted"
             """;
@@ -135,7 +135,7 @@ public class PatientRepository {
                  where p."organizationId" = :org
                  order by p."createdAt" desc, p."id" desc
                  limit 1
-                """, scope.bind(), String.class));
+                """, scope.bind().addValue("org", scope.queryScope().organizationId()), String.class));
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
@@ -171,13 +171,13 @@ public class PatientRepository {
                     insert into "patients"
                         ("id", "organizationId", "projectId", "patientNo", "displayName",
                          "givenName", "familyName", "gender", "dateOfBirth", "primaryPhone",
-                         "primaryEmail", "cnic", "profileImageUrl", "addressLine", "country",
+                         "primaryEmail", "cnic", "occupation", "profileImageUrl", "addressLine", "country",
                          "state", "city", "postalCode", "isActive", "locale", "customerId",
                          "portalPasswordHash", "createdAt", "updatedAt")
                     values
                         (:id, :org, :proj, :patientNo, :displayName,
                          :givenName, :familyName, :gender, :dateOfBirth, :primaryPhone,
-                         :primaryEmail, :cnic, :profileImageUrl, :addressLine, :country,
+                         :primaryEmail, :cnic, :occupation, :profileImageUrl, :addressLine, :country,
                          :state, :city, :postalCode, :isActive, cast(:locale as "Locale"),
                          :customerId, :portalPasswordHash,
                          (current_timestamp at time zone 'utc'),
@@ -206,6 +206,7 @@ public class PatientRepository {
                            "primaryPhone" = :primaryPhone,
                            "primaryEmail" = :primaryEmail,
                            "cnic" = :cnic,
+                           "occupation" = :occupation,
                            "profileImageUrl" = :profileImageUrl,
                            "addressLine" = :addressLine,
                            "country" = :country,
@@ -235,7 +236,7 @@ public class PatientRepository {
                  where r."organizationId" = :org
                    and r."patientId" = :patientId
                  order by r."createdAt" desc
-                """, scope.bind().addValue("patientId", patientId),
+                """, scope.bind().addValue("org", scope.queryScope().organizationId()).addValue("patientId", patientId),
                 (rs, n) -> new PatientModels.RelationshipRow(
                         rs.getObject("id", UUID.class),
                         rs.getObject("organizationId", UUID.class),
@@ -302,7 +303,7 @@ public class PatientRepository {
                  where c."organizationId" = :org
                    and c."patientId" = :patientId
                  order by c."grantedAt" desc
-                """, scope.bind().addValue("patientId", patientId),
+                """, scope.bind().addValue("org", scope.queryScope().organizationId()).addValue("patientId", patientId),
                 (rs, n) -> new PatientModels.ConsentRow(
                         rs.getObject("id", UUID.class),
                         rs.getObject("organizationId", UUID.class),
@@ -378,7 +379,7 @@ public class PatientRepository {
                  where d."organizationId" = :org
                    and d."patientId" = :patientId
                  order by d."disclosedAt" desc
-                """, scope.bind().addValue("patientId", patientId),
+                """, scope.bind().addValue("org", scope.queryScope().organizationId()).addValue("patientId", patientId),
                 (rs, n) -> new PatientModels.DisclosureLogRow(
                         rs.getObject("id", UUID.class),
                         rs.getObject("organizationId", UUID.class),
@@ -611,6 +612,7 @@ public class PatientRepository {
                 rs.getString("primaryPhone"),
                 rs.getString("primaryEmail"),
                 rs.getString("cnic"),
+                rs.getString("occupation"),
                 rs.getString("profileImageUrl"),
                 rs.getString("addressLine"),
                 rs.getString("country"),

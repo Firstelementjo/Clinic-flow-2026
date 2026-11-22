@@ -407,15 +407,20 @@ export const routes: Routes = [
       },
       {
         path: 'clinic/commission',
-        redirectTo: '/app/clinic/reports',
-        pathMatch: 'full',
+        canActivate: [permissionGuard],
+        data: { permission: 'report:manage' },
+        loadComponent: () =>
+          import('./features/clinic/clinic-commission.component').then(
+            (m) => m.ClinicCommissionComponent,
+          ),
+        title: 'clinic.commission.title',
       },
       {
         path: 'clinic/payouts',
         canActivate: [permissionGuard],
-        data: { permission: 'doctor:read' },
+        data: { permission: 'report:manage' },
         loadComponent: () =>
-          import('./features/clinic/clinic-payments.component').then((m) => m.ClinicPaymentsComponent),
+          import('./features/clinic/clinic-payouts.component').then((m) => m.ClinicPayoutsComponent),
         title: 'clinic.payouts.title',
       },
       {
@@ -465,14 +470,29 @@ export const routes: Routes = [
         title: 'shell.nav.frontDesk',
       },
       {
+        // Appointment performance. Every figure is the server's own report
+        // aggregation; the lists below it read the appointment projection.
         path: 'clinic/appointments-overview',
-        redirectTo: '/app/clinic/calendar',
-        pathMatch: 'full',
+        canActivate: [permissionGuard],
+        data: { permission: 'appointment:read' },
+        loadComponent: () =>
+          import('./features/clinic/clinic-appointments-overview.component').then(
+            (m) => m.ClinicAppointmentsOverviewComponent,
+          ),
+        title: 'clinic.appointmentsOverview.title',
       },
       {
+        // The clinic performance board: roster and catalogue counts, the age
+        // bands from `/clinic/reports`, and the monthly revenue series built
+        // from recorded payments.
         path: 'clinic/overview',
-        redirectTo: '/app/dashboard',
-        pathMatch: 'full',
+        canActivate: [permissionGuard],
+        data: { permission: 'appointment:read' },
+        loadComponent: () =>
+          import('./features/clinic/clinic-overview.component').then(
+            (m) => m.ClinicOverviewComponent,
+          ),
+        title: 'clinic.overview.title',
       },
       {
         path: 'clinic/calendar',

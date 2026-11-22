@@ -1,12 +1,15 @@
 package com.firstelement.inbox.web;
 
 import com.firstelement.crm.clinic.ClinicScope;
+import com.firstelement.crm.clinic.intake.PatientIntakeModels;
+import com.firstelement.crm.clinic.intake.PatientIntakeService;
 import com.firstelement.crm.clinic.odontogram.OdontogramModels;
 import com.firstelement.crm.clinic.odontogram.OdontogramService;
 import com.firstelement.crm.clinic.patient.PatientModels;
 import com.firstelement.crm.clinic.patient.PatientService;
 import com.firstelement.crm.clinic.schedule.AvailabilityService;
 import com.firstelement.crm.clinic.schedule.ScheduleModels;
+import com.firstelement.security.TenantContext;
 import com.firstelement.security.TenantContextHolder;
 import com.firstelement.security.auth.PasswordVerifier;
 import com.firstelement.security.annotation.RequirePermission;
@@ -16,7 +19,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -63,6 +68,7 @@ public class ClinicPatientController {
     private final OdontogramService odontogram;
     private final AvailabilityService availability;
     private final TenantQueryGuard guard;
+    private final PatientIntakeService intakeService;
 
     public ClinicPatientController(
             PatientService patients,
@@ -70,11 +76,23 @@ public class ClinicPatientController {
             OdontogramService odontogram,
             AvailabilityService availability,
             TenantQueryGuard guard) {
+        this(patients, patientRepository, odontogram, availability, guard, null);
+    }
+
+    @Autowired
+    public ClinicPatientController(
+            PatientService patients,
+            com.firstelement.crm.clinic.patient.PatientRepository patientRepository,
+            OdontogramService odontogram,
+            AvailabilityService availability,
+            TenantQueryGuard guard,
+            PatientIntakeService intakeService) {
         this.patients = patients;
         this.patientRepository = patientRepository;
         this.odontogram = odontogram;
         this.availability = availability;
         this.guard = guard;
+        this.intakeService = intakeService;
     }
 
     /**
@@ -133,6 +151,7 @@ public class ClinicPatientController {
         String phone,
         String email,
         String cnic,
+        String occupation,
         String password,
         String confirmPassword,
         String profileImageUrl,
@@ -143,13 +162,15 @@ public class ClinicPatientController {
         String postalCode,
         Boolean isActive,
         String locale,
-        UUID customerId
+        UUID customerId,
+        Boolean quickRegister
     ) {}
 
     /**
      * {@code POST /api/v1/clinic/patients}
      *
-     * <p>Registers a new patient in the scoped clinic.
+     * <p>Registers a new patient in the scoped clinic. Supports quick registration (Name + Phone)
+     * when {@code quickRegister=true} so the patient can complete remaining demographics via the Intake Portal.
      */
     @PostMapping("/patients")
     @RequirePermission(Permission.APPOINTMENT_READ)
@@ -169,13 +190,16 @@ public class ClinicPatientController {
             gender = gender.toUpperCase(java.util.Locale.ROOT);
         }
 
+        boolean isQuick = Boolean.TRUE.equals(payload.quickRegister());
         requireField(givenName, "givenName");
-        requireField(familyName, "familyName");
-        requireField(gender, "gender");
         requireField(phone, "phone");
-        if (payload.dateOfBirth() == null) {
-            throw new com.firstelement.crm.error.ValidationFailedException(
-                    "dateOfBirth is required", java.util.Map.of("field", "dateOfBirth"));
+        if (!isQuick) {
+            requireField(familyName, "familyName");
+            requireField(gender, "gender");
+            if (payload.dateOfBirth() == null) {
+                throw new com.firstelement.crm.error.ValidationFailedException(
+                        "dateOfBirth is required", java.util.Map.of("field", "dateOfBirth"));
+            }
         }
 
         if (gender != null && !gender.isEmpty() && !java.util.Set.of("MALE", "FEMALE", "OTHER").contains(gender)) {
@@ -232,6 +256,7 @@ public class ClinicPatientController {
                 phone,
                 trim(payload.email()),
                 trim(payload.cnic()),
+                trim(payload.occupation()),
                 profileImageUrl,
                 trim(payload.addressLine()),
                 trim(payload.country()),
@@ -331,6 +356,7 @@ public class ClinicPatientController {
                 phone,
                 trim(payload.email()) != null ? trim(payload.email()) : existing.primaryEmail(),
                 trim(payload.cnic()) != null ? trim(payload.cnic()) : existing.cnic(),
+                trim(payload.occupation()) != null ? trim(payload.occupation()) : existing.occupation(),
                 trim(payload.profileImageUrl()) != null ? trim(payload.profileImageUrl()) : existing.profileImageUrl(),
                 trim(payload.addressLine()) != null ? trim(payload.addressLine()) : existing.addressLine(),
                 trim(payload.country()) != null ? trim(payload.country()) : existing.country(),
@@ -675,6 +701,67 @@ public class ClinicPatientController {
                 ? TenantContextHolder.get().userId()
                 : TenantContextHolder.get().principalId();
         return patientRepository.mergePatients(writeScope(projectId), req.sourcePatientId(), req.targetPatientId(), userId, req.reason());
+    }
+
+    // --- Patient Intake Portal & 9-Step History ---
+
+    @GetMapping("/settings/intake-qr")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Get clinic Patient Intake Portal QR configuration")
+    public PatientIntakeModels.ClinicIntakeQrInfo getClinicIntakeQr(
+            @RequestParam(required = false) String projectId) {
+        return intakeService.getClinicQrInfo(writeScope(projectId));
+    }
+
+    @PostMapping("/patients/{patientId}/intake-code")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Generate a 1-hour one-time Patient Intake code")
+    public PatientIntakeModels.GeneratedIntakeCode generateIntakeCode(
+            @PathVariable UUID patientId,
+            @RequestParam(required = false) String projectId) {
+        TenantContext caller = TenantContextHolder.get();
+        return intakeService.generateIntakeCode(writeScope(projectId), patientId, caller);
+    }
+
+    @GetMapping("/patients/{patientId}/intake-status")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Check active intake code and latest intake submission status")
+    public PatientIntakeModels.ActiveIntakeCodeStatus getIntakeStatus(
+            @PathVariable UUID patientId,
+            @RequestParam(required = false) String projectId) {
+        return intakeService.getIntakeStatus(scope(projectId), patientId);
+    }
+
+    @GetMapping("/patients/{patientId}/history-records")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "List 9-step Patient History & Portal Intake records")
+    public List<PatientIntakeModels.PatientHistoryIntakeRecord> listHistoryRecords(
+            @PathVariable UUID patientId,
+            @RequestParam(required = false) String projectId) {
+        return intakeService.listHistoryRecords(scope(projectId), patientId);
+    }
+
+    @PostMapping("/patients/{patientId}/history-records")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Save or approve a 9-step Patient History record")
+    public PatientIntakeModels.PatientHistoryIntakeRecord saveHistoryRecord(
+            @PathVariable UUID patientId,
+            @RequestBody PatientIntakeModels.SavePatientHistoryIntakeRequest request,
+            @RequestParam(required = false) String projectId) {
+        TenantContext caller = TenantContextHolder.get();
+        return intakeService.saveOrApproveHistoryRecord(writeScope(projectId), patientId, request, caller);
+    }
+
+    @DeleteMapping("/patients/{patientId}/history-records/{recordId}")
+    @RequirePermission(Permission.APPOINTMENT_READ)
+    @Operation(summary = "Delete a 9-step Patient History record")
+    public Map<String, Object> deleteHistoryRecord(
+            @PathVariable UUID patientId,
+            @PathVariable UUID recordId,
+            @RequestParam(required = false) String projectId) {
+        boolean deleted = intakeService.deleteHistoryRecord(writeScope(projectId), patientId, recordId);
+        return Map.of("id", recordId, "deleted", deleted);
     }
 
     /**

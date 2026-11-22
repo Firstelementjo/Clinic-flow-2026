@@ -1283,6 +1283,11 @@ export const clinicStrings = {
     ar: 'حالة التقويم الشفاف حالة مختبر، فهي تنتظر المسار نفسه. تسمّي هذه الشاشة المسار الناقص بدل عرض حالات نموذجية.',
     en: 'A clear aligner case is a lab case, so it waits on the same route. This screen names the missing route rather than showing sample cases.',
   },
+  'feedback.title': { ar: 'تقييم المرضى', en: 'Patient feedback' },
+  'commission.title': { ar: 'عمولة الأطباء', en: 'Doctor commission' },
+  'payouts.title': { ar: 'مستحقات الأطباء', en: 'Doctor payouts' },
+  'overview.title': { ar: 'نظرة عامة على العيادة', en: 'Clinic overview' },
+  'appointmentsOverview.title': { ar: 'نظرة عامة على المواعيد', en: 'Appointment overview' },
 
   // -- refusals ------------------------------------------------------------
   'error.title': { ar: 'تعذّر تحميل بيانات العيادة', en: 'The clinic data could not be loaded' },

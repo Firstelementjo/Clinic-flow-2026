@@ -108,6 +108,7 @@ public class PatientService {
         parameters.put("primaryPhone", command.phone());
         parameters.put("primaryEmail", command.email());
         parameters.put("cnic", command.cnic());
+        parameters.put("occupation", command.occupation());
         parameters.put("profileImageUrl", command.profileImageUrl());
         parameters.put("addressLine", command.addressLine());
         parameters.put("country", command.country());
@@ -137,6 +138,7 @@ public class PatientService {
         parameters.put("primaryPhone", command.phone());
         parameters.put("primaryEmail", command.email());
         parameters.put("cnic", command.cnic());
+        parameters.put("occupation", command.occupation());
         parameters.put("profileImageUrl", command.profileImageUrl());
         parameters.put("addressLine", command.addressLine());
         parameters.put("country", command.country());

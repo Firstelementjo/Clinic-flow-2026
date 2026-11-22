@@ -149,6 +149,14 @@ public class SecurityConfiguration {
     };
 
     /**
+     * Public Patient Intake Portal endpoints (write-only quarantine authenticated by
+     * clinic QR key + 1-hour patient code + short-lived intake session token).
+     */
+    private static final String[] INTAKE_PUBLIC_PATHS = {
+        "/api/v1/public/intake/**",
+    };
+
+    /**
      * The paths the {@code CsrfFilter} does not guard.
      *
      * <p>CSRF defends against a third-party site inducing a <em>browser</em> to attach ambient
@@ -210,6 +218,7 @@ public class SecurityConfiguration {
                 // reject every real provider POST before the signature verifier ever ran.
                 csrf.ignoringRequestMatchers(CSRF_EXEMPT_PATHS);
                 csrf.ignoringRequestMatchers(INVITE_PUBLIC_PATHS);
+                csrf.ignoringRequestMatchers(INTAKE_PUBLIC_PATHS);
                 if (!security.isCsrfRequiredOnLogin()) {
                     log.warn("firstelement.security.csrf-required-on-login=false: login is no longer "
                         + "CSRF-protected and login-CSRF becomes possible.");
@@ -244,6 +253,7 @@ public class SecurityConfiguration {
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR, jakarta.servlet.DispatcherType.ASYNC).permitAll()
                 .requestMatchers(PUBLIC_PATHS).permitAll()
                 .requestMatchers(INVITE_PUBLIC_PATHS).permitAll()
+                .requestMatchers(INTAKE_PUBLIC_PATHS).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(AUTHENTICATED_PATHS).authenticated()
                 // A path no controller declares cannot succeed for anyone, so it answers
@@ -382,6 +392,17 @@ public class SecurityConfiguration {
         // A cross-origin request must never be answered from a preflight cache with a
         // decision made for a different origin.
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+
+        // Public Patient Intake Portal runs on a standalone mobile-first web origin.
+        // allowCredentials=false guarantees no ambient browser cookies can ever be sent here.
+        CorsConfiguration publicIntakeCors = new CorsConfiguration();
+        publicIntakeCors.setAllowedOriginPatterns(List.of("*"));
+        publicIntakeCors.setAllowedMethods(Arrays.asList("GET", "POST", "OPTIONS", "HEAD"));
+        publicIntakeCors.setAllowedHeaders(List.of("*"));
+        publicIntakeCors.setAllowCredentials(false);
+        publicIntakeCors.setMaxAge(600L);
+        source.registerCorsConfiguration("/api/v1/public/intake/**", publicIntakeCors);
+
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }

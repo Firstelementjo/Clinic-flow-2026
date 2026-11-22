@@ -1723,6 +1723,8 @@ export interface PlatformClinicSummary {
   organizationName: string;
   clinicName: string;
   slug: string;
+  intakePortalKey?: string;
+  intakePortalEnabled?: boolean;
   city: string;
   contactNumber?: string;
   timezone: string;
@@ -1806,6 +1808,16 @@ export interface EditClinicInput {
   reason?: string;
 }
 
+export interface PlatformClinicIntakeQr {
+  projectId: string;
+  organizationId: string;
+  clinicName: string;
+  clinicSlug: string;
+  intakePortalKey: string;
+  enabled: boolean;
+  defaultLocale?: string;
+}
+
 export interface AddClinicAdminInput {
   adminName: string;
   adminEmail: string;
@@ -1865,6 +1877,14 @@ export class PlatformApi {
 
   addClinicAdmin(clinicId: string, input: AddClinicAdminInput): Promise<{ userId: string; email: string; fullName: string; role: string; projectId: string }> {
     return this.api.post(`/api/v1/platform/clinics/${encodeURIComponent(clinicId)}/admins`, input);
+  }
+
+  getClinicIntakeQr(clinicId: string): Promise<PlatformClinicIntakeQr> {
+    return this.api.get(`/api/v1/platform/clinics/${encodeURIComponent(clinicId)}/intake-qr`);
+  }
+
+  regenerateClinicIntakeQr(clinicId: string, reason?: string): Promise<PlatformClinicIntakeQr> {
+    return this.api.post(`/api/v1/platform/clinics/${encodeURIComponent(clinicId)}/intake-qr/regenerate`, { reason });
   }
 
   subscriptions(): Promise<readonly PlatformSubscriptionOverview[]> {

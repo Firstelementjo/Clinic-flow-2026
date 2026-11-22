@@ -378,6 +378,21 @@ public class PlatformConsoleController {
         return clinics.addClinicAdmin(operator, clinicId, request, MDC.get("correlationId"));
     }
 
+    @GetMapping("/clinics/{id}/intake-qr")
+    public Map<String, Object> getClinicIntakeQr(@PathVariable("id") UUID clinicId) {
+        PlatformOperatorContext operator = PlatformOperatorContextHolder.require();
+        return clinics.getClinicIntakeQr(operator, clinicId);
+    }
+
+    @PostMapping("/clinics/{id}/intake-qr/regenerate")
+    public Map<String, Object> regenerateClinicIntakeQr(
+            @PathVariable("id") UUID clinicId,
+            @RequestBody(required = false) SimpleReasonRequest request) {
+        PlatformOperatorContext operator = PlatformOperatorContextHolder.require();
+        String reason = request == null ? "Regenerated clinic intake QR key" : request.reason();
+        return clinics.regenerateClinicIntakeQr(operator, clinicId, reason, MDC.get("correlationId"));
+    }
+
     // ------------------------------------------------------------------
     // Subscriptions and Append-Only Payments Ledger (Slice 3)
     // ------------------------------------------------------------------

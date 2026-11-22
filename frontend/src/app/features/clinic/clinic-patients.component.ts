@@ -38,8 +38,18 @@ import { TlDrawerComponent } from '../../ui/tl-drawer.component';
 import {
   ClinicPatientApi,
   type ClinicDuplicateCandidate,
+  type ClinicIntakeQrInfo,
   type ClinicPatient,
+  type GeneratedIntakeCode,
 } from './clinic-patient.api';
+import {
+  buildIntakePortalUrl,
+  generateQrSvgParts,
+  generateQrSvgString,
+  getSavedIntakePortalBaseUrl,
+  printIntakeQrPoster,
+  saveIntakePortalBaseUrl,
+} from '../../core/utils/qr-svg';
 import { clinicAdminStrings } from './clinic-admin.strings';
 import { clinicStrings } from './clinic.strings';
 
@@ -67,15 +77,68 @@ import { clinicStrings } from './clinic.strings';
           <h1 class="tl-page-title">{{ 'clinic.patients.title' | t }}</h1>
           <p class="tl-page-subtitle">{{ 'clinicAdmin.patients.subtitle' | t }}</p>
         </div>
-        <button
-          type="button"
-          class="tl-btn tl-btn-primary"
-          data-testid="clinic-patients-new"
-          (click)="openCreateDrawer()"
-        >
-          + {{ 'clinicAdmin.patients.createTitle' | t }}
-        </button>
+        <div class="tl-head-actions">
+          <button
+            type="button"
+            class="tl-btn tl-btn-gray"
+            data-testid="clinic-patients-intake-qr"
+            (click)="openIntakeQrDrawer()"
+          >
+            {{ isArabic() ? 'QR بوابة المرضى' : 'Patient Intake QR' }}
+          </button>
+          <button
+            type="button"
+            class="tl-btn tl-btn-primary"
+            data-testid="clinic-patients-new"
+            (click)="openCreateDrawer()"
+          >
+            + {{ 'clinicAdmin.patients.createTitle' | t }}
+          </button>
+        </div>
       </div>
+
+      @if (quickCreatedPatient(); as created) {
+        <div class="tl-quick-banner" role="status" data-testid="clinic-patient-quick-created">
+          <div>
+            <strong>
+              {{ isArabic() ? 'تم تسجيل المريض بنجاح:' : 'Patient registered:' }}
+              {{ nameOf(created) }}
+              @if (created.patientNo) {
+                <span class="tl-mono">({{ created.patientNo }})</span>
+              }
+            </strong>
+            @if (quickGeneratedCode(); as codeObj) {
+              <div class="tl-quick-code-box">
+                <span>{{ isArabic() ? 'كود تعبئة الاستبيان (صالح لمدة ساعة):' : '1-Hour Intake Code:' }}</span>
+                <strong class="tl-mono tl-quick-code" dir="ltr">{{ codeObj.formattedCode }}</strong>
+                <button type="button" class="tl-btn tl-btn-gray tl-btn-xs" (click)="copyText(codeObj.code)">
+                  {{ copiedText() ? (isArabic() ? 'تم النسخ' : 'Copied') : (isArabic() ? 'نسخ' : 'Copy') }}
+                </button>
+              </div>
+            }
+          </div>
+          <div class="tl-quick-banner-actions">
+            @if (created.id && !quickGeneratedCode()) {
+              <button
+                type="button"
+                class="tl-btn tl-btn-primary tl-btn-xs"
+                [disabled]="generatingQuickCode()"
+                (click)="generateQuickCodeForCreated(created.id)"
+              >
+                {{ generatingQuickCode() ? '...' : (isArabic() ? 'توليد الكود للمريض الآن' : 'Generate 1h Intake Code') }}
+              </button>
+            }
+            @if (created.id) {
+              <a class="tl-btn tl-btn-gray tl-btn-xs" [routerLink]="['/app/clinic/patients', created.id]">
+                {{ isArabic() ? 'فتح ملف المريض' : 'Open Profile' }}
+              </a>
+            }
+            <button type="button" class="tl-link" (click)="dismissQuickBanner()">
+              {{ isArabic() ? 'إغلاق' : 'Dismiss' }}
+            </button>
+          </div>
+        </div>
+      }
 
       <section class="tl-card" [attr.aria-busy]="patients.loading()">
         <div class="tl-toolbar">
@@ -238,6 +301,12 @@ import { clinicStrings } from './clinic.strings';
               }
             </div>
           }
+
+          <p class="tl-note tl-field--full">
+            {{ isArabic()
+              ? 'تسجيل سريع: يكفي إدخال الاسم الأول ورقم الهاتف فقط، ويمكنك بعدها توليد كود لحظي للمريض ليكمل باقي بياناته وتاريخه الطبي عبر الجوال.'
+              : 'Quick Register: First Name and Phone are enough — the patient can fill the rest via the Intake Portal.' }}
+          </p>
 
           <div class="tl-drawer-top-split">
             <div class="tl-field">
@@ -434,6 +503,73 @@ import { clinicStrings } from './clinic.strings';
           </button>
         </div>
       </fe-tl-drawer>
+
+      <fe-tl-drawer
+        [open]="showIntakeQrDrawer()"
+        [title]="isArabic() ? 'رمز QR بوابة تعبئة المرضى' : 'Clinic Patient Intake QR'"
+        [subtitle]="isArabic() ? 'قم بطباعة أو تحميل الرمز لتعليقه في استقبال العيادة' : 'Print or download this clinic-specific QR poster for patient check-in'"
+        (closed)="closeIntakeQrDrawer()"
+      >
+        <div class="tl-qr-drawer" data-testid="clinic-intake-qr-drawer">
+          @if (qrLoading()) {
+            <p class="tl-muted">{{ 'state.loading' | t }}</p>
+          } @else if (qrError()) {
+            <p class="tl-form-error">{{ qrError() }}</p>
+          } @else if (clinicQrInfo(); as info) {
+            <div class="tl-qr-preview">
+              @if (clinicQrSvg(); as svg) {
+                <svg
+                  class="tl-qr-svg"
+                  [attr.viewBox]="'0 0 ' + svg.viewBoxSize + ' ' + svg.viewBoxSize"
+                  width="220"
+                  height="220"
+                  shape-rendering="crispEdges"
+                  role="img"
+                  [attr.aria-label]="'QR for ' + info.clinicName"
+                >
+                  <rect [attr.width]="svg.viewBoxSize" [attr.height]="svg.viewBoxSize" fill="#ffffff" />
+                  <path [attr.d]="svg.path" fill="#0f172a" />
+                </svg>
+              }
+              <strong>{{ info.clinicName }}</strong>
+              <span class="tl-mono tl-muted">{{ info.intakePortalKey }}</span>
+            </div>
+
+            <label class="tl-field">
+              <span class="tl-label">{{ isArabic() ? 'رابط البوابة (Base URL)' : 'Portal Base URL' }}</span>
+              <input
+                class="tl-input"
+                type="url"
+                dir="ltr"
+                [value]="intakeBaseUrl()"
+                (input)="onIntakeBaseUrlInput($event)"
+              />
+            </label>
+
+            <div class="tl-field">
+              <span class="tl-label">{{ isArabic() ? 'رابط العيادة المباشر' : 'Clinic Intake Link' }}</span>
+              <div class="tl-qr-link-row">
+                <input class="tl-input tl-mono" type="text" dir="ltr" readonly [value]="clinicQrUrl()" />
+                <button type="button" class="tl-btn tl-btn-gray" (click)="copyText(clinicQrUrl())">
+                  {{ copiedText() ? (isArabic() ? 'تم النسخ' : 'Copied') : (isArabic() ? 'نسخ' : 'Copy') }}
+                </button>
+              </div>
+            </div>
+
+            <div class="tl-qr-actions">
+              <button type="button" class="tl-btn tl-btn-primary" (click)="printClinicQr()">
+                {{ isArabic() ? 'طباعة ملصق الـ QR' : 'Print QR Poster' }}
+              </button>
+              <button type="button" class="tl-btn tl-btn-gray" (click)="downloadClinicQrSvg()">
+                {{ isArabic() ? 'تحميل SVG' : 'Download SVG' }}
+              </button>
+              <button type="button" class="tl-btn tl-btn-gray" (click)="openPortalInTab()">
+                {{ isArabic() ? 'فتح البوابة' : 'Open Portal' }}
+              </button>
+            </div>
+          }
+        </div>
+      </fe-tl-drawer>
     </div>
   `,
   styles: [
@@ -596,6 +732,80 @@ import { clinicStrings } from './clinic.strings';
         cursor: pointer;
         font-size: var(--fe-text-xs);
       }
+      .tl-head-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--fe-space-2);
+        flex-wrap: wrap;
+      }
+      .tl-quick-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--fe-space-3);
+        flex-wrap: wrap;
+        padding: var(--fe-space-3) var(--fe-space-4);
+        margin-block-end: var(--fe-space-3);
+        border-radius: var(--fe-radius);
+        background: var(--pri-soft);
+        border: 1px solid var(--pri);
+      }
+      .tl-quick-code-box {
+        display: flex;
+        align-items: center;
+        gap: var(--fe-space-2);
+        margin-block-start: var(--fe-space-1);
+      }
+      .tl-quick-code {
+        font-size: 1.15rem;
+        padding: 2px 10px;
+        border-radius: 6px;
+        background: var(--surf);
+        border: 1px solid var(--line);
+      }
+      .tl-quick-banner-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--fe-space-2);
+        flex-wrap: wrap;
+      }
+      .tl-btn-xs {
+        padding: 4px 10px;
+        font-size: var(--fe-text-xs);
+      }
+      .tl-qr-drawer {
+        display: flex;
+        flex-direction: column;
+        gap: var(--fe-space-4);
+      }
+      .tl-qr-preview {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--fe-space-2);
+        padding: var(--fe-space-4);
+        border-radius: var(--fe-radius);
+        background: var(--surf2);
+        border: 1px solid var(--line);
+      }
+      .tl-qr-svg {
+        background: #ffffff;
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+      }
+      .tl-qr-link-row {
+        display: flex;
+        gap: var(--fe-space-2);
+      }
+      .tl-qr-link-row .tl-input {
+        flex: 1;
+      }
+      .tl-qr-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--fe-space-2);
+      }
       @media (max-width: 720px) {
         .tl-page-head,
         .tl-toolbar {
@@ -640,6 +850,26 @@ export class ClinicPatientsComponent implements OnInit {
   protected readonly duplicateCandidates = signal<readonly ClinicDuplicateCandidate[]>([]);
   protected readonly duplicateCheckFailed = signal(false);
   protected readonly imageError = signal<string | null>(null);
+  protected readonly isArabic = computed(() => this.i18n.locale() === 'ar');
+
+  protected readonly showIntakeQrDrawer = signal(false);
+  protected readonly qrLoading = signal(false);
+  protected readonly qrError = signal<string | null>(null);
+  protected readonly clinicQrInfo = signal<ClinicIntakeQrInfo | null>(null);
+  protected readonly intakeBaseUrl = signal(getSavedIntakePortalBaseUrl());
+  protected readonly copiedText = signal(false);
+  protected readonly clinicQrUrl = computed(() => {
+    const info = this.clinicQrInfo();
+    return info?.intakePortalKey ? buildIntakePortalUrl(info.intakePortalKey, this.intakeBaseUrl()) : '';
+  });
+  protected readonly clinicQrSvg = computed(() => {
+    const url = this.clinicQrUrl();
+    return url ? generateQrSvgParts(url) : null;
+  });
+
+  protected readonly quickCreatedPatient = signal<ClinicPatient | null>(null);
+  protected readonly quickGeneratedCode = signal<GeneratedIntakeCode | null>(null);
+  protected readonly generatingQuickCode = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     givenName: ['', Validators.required],
@@ -856,7 +1086,7 @@ export class ClinicPatientsComponent implements OnInit {
     this.saveFailed.set(false);
     this.createRequestId.set(null);
     try {
-      await this.api.createPatient(
+      const created = await this.api.createPatient(
         {
           givenName: value.givenName.trim(),
           familyName: value.familyName.trim() === '' ? undefined : value.familyName.trim(),
@@ -873,11 +1103,14 @@ export class ClinicPatientsComponent implements OnInit {
           city: value.city.trim() === '' ? undefined : value.city.trim(),
           postalCode: value.postalCode.trim() === '' ? undefined : value.postalCode.trim(),
           isActive: value.isActive,
+          quickRegister: true,
         },
         {
           projectId: this.projects.selectedProjectId() ?? undefined,
         },
       );
+      this.quickCreatedPatient.set(created);
+      this.quickGeneratedCode.set(null);
       this.closeCreateDrawer();
       await this.load();
     } catch (cause) {
@@ -888,5 +1121,79 @@ export class ClinicPatientsComponent implements OnInit {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  protected async openIntakeQrDrawer(): Promise<void> {
+    this.showIntakeQrDrawer.set(true);
+    this.qrLoading.set(true);
+    this.qrError.set(null);
+    try {
+      const info = await this.api.getClinicIntakeQr({
+        projectId: this.projects.selectedProjectId() ?? undefined,
+      });
+      this.clinicQrInfo.set(info);
+    } catch {
+      this.qrError.set(this.isArabic() ? 'تعذر تحميل رمز QR العيادة.' : 'Could not load clinic intake QR.');
+    } finally {
+      this.qrLoading.set(false);
+    }
+  }
+
+  protected closeIntakeQrDrawer(): void {
+    this.showIntakeQrDrawer.set(false);
+  }
+
+  protected onIntakeBaseUrlInput(event: Event): void {
+    const val = (event.target as HTMLInputElement).value;
+    this.intakeBaseUrl.set(saveIntakePortalBaseUrl(val));
+  }
+
+  protected printClinicQr(): void {
+    const info = this.clinicQrInfo();
+    const url = this.clinicQrUrl();
+    if (info && url) printIntakeQrPoster(info.clinicName, url);
+  }
+
+  protected downloadClinicQrSvg(): void {
+    const info = this.clinicQrInfo();
+    const url = this.clinicQrUrl();
+    if (!info || !url) return;
+    const svg = generateQrSvgString(url, 360);
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = `intake-qr-${info.clinicSlug || 'clinic'}.svg`;
+    a.click();
+    URL.revokeObjectURL(objUrl);
+  }
+
+  protected openPortalInTab(): void {
+    const url = this.clinicQrUrl();
+    if (url) window.open(url, '_blank', 'noopener');
+  }
+
+  protected async generateQuickCodeForCreated(patientId: string): Promise<void> {
+    this.generatingQuickCode.set(true);
+    try {
+      const res = await this.api.generateIntakeCode(patientId, {
+        projectId: this.projects.selectedProjectId() ?? undefined,
+      });
+      this.quickGeneratedCode.set(res);
+    } finally {
+      this.generatingQuickCode.set(false);
+    }
+  }
+
+  protected dismissQuickBanner(): void {
+    this.quickCreatedPatient.set(null);
+    this.quickGeneratedCode.set(null);
+  }
+
+  protected copyText(val: string): void {
+    navigator.clipboard.writeText(val).then(() => {
+      this.copiedText.set(true);
+      setTimeout(() => this.copiedText.set(false), 2000);
+    });
   }
 }
