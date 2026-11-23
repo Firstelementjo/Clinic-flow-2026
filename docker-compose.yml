@@ -98,6 +98,26 @@ services:
     networks:
       - clinicflow-net
 
+  intake-portal:
+    build:
+      context: ./intake-portal
+      dockerfile: Dockerfile
+    image: clinicflow-intake-portal:${VERSION:-latest}
+    container_name: clinicflow-intake-portal
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '${INTAKE_PORT:-4300}:80'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - clinicflow-net
+
 volumes:
   clinicflow-pgdata:
     name: clinicflow-pgdata

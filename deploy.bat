@@ -64,6 +64,12 @@ docker image inspect clinicflow-backend:latest >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo Pre-built images not found. Performing initial build...
     docker compose -f docker-compose.yml build
+) else (
+    docker image inspect clinicflow-intake-portal:latest >nul 2>&1
+    if %ERRORLEVEL% NEQ 0 (
+        echo Patient Intake Portal image not found. Rebuilding full Docker stack...
+        docker compose -f docker-compose.yml build
+    )
 )
 
 docker compose -f docker-compose.yml up -d
@@ -87,6 +93,7 @@ echo ================================================================
 echo.
 echo Application URLs:
 echo   - Web Workstation:  http://localhost
+echo   - Patient Intake:   http://localhost:4300
 echo   - Backend REST API: http://localhost:4000
 echo   - Actuator Health:  http://localhost:4101/actuator/health
 echo   - PostgreSQL Port:  5435
@@ -105,7 +112,7 @@ echo ================================================================
 echo [1/5] Preparing Local Dev Environment...
 echo ================================================================
 :: Free port 4000 if Docker backend is running
-docker stop clinicflow-backend clinicflow-frontend >nul 2>&1
+docker stop clinicflow-backend clinicflow-frontend clinicflow-intake-portal >nul 2>&1
 
 :: Start database and redis in Docker
 docker compose -f docker-compose.yml up -d postgres redis
