@@ -102,7 +102,7 @@ goto END
 :DEPLOY_DEV
 echo.
 echo ================================================================
-echo [1/4] Preparing Local Dev Environment...
+echo [1/5] Preparing Local Dev Environment...
 echo ================================================================
 :: Free port 4000 if Docker backend is running
 docker stop clinicflow-backend clinicflow-frontend >nul 2>&1
@@ -112,7 +112,7 @@ docker compose -f docker-compose.yml up -d postgres redis
 
 echo.
 echo ================================================================
-echo [2/4] Starting Spring Boot Backend in a separate window...
+echo [2/5] Starting Spring Boot Backend in a separate window...
 echo ================================================================
 set WEB_ORIGIN=http://localhost:4200,http://localhost
 set SESSION_SECRET=wVj2K9yNqL7xP3sT6uB1eR5aZ8dF0mC4hI9gO2vY1nU=
@@ -124,15 +124,24 @@ start "ClinicFlow Backend (Spring Boot)" cmd /k "gradlew.bat :backend:app-bootst
 
 echo.
 echo ================================================================
-echo [3/4] Starting Angular Frontend in a separate window...
+echo [3/5] Starting Angular Frontend in a separate window...
 echo ================================================================
 start "ClinicFlow Frontend (Angular)" cmd /k "cd frontend && npm start"
 
 echo.
 echo ================================================================
-echo [4/4] Waiting for services to initialize...
+echo [4/5] Starting Patient Intake Portal (Mobile Vite) in a separate window...
+echo ================================================================
+start "ClinicFlow Patient Intake Portal (Vite)" cmd /k "cd intake-portal && npm run dev"
+
+echo.
+echo ================================================================
+echo [5/5] Waiting for services to initialize...
 echo ================================================================
 ping 127.0.0.1 -n 6 >nul 2>&1
+echo   - ClinicFlow Web:          http://localhost:4200
+echo   - Patient Intake Portal:   http://localhost:4300
+echo   - Backend REST API:        http://localhost:4000
 start http://localhost:4200
 goto END
 
