@@ -212,7 +212,7 @@ const APPOINTMENT_READ = 'appointment:read';
             </tr>
           </thead>
           <tbody data-testid="clinic-roster">
-            @for (doc of pagedDoctors(); track doc.id) {
+            @for (doc of pagedDoctors(); track doc.id ?? $index) {
               <tr>
                 <td>
                   <input
@@ -236,7 +236,7 @@ const APPOINTMENT_READ = 'appointment:read';
                 </td>
                 <td>
                   <div class="tl-days-wrap">
-                    @for (day of getDoctorWorkingDays(doc); track day) {
+                    @for (day of getDoctorWorkingDays(doc); track day + '-' + $index) {
                       <span class="tl-day-chip">{{ 'clinic.day.' + day | t }}</span>
                     }
                   </div>
@@ -609,7 +609,7 @@ const APPOINTMENT_READ = 'appointment:read';
                   (change)="onClinicianChange($event)"
                 >
                   <option value="">{{ 'clinic.schedules.pickClinician' | t }}</option>
-                  @for (doctor of doctors(); track doctor.id) {
+                  @for (doctor of doctors(); track doctor.id ?? $index) {
                     <option [value]="doctor.id ?? ''">{{ doctor.name ?? '—' }}</option>
                   }
                 </select>
@@ -698,7 +698,7 @@ const APPOINTMENT_READ = 'appointment:read';
             <div class="tl-form-section">
               <h3 class="tl-section-heading">Weekly Working Days</h3>
               <div class="tl-days-grid">
-                @for (d of [0, 1, 2, 3, 4, 5, 6]; track d) {
+                @for (d of allWeekDays; track d) {
                   <label class="tl-day-checkbox" [class.selected]="editWorkingDays().has(d)">
                     <input
                       type="checkbox"
@@ -790,7 +790,7 @@ const APPOINTMENT_READ = 'appointment:read';
                     (ngModelChange)="onSchedDoctorSelected($event)"
                   >
                     <option value="">Custom Name / Unlinked</option>
-                    @for (doc of doctors(); track doc.id) {
+                    @for (doc of doctors(); track doc.id ?? $index) {
                       <option [value]="doc.id">{{ doc.name }}</option>
                     }
                   </select>
@@ -1421,6 +1421,9 @@ const APPOINTMENT_READ = 'appointment:read';
   ],
 })
 export class ClinicSchedulesComponent implements OnInit {
+  private static readonly DEFAULT_WORKING_DAYS: readonly number[] = [0, 1, 2, 3, 4];
+  protected readonly allWeekDays: readonly number[] = [0, 1, 2, 3, 4, 5, 6];
+
   private readonly clinic = inject(ClinicApi);
   private readonly availabilityApi = inject(ClinicPatientApi);
   private readonly sessions = inject(SessionService);
@@ -1936,10 +1939,14 @@ export class ClinicSchedulesComponent implements OnInit {
 
   protected getDoctorWorkingDays(doc: ClinicDoctor): readonly number[] {
     const id = doc.id;
-    if (id && this.scheduleOverrides()[id]?.workingDays) {
-      return this.scheduleOverrides()[id]!.workingDays!;
+    const override = id ? this.scheduleOverrides()[id]?.workingDays : undefined;
+    if (Array.isArray(override) && override.length > 0) {
+      return override;
     }
-    return doc.workingDays?.length ? doc.workingDays : [0, 1, 2, 3, 4];
+    if (Array.isArray(doc.workingDays) && doc.workingDays.length > 0) {
+      return doc.workingDays;
+    }
+    return ClinicSchedulesComponent.DEFAULT_WORKING_DAYS;
   }
 
   protected getDoctorStartHour(doc: ClinicDoctor): string {

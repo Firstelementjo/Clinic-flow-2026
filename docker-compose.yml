@@ -62,7 +62,7 @@ services:
       FIRSTELEMENT_EXPORTS_SIGNING_KEY: ${EXPORT_SIGNING_KEY:-c11n1c-f10w-2026-s3cur3-3xp0rt-s1gn1ng-k3y-32-chars}
       API_PORT: 4000
       MANAGEMENT_PORT: 4101
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost,http://localhost:4200,http://localhost:4300}
       SESSION_SECRET: ${SESSION_SECRET:-wVj2K9yNqL7xP3sT6uB1eR5aZ8dF0mC4hI9gO2vY1nU=}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
       PLATFORM_CONSOLE_ENABLED: ${PLATFORM_CONSOLE_ENABLED:-true}
@@ -90,6 +90,7 @@ services:
         condition: service_healthy
     ports:
       - '${WEB_PORT:-80}:80'
+      - '4200:80'
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/healthz']
       interval: 10s
